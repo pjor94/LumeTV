@@ -26,7 +26,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v6
       - name: Install Android platform
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
       - name: Check catalogue and updater
         run: |
           python3 tools/update_catalog.py --check
