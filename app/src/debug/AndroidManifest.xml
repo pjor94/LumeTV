@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Development-only replay of a guide previously downloaded with permission. -->
+        <activity android:name=".GuideReplayActivity" android:exported="true" />
+    </application>
+</manifest>

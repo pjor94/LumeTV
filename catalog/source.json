@@ -1,0 +1,33 @@
+{
+  "source": "https://tvchannels.worldtvlive.eu/tv/_dtt_kodi/list.m3u8",
+  "retrieved_at": "2026-10-25",
+  "sha256": "0d2c26f6f52ea45d0c9a778f8388419bd37a431e2ea69614dfc7404ad1c5d380",
+  "entries": 159,
+  "by_provider": {
+    "dailymotion": 1,
+    "direct": 49,
+    "discovery": 8,
+    "gamberorosso": 1,
+    "generics": 1,
+    "la7": 2,
+    "mediaset": 23,
+    "mediasport": 2,
+    "olympics": 2,
+    "premio": 2,
+    "rai": 21,
+    "rainewsrg": 22,
+    "rakuten": 1,
+    "redbull": 1,
+    "rsi": 2,
+    "sciscione": 4,
+    "sky": 3,
+    "smtv": 2,
+    "sole24": 1,
+    "sportitalia": 4,
+    "supertennis": 1,
+    "telelombardia": 1,
+    "tv2000": 1,
+    "yt": 4
+  },
+  "purpose": "Offline first-launch fallback; the installed app refreshes directly from WLTV."
+}
