@@ -32,18 +32,18 @@ jobs:
           python3 tools/update_catalog.py --check
           python3 -m unittest discover -s tools -p 'test_*.py'
       - name: Test, lint and build
-        run: ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-daemon
+        run: ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:writeReleaseDependencies --no-daemon
+      - name: Verify licenses and collect matching dependency sources
+        run: python3 tools/dependency_sources.py fetch --report app/build/reports/release-dependencies.json
       - name: Package corresponding source
         run: python3 tools/package_source.py
-      - name: Keep build and source
+      - name: Keep source archive
         uses: actions/upload-artifact@v7
         with:
-          name: LumeTV-build-${{ github.sha }}
+          name: LumeTV-source-${{ github.sha }}
           retention-days: 14
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*unsigned.apk
-            dist/*source.zip
+          if-no-files-found: error
+          path: dist/*source.zip
       - name: Keep verification reports
         if: always()
         uses: actions/upload-artifact@v7

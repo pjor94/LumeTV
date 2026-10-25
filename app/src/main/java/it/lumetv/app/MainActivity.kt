@@ -258,16 +258,35 @@ class MainActivity : ComponentActivity() {
     private fun showAbout() {
         val updated = if (repository.lastUpdated > 0) SimpleDateFormat("d MMM, HH:mm", Locale.ITALY).format(Date(repository.lastUpdated)) else "lista iniziale inclusa"
         val guideUpdated = if (guide.lastUpdated > 0) SimpleDateFormat("d MMM, HH:mm", Locale.ITALY).format(Date(guide.lastUpdated)) else "in attesa del primo aggiornamento"
-        android.app.AlertDialog.Builder(this).setTitle("Lume TV · 0.2.1")
-            .setMessage("La TV, fatta semplice.\n\nCatalogo automatico ogni 24 ore: $updated.\nGuida automatica ogni 6 ore: $guideUpdated.\n↻ aggiorna canali e guida.\n\nIntegrazioni adattate da WorldLiveTV, WLTV Group. Software libero, GPL-3.0-or-later.\n\nLe trasmissioni sono fornite dalle rispettive emittenti.")
+        android.app.AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
+            .setMessage("La TV, fatta semplice.\n\nCatalogo automatico ogni 24 ore: $updated.\nGuida automatica ogni 6 ore: $guideUpdated.\n↻ aggiorna canali e guida.\n\nIntegrazioni adattate da WorldLiveTV, WLTV Group; modifiche Lume TV del 25 ottobre 2026. Software libero, GPL-3.0-or-later: puoi ridistribuirlo e modificarlo secondo la licenza. Nessuna garanzia, nei limiti di legge.\n\nLe trasmissioni sono fornite dalle rispettive emittenti. Sorgenti e segnalazioni: github.com/pjor94/LumeTV.")
             .setPositiveButton("Chiudi", null)
-            .setNeutralButton("Licenza") { _, _ ->
-                val text = TvStyle.text(this, assets.open("LICENSE.txt").bufferedReader().use { it.readText() }, 13f).apply {
+            .setNeutralButton("Licenze e avvisi") { _, _ -> showLicenses() }.show()
+    }
+
+    private fun showLicenses() {
+        val documents = linkedMapOf(
+            "Crediti, modifiche e sorgenti" to "THIRD_PARTY_NOTICES.md",
+            "Lume TV · GNU GPL v3" to "LICENSE.txt",
+            "Apache License 2.0" to "licenses/Apache-2.0.txt",
+            "R8 · BSD a tre clausole" to "licenses/BSD-3-Clause-R8.txt",
+            "Desugar JDK · GPL v2 e Classpath Exception" to "licenses/GPL-2.0-with-classpath-exception.txt",
+            "Public Suffix List · Mozilla Public License 2.0" to "licenses/MPL-2.0.txt",
+            "XZ for Java · Pubblico dominio" to "licenses/XZ-PUBLIC-DOMAIN.txt",
+            "Avvisi originali delle dipendenze" to "DEPENDENCY_NOTICES.txt",
+            "OpenJDK · Informazioni aggiuntive" to "licenses/DESUGAR-ADDITIONAL_LICENSE_INFO.txt",
+            "OpenJDK · Assembly Exception" to "licenses/OPENJDK-ASSEMBLY_EXCEPTION.txt",
+        )
+        val titles = documents.keys.toTypedArray()
+        android.app.AlertDialog.Builder(this).setTitle("Licenze e avvisi")
+            .setItems(titles) { _, index ->
+                val text = TvStyle.text(this, assets.open(documents.getValue(titles[index])).bufferedReader().use { it.readText() }, 13f).apply {
                     setPadding(dp(24), dp(16), dp(24), dp(16))
                 }
                 val scroll = android.widget.ScrollView(this).apply { addView(text); isFocusable = true }
-                android.app.AlertDialog.Builder(this).setTitle("GNU GPL v3").setView(scroll).setPositiveButton("Chiudi", null).show()
-            }.show()
+                android.app.AlertDialog.Builder(this).setTitle(titles[index]).setView(scroll)
+                    .setPositiveButton("Chiudi", null).show()
+            }.setPositiveButton("Chiudi", null).show()
     }
 
     private fun updateCatalog() {

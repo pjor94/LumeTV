@@ -1,11 +1,11 @@
 {
   "source": "https://tvchannels.worldtvlive.eu/tv/_dtt_kodi/list.m3u8",
   "retrieved_at": "2026-10-25",
-  "sha256": "0d2c26f6f52ea45d0c9a778f8388419bd37a431e2ea69614dfc7404ad1c5d380",
-  "entries": 159,
+  "sha256": "f97066d006618a2b2cbc522b9f5a9c997c999bebe762676d08c0aefd5784f12b",
+  "entries": 155,
   "by_provider": {
     "dailymotion": 1,
-    "direct": 49,
+    "direct": 47,
     "discovery": 8,
     "gamberorosso": 1,
     "generics": 1,
@@ -18,7 +18,6 @@
     "rainewsrg": 22,
     "rakuten": 1,
     "redbull": 1,
-    "rsi": 2,
     "sciscione": 4,
     "sky": 3,
     "smtv": 2,
@@ -29,5 +28,5 @@
     "tv2000": 1,
     "yt": 4
   },
-  "purpose": "Offline first-launch fallback; the installed app refreshes directly from WLTV."
+  "purpose": "Offline first-launch fallback, excluding RSI LA1/LA2; the app applies the same exclusions to WLTV updates."
 }

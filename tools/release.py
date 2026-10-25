@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 from package_source import ROOT, build_archive, project_version
 
@@ -37,7 +38,7 @@ def metadata(root, tag):
     head = run('git', 'rev-parse', 'HEAD', root=root).stdout.strip()
     if commit != head:
         raise ValueError('Checkout must match the release tag')
-    if run('git', 'status', '--porcelain', '--untracked-files=no', root=root).stdout.strip():
+    if run('git', 'status', '--porcelain', '--untracked-files=normal', root=root).stdout.strip():
         raise ValueError('Commit source changes before releasing')
     release_notes(root, version)
     return {'version': version, 'tag': tag, 'commit': commit, 'prerelease': version.startswith('0.') or '-' in version}
@@ -91,8 +92,19 @@ def assets(output_dir, version):
     return [output_dir / f'LumeTV-{version}.apk', output_dir / f'LumeTV-{version}-source.zip', output_dir / 'SIGNING-CERTIFICATE.txt']
 
 
+def verify_apk_notices(root, apk):
+    legal = root / 'app/src/main/assets'
+    names = ['LICENSE.txt', 'THIRD_PARTY_NOTICES.md', 'DEPENDENCY_NOTICES.txt']
+    names += [p.relative_to(legal).as_posix() for p in (legal / 'licenses').glob('*.txt')]
+    with zipfile.ZipFile(apk) as archive:
+        for name in names:
+            if 'assets/' + name not in archive.namelist() or archive.read('assets/' + name) != (legal / name).read_bytes():
+                raise ValueError(f'APK legal notice differs from corresponding source: {name}')
+
+
 def prepare(root, output_dir):
     version = project_version(root)
+    verify_apk_notices(root, output_dir / f'LumeTV-{version}.apk')
     build_archive(root, output_dir)
     paths = assets(output_dir, version)
     checksums = ''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in paths)

@@ -1,0 +1,32 @@
+name: Diritti e rimozione di un canale
+description: Segnala un problema relativo ai diritti o chiedi la rimozione di una sorgente.
+title: "[Diritti] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Le segnalazioni vengono esaminate per valutare rimozione o disabilitazione della sorgente e prevenire la reintroduzione dagli aggiornamenti. Le issue sono pubbliche: non inserire credenziali, token, documenti d’identità o dati personali riservati.
+  - type: input
+    id: channel
+    attributes:
+      label: Canale o integrazione
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Sorgente o riferimento nel catalogo
+      description: Nome, dominio o percorso del file. Ometti token e credenziali dagli URL.
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: Motivo e richiesta
+      description: Descrivi il problema, i diritti interessati e la modifica richiesta. Se rappresenti un titolare, indica elementi pubblici utili a verificare il tuo ruolo.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versione dell’app

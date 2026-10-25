@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.2 — 2026-10-25
+
+- Distribuzione pubblica dei soli sorgenti: rimossa la pubblicazione automatica delle release e l’upload delle APK da GitHub Actions; restano gli archivi sorgente e i report di verifica.
+- Adattamenti di WorldLiveTV modificati dal progetto Lume TV: porting Kotlin/Android, player Media3, catalogo, cache e guida TV. Riferimento upstream e avvisi GPL conservati nelle attribuzioni.
+- Rimosse le quattro voci RSI La1/La2 e impedita la reintroduzione da catalogo, cache e aggiornamenti automatici.
+- Aggiunti GPLv2 con Classpath Exception, Apache 2.0, MPL 2.0, dichiarazione XZ e avvisi delle dipendenze; consultazione dall’app.
+- Archivi dei sorgenti corrispondenti con dipendenze, revisioni e checksum verificati.
+- Documentati funzionamento degli endpoint, limiti di garanzia e procedura di segnalazione/rimozione.
+
 ## 0.2.1
 
 - Il pulsante ↻ aggiorna catalogo e guida TV.

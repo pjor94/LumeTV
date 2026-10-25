@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Broadcaster flows adapted from WorldLiveTV 1.2.14 + hotfix 121417 (WLTV Group).
+// Modified by the Lume TV project, 2026-10-25: Kotlin/Android port and Media3 integration.
 package it.lumetv.app.data
 
 import it.lumetv.core.Channel

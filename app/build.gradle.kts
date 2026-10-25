@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -10,8 +12,8 @@ android {
         applicationId = "it.lumetv.app"
         minSdk = 23
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -37,9 +39,34 @@ android {
     }
     sourceSets.getByName("test").resources.srcDir("src/main/assets")
     sourceSets.getByName("test").resources.srcDir(rootProject.file("test-fixtures"))
+    buildFeatures { buildConfig = true }
     lint { abortOnError = true }
 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
+
+// Record the actual artifacts used by the APK, including the desugared JDK.
+// tools/dependency_sources.py checks these against the source distribution lock.
+tasks.register("writeReleaseDependencies") {
+    val report = layout.buildDirectory.file("reports/release-dependencies.json")
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        val artifacts = listOf("releaseRuntimeClasspath", "coreLibraryDesugaring").flatMap { name ->
+            configurations.getByName(name).resolvedConfiguration.resolvedArtifacts
+                .filter { it.id.componentIdentifier !is org.gradle.api.artifacts.component.ProjectComponentIdentifier }
+                .map { artifact ->
+                    mapOf("coordinate" to artifact.moduleVersion.id.toString(),
+                        "artifact" to artifact.file.name,
+                        "sha256" to MessageDigest.getInstance("SHA-256")
+                            .digest(artifact.file.readBytes()).joinToString("") { "%02x".format(it) })
+                }
+        }.distinct().sortedBy { it["coordinate"] }
+        report.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(artifacts)) + "\n")
+        }
+    }
+}
 
 dependencies {
     implementation(project(":core"))

@@ -219,14 +219,6 @@ plugin://plugin.video.wltvhelper/play/rai/RaiPlay
 plugin://plugin.video.wltvhelper/play/rai/RaiPlay 2
 #EXTINF:-1 tvg-id="raiplay3" tvg-logo="" tvg-name="Rai Play 3" tvg-chno="910" group-title="Generalisti",Rai Play 3
 plugin://plugin.video.wltvhelper/play/rai/RaiPlay 3
-#EXTINF:-1 tvg-id="rsila1vpn" tvg-logo="" tvg-name="RSI La 1 (solo in vpn)" tvg-chno="911" group-title="Generalisti",RSI La 1 (solo in vpn)
-plugin://plugin.video.wltvhelper/play/rsi/LA 1
-#EXTINF:-1 tvg-id="rsila2vpn" tvg-logo="" tvg-name="RSI La 2 (solo in vpn)" tvg-chno="912" group-title="Generalisti",RSI La 2 (solo in vpn)
-plugin://plugin.video.wltvhelper/play/rsi/LA 2
-#EXTINF:-1 tvg-id="rsila1" tvg-logo="" tvg-name="RSI La1 (instabile)" tvg-chno="913" group-title="Generalisti",RSI La1 (instabile)
-https://viamotionhsi.netplus.ch/live/eds/rsila1hd/browser-dash/rsila1hd.mpd
-#EXTINF:-1 tvg-id="rsila2" tvg-logo="" tvg-name="RSI La2 (instabile)" tvg-chno="914" group-title="Generalisti",RSI La2 (instabile)
-https://viamotionhsi.netplus.ch/live/eds/rsila2hd/browser-dash/rsila2hd.mpd
 #EXTINF:-1 tvg-id="grandefratelloparty" tvg-logo="" tvg-name="GF Party" tvg-chno="915" group-title="Grande Fratello",GF Party
 plugin://plugin.video.wltvhelper/play/mediaset/$B1
 #EXTINF:-1 tvg-id="grandefratello1" tvg-logo="" tvg-name="GF Regia 1" tvg-chno="916" group-title="Grande Fratello",GF Regia 1

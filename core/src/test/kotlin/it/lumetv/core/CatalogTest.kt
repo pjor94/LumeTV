@@ -7,7 +7,9 @@ class CatalogTest {
     private val catalog get() = M3uParser.parse(javaClass.getResource("/channels-2026-10-25.m3u")!!.readText())
 
     @Test fun `current bundled catalogue includes supported Rai and Mediaset channels`() {
-        val current = M3uParser.parse(javaClass.getResource("/channels.m3u")!!.readText()).filter { it.supported }
+        val text = javaClass.getResource("/channels.m3u")!!.readText()
+        assertEquals(text, CatalogPolicy.filterPlaylist(text))
+        val current = M3uParser.parse(text).filter { it.supported }
         assertTrue(current.size >= 20)
         assertTrue(current.count { it.family == "Rai" } >= 3)
         assertTrue(current.count { it.family == "Mediaset" } >= 3)

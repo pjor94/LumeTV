@@ -1,69 +1,46 @@
-# Pubblicare una versione
+# Pubblicare soltanto i sorgenti
 
-Il workflow [Release](../.github/workflows/release.yml) compila l’app al push di un tag di versione. Prima della pubblicazione esegue test e Lint, firma l’APK e ne verifica certificato, versione e assenza del flag di debug.
+Lume TV viene pubblicata come codice sorgente. Il repository mantiene codice, risorse, test, licenze, avvisi di modifica e strumenti per la compilazione locale.
 
-La release contiene:
+## GitHub Actions
 
-- `LumeTV-<versione>.apk`: APK ottimizzata e firmata.
-- `LumeTV-<versione>-source.zip`: sorgente corrispondente, comprese licenze, risorse e test.
-- `SHA256SUMS`: checksum dei file distribuiti.
-- `SIGNING-CERTIFICATE.txt`: impronta SHA-256 del certificato pubblico.
+Il workflow [Android](../.github/workflows/android.yml) esegue test, Lint e compilazioni debug/release per verificare il progetto. Le APK restano temporanee nel runner e non vengono caricate tra gli artefatti.
 
-Le note vengono dalla sezione della versione in `CHANGELOG.md` e includono i crediti a WorldLiveTV / WLTV Group.
+Gli unici artefatti conservati sono:
 
-## Configurare la firma
+- `LumeTV-source-<commit>`: archivio `LumeTV-<versione>-source.zip` con il progetto e i sorgenti verificati delle dipendenze.
+- `verification-<commit>`: report dei test e di Lint.
 
-Usa una chiave dedicata alle release e conservala con un backup. Tutte le versioni successive devono mantenere la stessa identità di firma per poter aggiornare l’app installata. Le anteprime locali firmate con il certificato di sviluppo hanno un’identità diversa: passando alla firma di release può essere necessario reinstallarle.
+La conservazione è di 14 giorni. Il workflow Android ha permessi di sola lettura sui contenuti del repository. Il precedente workflow di firma e pubblicazione delle release è stato rimosso: push di tag e avvio manuale non possono attivarlo. Non servono Secrets di firma Android per questa configurazione.
 
-Puoi generare il keystore con Android Studio oppure con JDK 17:
+Il workflow [Refresh bundled catalogue](../.github/workflows/catalog.yml) continua ad aggiornare la sola copia iniziale della playlist. Non crea tag, release o APK. Gli aggiornamenti del catalogo ricevuti dall’app compilata localmente restano disponibili.
 
-```sh
-keytool -genkeypair -v \
-  -keystore /percorso/sicuro/lumetv-release.jks \
-  -alias lumetv \
-  -keyalg RSA -keysize 4096 -validity 10000 -storetype JKS
-```
+## Preparare il repository
 
-Il comando chiede le password in modo interattivo. Il keystore e le password non vanno aggiunti al repository. [Indicazioni Android sulla firma](https://developer.android.com/studio/publish/app-signing).
+1. Conserva `LICENSE`, `THIRD_PARTY_NOTICES.md`, la copia degli avvisi nell’app e i testi in `app/src/main/assets/licenses/`.
+2. Aggiungi a Git tutti i nuovi file sorgente e documenti. Verifica anche la cancellazione di `.github/workflows/release.yml`, per non reintrodurre il vecchio workflow.
+3. Escludi APK, chiavi, password, cache, build e file locali: `.gitignore` esclude già `dist/`, le cartelle di build e le chiavi di firma.
+4. Esegui le verifiche indicate in [CONTRIBUTING.md](../CONTRIBUTING.md) e pubblica il commit del repository. Non è necessario creare una release.
+5. Mantieni attive le Issues per ricevere le richieste di rimozione attraverso il modulo dedicato. I collegamenti del progetto puntano a `pjor94/LumeTV`; se cambi repository, aggiorna anche quelli nell’app.
 
-In **Settings → Secrets and variables → Actions** del repository aggiungi:
+Gli strumenti manuali in `tools/release.py` restano nel codice, ma non sono richiamati da alcun workflow. Non usarne le operazioni di firma o pubblicazione per questa distribuzione di soli sorgenti.
 
-| Secret | Valore |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | Contenuto del keystore codificato in Base64 |
-| `ANDROID_KEYSTORE_PASSWORD` | Password del keystore |
-| `ANDROID_KEY_ALIAS` | Alias della chiave, per esempio `lumetv` |
-| `ANDROID_KEY_PASSWORD` | Password della chiave |
+## Preparare un archivio completo
 
-Con GitHub CLI puoi trasferire il keystore direttamente al Secret, senza stampare il contenuto:
+Con JDK 17 e Android SDK 36 configurati:
 
 ```sh
-base64 < /percorso/sicuro/lumetv-release.jks | gh secret set ANDROID_KEYSTORE_BASE64 --repo pjor94/LumeTV
-gh secret set ANDROID_KEYSTORE_PASSWORD --repo pjor94/LumeTV
-gh secret set ANDROID_KEY_ALIAS --repo pjor94/LumeTV
-gh secret set ANDROID_KEY_PASSWORD --repo pjor94/LumeTV
+./gradlew :app:writeReleaseDependencies --no-daemon
+python3 tools/dependency_sources.py fetch --report app/build/reports/release-dependencies.json
+python3 tools/package_source.py
 ```
 
-Il workflow usa la chiave soltanto durante la firma e rimuove la copia temporanea. In assenza dei Secrets si interrompe, senza pubblicare un’APK non firmata o usare una firma di sviluppo.
+L’archivio viene scritto in `dist/`. Contiene anche i sorgenti delle dipendenze in `third_party/sources/`, oltre a `SOURCE-MANIFEST.sha256` per verificare i file estratti. Revisioni, versioni e checksum delle dipendenze sono in `third_party/sources.lock.json`. La procedura blocca dipendenze diverse, sorgenti mancanti e checksum non corrispondenti; i dettagli sono in [third_party/README.md](../third_party/README.md).
 
-## Creare il tag
+Per preparare un’esportazione locale prima del commit, aggiungi `--include-untracked`: vengono inclusi i nuovi sorgenti e documenti ammessi, i file ignorati restano esclusi e le cancellazioni del workspace sono rispettate. L’esportazione non contiene cronologia Git, chiavi o APK.
 
-1. Aggiorna `versionName` e incrementa `versionCode` in `app/build.gradle.kts`.
-2. Aggiungi la sezione della versione a `CHANGELOG.md`.
-3. Salva le modifiche in un commit e pubblicalo sul repository.
-4. Crea e invia il tag corrispondente. Per la versione attuale:
+## Compilazione locale
 
-```sh
-git tag -a v0.2.1 -m "Lume TV 0.2.1"
-git push origin v0.2.1
-```
+Chi desidera provare l’app può seguire [README → Compilazione](../README.md#compilazione). La build di sviluppo viene firmata localmente con il certificato Android Debug; non richiede una chiave del progetto. La compilazione ottimizzata `:app:assembleRelease` produce invece un’APK non firmata, che richiede una propria firma per essere installata.
 
-Il tag deve coincidere esattamente con `v` seguito da `versionName`. Le versioni `0.x` e quelle con suffisso, come `1.0.0-rc.1`, vengono pubblicate come prerelease; le altre come release stabili.
-
-Il workflow prepara una bozza, carica tutti i file e la rende pubblica soltanto dopo il completamento degli upload. Una release già pubblicata non viene sovrascritta. Per correggerla, prepara una nuova versione; una bozza incompleta può essere completata rieseguendo il workflow sullo stesso tag.
-
-Per avviare manualmente la procedura, apri **Actions → Release → Run workflow** e indica un tag già presente nel repository. Non servono token personali: la pubblicazione usa il `GITHUB_TOKEN` del workflow.
-
-## Catalogo
-
-Il workflow [Refresh bundled catalogue](../.github/workflows/catalog.yml) aggiorna la sola copia iniziale della playlist. Non crea tag o release. L’aggiornamento ricevuto dalla TV continua a usare direttamente il servizio WLTV.
+Chi decidesse autonomamente di ridistribuire una propria APK deve rispettare le licenze e rendere disponibili i sorgenti corrispondenti alla compilazione, comprese le dipendenze richieste. Non è promessa una riproducibilità bit per bit dell’APK.

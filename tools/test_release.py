@@ -2,6 +2,7 @@ import base64
 import hashlib
 import io
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -30,16 +31,27 @@ class ReleaseTest(unittest.TestCase):
             'LICENSE': 'License fixture', 'README.md': 'Readme fixture',
             'THIRD_PARTY_NOTICES.md': 'WorldLiveTV attribution fixture',
             'gradlew': '#!/bin/sh\n', 'gradle/wrapper/gradle-wrapper.jar': 'Wrapper fixture',
+            'third_party/sources.lock.json': '{"schema":1,"artifacts":[]}',
+            'third_party/README.md': 'Dependency source fixture',
+            'app/src/main/assets/LICENSE.txt': 'License fixture',
+            'app/src/main/assets/THIRD_PARTY_NOTICES.md': 'WorldLiveTV attribution fixture',
+            'app/src/main/assets/DEPENDENCY_NOTICES.txt': 'Dependency notices fixture',
         }
         for name, text in files.items():
             path = self.root / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text)
         (self.root / 'gradlew').chmod(0o755)
+        shutil.copytree(release.ROOT / 'app/src/main/assets/licenses', self.root / 'app/src/main/assets/licenses')
         self.git('init', '-q')
         self.git('add', '.')
         self.commit()
         self.git('tag', 'v0.2.1')
+        report = self.root / 'app/build/reports/release-dependencies.json'
+        report.parent.mkdir(parents=True)
+        report.write_text('[]')
+        # Build reports are generated locally and never belong in a source archive.
+        (self.root / '.git/info/exclude').write_text('app/build/\n')
 
     def git(self, *args):
         return subprocess.check_output(['git', *args], cwd=self.root, stderr=subprocess.DEVNULL).decode()
@@ -105,9 +117,39 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Private or generated'):
             build_archive(self.root, self.output)
 
+    def test_removed_workflow_is_not_restored_in_source_archive(self):
+        workflow = self.root / '.github/workflows/release.yml'
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text('name: Previously enabled release\n')
+        self.git('add', '.github/workflows/release.yml')
+        self.commit()
+        workflow.unlink()
+        output = build_archive(self.root, self.output)
+        with zipfile.ZipFile(output) as archive:
+            self.assertNotIn('LumeTV-0.2.1/.github/workflows/release.yml', archive.namelist())
+
+    def test_new_source_cannot_be_silently_omitted(self):
+        path = self.root / 'app/src/main/NewPolicy.kt'
+        path.write_text('New source fixture')
+        with self.assertRaisesRegex(ValueError, 'Untracked source'):
+            build_archive(self.root, self.output)
+        with self.assertRaisesRegex(ValueError, 'Commit source'):
+            release.metadata(self.root, 'v0.2.1')
+        output = build_archive(self.root, self.output, include_untracked=True)
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(b'New source fixture', archive.read('LumeTV-0.2.1/app/src/main/NewPolicy.kt'))
+            manifest = archive.read('LumeTV-0.2.1/SOURCE-MANIFEST.sha256').decode()
+            for line in manifest.splitlines():
+                checksum, name = line.split('  ', 1)
+                self.assertEqual(checksum, hashlib.sha256(archive.read('LumeTV-0.2.1/' + name)).hexdigest())
+
     def prepared(self):
         self.output.mkdir()
-        (self.output / 'LumeTV-0.2.1.apk').write_bytes(b'APK fixture')
+        with zipfile.ZipFile(self.output / 'LumeTV-0.2.1.apk', 'w') as apk:
+            legal = self.root / 'app/src/main/assets'
+            for path in legal.rglob('*'):
+                if path.is_file():
+                    apk.write(path, 'assets/' + path.relative_to(legal).as_posix())
         (self.output / 'SIGNING-CERTIFICATE.txt').write_text('Fingerprint fixture')
         release.prepare(self.root, self.output)
 
@@ -163,6 +205,12 @@ class ReleaseTest(unittest.TestCase):
         with fake, self.assertRaisesRegex(ValueError, 'checksum'):
             release.publish(self.root, self.output, 'v0.2.1', 'owner/repository')
         self.assertFalse(calls)
+
+    def test_stale_apk_licenses_cannot_be_prepared(self):
+        self.prepared()
+        (self.root / 'app/src/main/assets/THIRD_PARTY_NOTICES.md').write_text('Updated attribution')
+        with self.assertRaisesRegex(ValueError, 'APK legal notice differs'):
+            release.prepare(self.root, self.output)
 
 
 if __name__ == '__main__':
