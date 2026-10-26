@@ -37,7 +37,7 @@ I palinsesti provengono dal servizio esterno [EPG-Guide](https://epg-guide.com/)
 
 Le licenze si applicano ai rispettivi componenti e non ai contenuti delle emittenti. Il progetto conserva i copyright dei sorgenti upstream; i nomi sopra riassumono i titolari, senza sostituire gli avvisi dei singoli file. Gli avvisi originali sono conservati in `app/src/main/assets/DEPENDENCY_NOTICES.txt` e nell’app.
 
-Testi integrali nell’app, in **Info → Licenze e avvisi**, e nei sorgenti in `app/src/main/assets/licenses/`: Apache 2.0, GPLv2 con Classpath Exception, BSD R8, MPL 2.0, dichiarazione XZ, informazioni aggiuntive OpenJDK. La EPL 1.0 dei test è inclusa nella stessa cartella. La Classpath Exception consente il collegamento con moduli indipendenti con licenze diverse; non elimina gli obblighi relativi al componente desugar.
+Testi integrali nell’app, in **Opzioni → Licenze e avvisi**, e nei sorgenti in `app/src/main/assets/licenses/`: Apache 2.0, GPLv2 con Classpath Exception, BSD R8, MPL 2.0, dichiarazione XZ, informazioni aggiuntive OpenJDK. La EPL 1.0 dei test è inclusa nella stessa cartella. La Classpath Exception consente il collegamento con moduli indipendenti con licenze diverse; non elimina gli obblighi relativi al componente desugar.
 
 ### Sorgenti corrispondenti
 
@@ -51,7 +51,7 @@ desugar_jdk_libs 2.1.5 proviene dalla revisione Google `73170c345e6a762fc6a1f030
 
 Copyright (c) 2026, contributori del progetto Lume TV.
 
-Il codice, il simbolo, il lettering e le altre risorse originali di Lume TV sono distribuiti con licenza **GPL-3.0-or-later**. Il testo integrale è disponibile in `LICENSE` e nell’app, in **Info → Licenze e avvisi**.
+Il codice, il simbolo, il lettering e le altre risorse originali di Lume TV sono distribuiti con licenza **GPL-3.0-or-later**. Il testo integrale è disponibile in `LICENSE` e nell’app, in **Opzioni → Licenze e avvisi**.
 
 Lume TV è software libero: puoi ridistribuirlo e modificarlo secondo la GNU GPL versione 3 o successiva. È fornito senza garanzie nei limiti consentiti dalla legge; vedi le sezioni 15–17 della licenza. La licenza del software non autorizza utilizzi di contenuti o servizi di terzi. Segnalazioni sui diritti e richieste di rimozione: https://github.com/pjor94/LumeTV/issues/new. La raggiungibilità di un endpoint non prova un’autorizzazione; condizioni dei fornitori e limiti territoriali restano applicabili.
 

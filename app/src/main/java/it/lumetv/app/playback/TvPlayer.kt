@@ -22,8 +22,9 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
     private var player: ExoPlayer? = null
     private var session: MediaSession? = null
     private var view: PlayerView? = null
-    var onState: (Boolean) -> Unit = {}
-    var onError: (String) -> Unit = {}
+    var onBuffering: () -> Unit = {}
+    var onPlayingChanged: (Boolean) -> Unit = {}
+    var onError: (PlaybackFailure) -> Unit = {}
     val isPlaying get() = player?.isPlaying == true
     private val listener = object : Player.Listener {
         override fun onRenderedFirstFrame() {
@@ -31,18 +32,13 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
         }
         override fun onPlaybackStateChanged(playbackState: Int) {
             debug("state=$playbackState")
-            onState(playbackState == Player.STATE_BUFFERING)
+            if (playbackState == Player.STATE_BUFFERING) onBuffering()
+            if (playbackState == Player.STATE_ENDED) onError(PlaybackFailure("La diretta si è interrotta. Riprova o scegli un altro canale.", true))
         }
+        override fun onIsPlayingChanged(isPlaying: Boolean) = onPlayingChanged(isPlaying)
         override fun onPlayerError(error: PlaybackException) {
             debug("error=${error.errorCodeName}")
-            onState(false)
-            onError(when (error.errorCode) {
-                PlaybackException.ERROR_CODE_DRM_LICENSE_ACQUISITION_FAILED -> "L’emittente non ha rilasciato la licenza DRM. Riprova o scegli un altro canale."
-                PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED, PlaybackException.ERROR_CODE_DRM_SYSTEM_ERROR -> "La TV non riesce a inizializzare la riproduzione protetta."
-                PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> "Il formato video di questo canale non è supportato dalla TV."
-                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> "Connessione assente. Controlla la rete e riprova."
-                else -> "La diretta si è interrotta. Premi OK per riprovare o Indietro per scegliere un altro canale."
-            })
+            onError(PlaybackFailure.fromPlayer(error))
         }
     }
 
@@ -92,10 +88,15 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
         player.playWhenReady = true
     }
 
-    fun togglePause() { player?.let { it.playWhenReady = !it.playWhenReady } }
+    fun togglePause(): Boolean {
+        val active = player ?: return false
+        active.playWhenReady = !active.playWhenReady
+        return active.playWhenReady
+    }
     fun pauseForCatalog() { player?.pause() }
     fun resumeToLive(): Boolean {
-        val active = player?.takeIf { it.mediaItemCount > 0 } ?: return false
+        val active = player?.takeIf { it.mediaItemCount > 0 && it.playerError == null &&
+            it.playbackState != Player.STATE_IDLE && it.playbackState != Player.STATE_ENDED } ?: return false
         active.seekToDefaultPosition(); active.play()
         return true
     }

@@ -17,14 +17,19 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import it.lumetv.app.data.*
 import it.lumetv.app.playback.TvPlayer
+import it.lumetv.app.playback.NetworkMonitor
+import it.lumetv.app.playback.PlaybackFailure
+import it.lumetv.app.playback.PlaybackRecovery
 import it.lumetv.app.ui.ChannelAdapter
 import it.lumetv.app.ui.CatalogBackdrop
+import it.lumetv.app.ui.LiveBanner
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.core.Channel
@@ -44,6 +49,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var guide: GuideRepository
     private lateinit var resolver: StreamResolver
     private lateinit var tvPlayer: TvPlayer
+    private lateinit var recovery: PlaybackRecovery
+    private lateinit var network: NetworkMonitor
     private lateinit var video: PlayerView
     private lateinit var root: FrameLayout
     private lateinit var catalog: FrameLayout
@@ -55,9 +62,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var heading: TextView
     private lateinit var clock: TextView
     private lateinit var syncStatus: TextView
-    private lateinit var banner: LinearLayout
-    private lateinit var bannerTitle: TextView
-    private lateinit var bannerShow: TextView
+    private lateinit var banner: LiveBanner
+    private var channelBannerVisible = false
     private lateinit var loading: LinearLayout
     private lateinit var loadingTitle: TextView
     private lateinit var errorBox: LinearLayout
@@ -73,7 +79,15 @@ class MainActivity : ComponentActivity() {
     private var showingCatalog = true
     private var failed = false
     private var digits = ""
-    private val hideBanner = Runnable { banner.visibility = View.GONE }
+    private val hideBanner = Runnable { banner.visibility = View.GONE; handler.removeCallbacks(bannerTick) }
+    private val bannerTick = object : Runnable {
+        override fun run() {
+            if (!showingCatalog && channelBannerVisible && banner.visibility == View.VISIBLE) {
+                updateChannelBanner()
+                handler.postDelayed(this, 1_000)
+            }
+        }
+    }
     private val numberAction = Runnable {
         val number = digits.toIntOrNull()
         digits = ""
@@ -102,15 +116,30 @@ class MainActivity : ComponentActivity() {
         guide = GuideRepository(this, http)
         resolver = StreamResolver(http)
         tvPlayer = TvPlayer(this, http)
+        network = NetworkMonitor(this) { online -> recovery.onNetworkChanged(online) }
+        recovery = PlaybackRecovery(lifecycleScope, { network.isOnline }, { openCurrentChannel(isRetry = true) },
+            onWaiting = { showRecoveryStatus("Connessione assente · Riprendo quando torna la rete…") },
+            onScheduled = { attempt, maximum -> showRecoveryStatus("Riconnetto la diretta… Tentativo $attempt di $maximum") },
+            onExhausted = ::showError)
         buildUi()
-        tvPlayer.onState = { buffering -> if (!showingCatalog && !failed) loading.visibility = if (buffering) View.VISIBLE else View.GONE }
-        tvPlayer.onError = { message -> if (!showingCatalog) showError(message) }
+        tvPlayer.onBuffering = {
+            if (!showingCatalog && !failed) { loading.visibility = View.VISIBLE; recovery.onBuffering() }
+        }
+        tvPlayer.onPlayingChanged = { playing ->
+            if (!showingCatalog && !failed && playing) {
+                loading.visibility = View.GONE
+                current?.let { repository.lastChannelId = it.id }
+                recovery.onPlaying()
+            } else recovery.onNotPlaying()
+        }
+        tvPlayer.onError = { error -> if (!showingCatalog) recovery.onFailure(error) }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (!showingCatalog) showCatalog()
                 else if (current != null && !failed) {
                     showingCatalog = false; catalog.visibility = View.GONE; video.visibility = View.VISIBLE
-                    if (!tvPlayer.resumeToLive()) current?.let(::selectChannel) else showChannelBanner()
+                    resumeLive()
+                    showChannelBanner()
                 } else finish()
             }
         })
@@ -121,7 +150,10 @@ class MainActivity : ComponentActivity() {
             updateCatalog()
             val previous = savedInstanceState?.getString("channel") ?: repository.lastChannelId
             current = channels.firstOrNull { it.id == previous }
-            if (current != null) selectChannel(current!!) else focusFirstChannel()
+            if (current != null) {
+                showingCatalog = false
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) selectChannel(current!!)
+            } else focusFirstChannel()
             refreshCatalog(false)
             refreshGuide()
         }
@@ -130,12 +162,15 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         tvPlayer.attach(video)
+        network.start()
         handler.post(tick)
         handler.post(catalogTick)
         if (current != null && !showingCatalog) selectChannel(current!!)
     }
 
     override fun onStop() {
+        recovery.stop()
+        network.stop()
         resolveJob?.cancel(); guideJob?.cancel(); catalogJob?.cancel()
         handler.removeCallbacksAndMessages(null)
         digits = ""
@@ -211,16 +246,7 @@ class MainActivity : ComponentActivity() {
         catalog.addView(content, FrameLayout.LayoutParams(-1, -1))
         root.addView(catalog, FrameLayout.LayoutParams(-1, -1))
 
-        banner = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(28), dp(23), dp(28), dp(23))
-            background = TvStyle.rounded(0xE61A1D24.toInt(), dp(24).toFloat(), 0x24FFFFFF, dp(1))
-            visibility = View.GONE
-        }
-        bannerTitle = TvStyle.text(this, "", 29f, bold = true)
-        bannerShow = TvStyle.text(this, "", 15f, TvStyle.muted)
-        banner.addView(bannerTitle); banner.addView(bannerShow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-        banner.addView(TvStyle.text(this, "OK  Info / Riprendi     ·     Indietro  Canali     ·     CH +/−  Cambia", 12f, TvStyle.muted), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+        banner = LiveBanner(this).apply { visibility = View.GONE }
         root.addView(banner, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
             leftMargin = dp(46); rightMargin = dp(46); bottomMargin = dp(28)
         })
@@ -252,7 +278,25 @@ class MainActivity : ComponentActivity() {
         val refresh = TvStyle.button(this, "↻", false) { refreshCatalog(true); refreshGuide(true) }.apply { contentDescription = "Aggiorna canali e guida TV" }
         refresh.setPadding(dp(13), dp(8), dp(13), dp(8))
         tabs.addView(refresh, LinearLayout.LayoutParams(dp(42), -1))
-        tabs.addView(TvStyle.button(this, "Info") { showAbout() }.apply { setPadding(dp(13), dp(8), dp(13), dp(8)) }, LinearLayout.LayoutParams(-2, -1))
+        tabs.addView(TvStyle.button(this, "Opzioni") { showOptions() }.apply { setPadding(dp(13), dp(8), dp(13), dp(8)) }, LinearLayout.LayoutParams(-2, -1))
+    }
+
+    private fun showOptions() {
+        val mode = if (repository.zapFavoritesOnly) "solo preferiti" else "tutti i canali"
+        android.app.AlertDialog.Builder(this).setTitle("Opzioni")
+            .setItems(arrayOf("CH+/CH−: $mode", "Informazioni", "Licenze e avvisi")) { _, index ->
+                when (index) { 0 -> showZappingOptions(); 1 -> showAbout(); 2 -> showLicenses() }
+            }.setNegativeButton("Chiudi", null).show()
+    }
+
+    private fun showZappingOptions() {
+        android.app.AlertDialog.Builder(this).setTitle("Cambio canale con CH+/CH−")
+            .setSingleChoiceItems(arrayOf("Tutti i canali", "Solo preferiti"), if (repository.zapFavoritesOnly) 1 else 0) { dialog, selected ->
+                repository.zapFavoritesOnly = selected == 1
+                status.text = if (selected == 1) "CH+/CH− scorre i preferiti · OK prolungato per aggiungere un canale"
+                    else "CH+/CH− scorre tutti i canali"
+                dialog.dismiss()
+            }.setNegativeButton("Annulla", null).show()
     }
 
     private fun showAbout() {
@@ -326,28 +370,43 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectChannel(channel: Channel) {
+        recovery.start()
         resolveJob?.cancel()
         handler.removeCallbacks(numberAction); digits = ""
         current = channel; showingCatalog = false; failed = false
         catalog.visibility = View.GONE; video.visibility = View.VISIBLE; errorBox.visibility = View.GONE
         root.requestFocus()
-        tvPlayer.stop()
-        loadingTitle.text = channel.name
-        loading.visibility = View.VISIBLE
         showChannelBanner()
+        openCurrentChannel()
+    }
+
+    private fun openCurrentChannel(isRetry: Boolean = false) {
+        val channel = current ?: return
+        resolveJob?.cancel()
+        tvPlayer.stop()
+        if (!isRetry) loadingTitle.text = channel.name
+        loading.visibility = View.VISIBLE
+        recovery.onBuffering()
         resolveJob = lifecycleScope.launch {
             try {
                 val stream = resolver.resolve(channel)
                 tvPlayer.play(stream)
-                repository.lastChannelId = channel.id
             } catch (cancelled: CancellationException) { throw cancelled }
-              catch (error: Exception) { showError((error as? SourceException)?.message ?: "Non riesco ad aprire la diretta. Controlla la connessione e riprova.") }
+              catch (error: Exception) { recovery.onFailure(PlaybackFailure.fromSource(error)) }
         }
     }
 
-    private fun showCatalog() {
+    private fun showRecoveryStatus(message: String) {
         resolveJob?.cancel()
-        handler.removeCallbacks(hideBanner); handler.removeCallbacks(numberAction); digits = ""
+        tvPlayer.stop()
+        loadingTitle.text = message
+        loading.visibility = View.VISIBLE
+    }
+
+    private fun showCatalog() {
+        recovery.stop()
+        resolveJob?.cancel()
+        handler.removeCallbacks(hideBanner); handler.removeCallbacks(bannerTick); handler.removeCallbacks(numberAction); digits = ""
         tvPlayer.pauseForCatalog()
         showingCatalog = true
         banner.visibility = View.GONE; loading.visibility = View.GONE; errorBox.visibility = View.GONE
@@ -356,6 +415,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showError(message: String) {
+        recovery.stop()
+        resolveJob?.cancel()
+        tvPlayer.stop()
         failed = true; loading.visibility = View.GONE; banner.visibility = View.GONE
         errorBox.removeAllViews()
         errorBox.addView(TvStyle.text(this, current?.name.orEmpty(), 26f, bold = true))
@@ -369,17 +431,35 @@ class MainActivity : ComponentActivity() {
         retry.requestFocus()
     }
 
+    private fun resumeLive() {
+        recovery.start()
+        if (!tvPlayer.resumeToLive()) current?.let(::selectChannel)
+        else if (tvPlayer.isPlaying) recovery.onPlaying()
+        else { loading.visibility = View.VISIBLE; recovery.onBuffering() }
+    }
+
     private fun showChannelBanner() {
-        val channel = current ?: return
-        val now = System.currentTimeMillis()
-        val programme = programmes[channel.epgId]?.firstOrNull { it.start <= now && it.end > now }
-        showBanner("${channel.number.takeIf { it != 9999 }?.let { "$it  ·  " }.orEmpty()}${channel.name}", programme?.title ?: "Diretta")
+        if (current == null) return
+        channelBannerVisible = true
+        updateChannelBanner()
+        displayBanner()
+        handler.removeCallbacks(bannerTick); handler.post(bannerTick)
+    }
+
+    private fun updateChannelBanner() {
+        current?.let { banner.bind(it, programmes[it.epgId].orEmpty(), repository.zapFavoritesOnly) }
     }
 
     private fun showBanner(title: String, subtitle: String) {
-        bannerTitle.text = title; bannerShow.text = subtitle
+        channelBannerVisible = false
+        handler.removeCallbacks(bannerTick)
+        banner.message(title, subtitle)
+        displayBanner()
+    }
+
+    private fun displayBanner() {
         banner.visibility = View.VISIBLE
-        handler.removeCallbacks(hideBanner); handler.postDelayed(hideBanner, 4_000)
+        handler.removeCallbacks(hideBanner); handler.postDelayed(hideBanner, 6_000)
     }
 
     private fun refreshCatalog(force: Boolean) {
@@ -423,7 +503,20 @@ class MainActivity : ComponentActivity() {
             finally {
                 guideLoading = false
                 if (showingCatalog) updateCatalog()
+                else if (channelBannerVisible && banner.visibility == View.VISIBLE) updateChannelBanner()
             }
+        }
+    }
+
+    private fun zap(direction: Int) {
+        val next = repository.nextChannel(channels, current?.id, direction)
+        if (next != null) {
+            if (next.id != current?.id || showingCatalog || failed) selectChannel(next)
+            else showChannelBanner()
+        } else {
+            val message = "Nessun preferito · Tieni premuto OK su un canale per aggiungerlo"
+            if (showingCatalog) status.text = message
+            else showBanner("Nessun canale preferito", "Aggiungi un preferito dal catalogo o cambia la modalità in Opzioni")
         }
     }
 
@@ -437,14 +530,22 @@ class MainActivity : ComponentActivity() {
             return true
         }
         when (event.keyCode) {
-            KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT -> { ChannelNavigation.next(channels, current?.id, 1)?.let(::selectChannel); return true }
-            KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { ChannelNavigation.next(channels, current?.id, -1)?.let(::selectChannel); return true }
+            KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT -> { zap(1); return true }
+            KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { zap(-1); return true }
             KeyEvent.KEYCODE_GUIDE -> { currentFilter = "Guida TV"; buildTabs(); showCatalog(); refreshGuide(); return true }
             KeyEvent.KEYCODE_MENU -> { showCatalog(); return true }
-            KeyEvent.KEYCODE_INFO -> { if (!showingCatalog) showChannelBanner(); return true }
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (!showingCatalog) tvPlayer.togglePause(); return true }
+            KeyEvent.KEYCODE_INFO -> { if (!showingCatalog && !failed) showChannelBanner(); return true }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                if (!showingCatalog && !failed && !recovery.isRecovering) {
+                    if (tvPlayer.togglePause()) resumeLive()
+                    else { recovery.stop(); resolveJob?.cancel(); loading.visibility = View.GONE }
+                }
+                return true
+            }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (!showingCatalog && !failed) {
-                if (!tvPlayer.isPlaying && !tvPlayer.resumeToLive()) current?.let(::selectChannel)
+                if (!tvPlayer.isPlaying && !recovery.isRecovering) {
+                    resumeLive()
+                }
                 showChannelBanner(); return true
             }
         }

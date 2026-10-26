@@ -88,11 +88,13 @@ data class ResolvedStream(
 )
 
 object ChannelNavigation {
-    fun next(channels: List<Channel>, currentId: String?, direction: Int): Channel? {
-        if (channels.isEmpty()) return null
-        val index = channels.indexOfFirst { it.id == currentId }
-        val next = if (index < 0) 0 else Math.floorMod(index + direction, channels.size)
-        return channels[next]
+    fun next(channels: List<Channel>, currentId: String?, direction: Int, favoriteIds: Set<String>? = null): Channel? {
+        val available = if (favoriteIds == null) channels else channels.filter { it.id in favoriteIds }
+        if (available.isEmpty()) return null
+        val index = available.indexOfFirst { it.id == currentId }
+        val next = if (index < 0) { if (direction < 0) available.lastIndex else 0 }
+            else Math.floorMod(index + direction, available.size)
+        return available[next]
     }
     fun byNumber(channels: List<Channel>, number: Int) = channels.firstOrNull { it.number == number }
 }

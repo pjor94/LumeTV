@@ -3,6 +3,7 @@ package it.lumetv.app.data
 import android.content.Context
 import android.util.AtomicFile
 import it.lumetv.core.Channel
+import it.lumetv.core.ChannelNavigation
 import java.io.File
 
 class ChannelRepository(context: Context, private val http: Transport) {
@@ -30,6 +31,12 @@ class ChannelRepository(context: Context, private val http: Transport) {
     var lastChannelId: String?
         get() = prefs.getString("last_channel", null)
         set(value) { prefs.edit().putString("last_channel", value).apply() }
+    var zapFavoritesOnly: Boolean
+        get() = prefs.getBoolean("zap_favorites_only", false)
+        set(value) { prefs.edit().putBoolean("zap_favorites_only", value).apply() }
+
+    fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int): Channel? =
+        ChannelNavigation.next(channels, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
 
     suspend fun local(): List<Channel> = sync.local()
     suspend fun refresh(force: Boolean = false): List<Channel>? = sync.refresh(force)

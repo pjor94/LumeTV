@@ -63,4 +63,28 @@ class CatalogTest {
         assertEquals(channels.first(), ChannelNavigation.next(channels, "removed-channel", 1))
         assertNull(ChannelNavigation.next(emptyList(), null, 1))
     }
+
+    @Test fun `favorites zapping skips other channels and wraps in both directions`() {
+        val channels = catalog.take(5)
+        val favorites = setOf(channels[1].id, channels[3].id, "removed-channel")
+        assertEquals(channels[3], ChannelNavigation.next(channels, channels[1].id, 1, favorites))
+        assertEquals(channels[1], ChannelNavigation.next(channels, channels[3].id, 1, favorites))
+        assertEquals(channels[3], ChannelNavigation.next(channels, channels[1].id, -1, favorites))
+        assertEquals(channels[1], ChannelNavigation.next(channels, channels[0].id, 1, favorites))
+        assertEquals(channels[3], ChannelNavigation.next(channels, channels[0].id, -1, favorites))
+    }
+
+    @Test fun `empty and stale favorites do not silently zap through all channels`() {
+        assertNull(ChannelNavigation.next(catalog, null, 1, emptySet()))
+        assertNull(ChannelNavigation.next(catalog, null, -1, setOf("removed-channel")))
+        assertEquals(catalog[1], ChannelNavigation.next(catalog, catalog[0].id, 1))
+    }
+
+    @Test fun `one favorite remains selected and numerical selection still uses the full catalog`() {
+        val channels = catalog.take(5)
+        val favorite = channels[3]
+        assertEquals(favorite, ChannelNavigation.next(channels, favorite.id, 1, setOf(favorite.id)))
+        assertEquals(favorite, ChannelNavigation.next(channels, favorite.id, -1, setOf(favorite.id)))
+        assertEquals(channels[0], ChannelNavigation.byNumber(channels, channels[0].number))
+    }
 }
