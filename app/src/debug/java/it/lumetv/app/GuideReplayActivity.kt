@@ -36,7 +36,8 @@ class GuideReplayActivity : ComponentActivity() {
                     require(shows["canale5"].orEmpty().any { it.start <= now && it.end > now })
                     val root = JSONObject()
                     shows.forEach { (id, programmes) -> root.put(id, JSONArray().apply { programmes.forEach { p ->
-                        put(JSONObject().put("title", p.title).put("start", p.start).put("end", p.end))
+                        put(JSONObject().put("title", p.title).put("start", p.start).put("end", p.end)
+                            .put("description", p.description))
                     } }) }
                     val cache = AtomicFile(File(filesDir, "guide.json"))
                     val output = cache.startWrite()

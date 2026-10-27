@@ -13,10 +13,12 @@ import kotlinx.coroutines.Job
 
 /** A fixed optical footprint, shared by cards, guide rows and the live banner. */
 @SuppressLint("ViewConstructor") // Programmatic UI; the repository is supplied by the activity.
-class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository) : FrameLayout(context) {
+class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository, private val compact: Boolean = false) : FrameLayout(context) {
     private val image = ImageView(context).apply {
         scaleType = ImageView.ScaleType.FIT_CENTER
-        setPadding(context.dp(10), context.dp(8), context.dp(10), context.dp(8))
+        val horizontal = context.dp(if (compact) 4 else 10)
+        val vertical = context.dp(if (compact) 4 else 8)
+        setPadding(horizontal, vertical, horizontal, vertical)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
     private var channel: Channel? = null
@@ -68,7 +70,7 @@ class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository
         background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
             if (light) intArrayOf(0xFFF3F5F8.toInt(), 0xFFDDE3EB.toInt())
             else intArrayOf(0xFF303846.toInt(), 0xFF222832.toInt())).apply {
-            cornerRadius = context.dp(12).toFloat()
+            cornerRadius = context.dp(if (compact) 8 else 12).toFloat()
             setStroke(context.dp(1), if (light) 0x19000000 else 0x19FFFFFF)
         }
     }

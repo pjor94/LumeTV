@@ -40,13 +40,13 @@ Per abilitare il collegamento con AURA nelle release, imposta anche la variabile
 ## Preparare e avviare una versione
 
 1. Imposta `versionName` in `app/build.gradle.kts` e incrementa `versionCode` per ogni nuova versione da installare come aggiornamento.
-2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.3.3` è già presente.
+2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.4.0` è già presente.
 3. Esegui le verifiche indicate in [CONTRIBUTING.md](../CONTRIBUTING.md). Aggiungi a Git tutti i nuovi sorgenti e documenti, poi committa e pubblica le modifiche.
 4. Crea e pubblica un tag esattamente uguale a `v<versionName>`. Con la versione attuale:
 
 ```sh
-git tag -a v0.3.3 -m 'Lume TV 0.3.3'
-git push origin v0.3.3
+git tag -a v0.4.0 -m 'Lume TV 0.4.0'
+git push origin v0.4.0
 ```
 
 Il push avvia la pipeline. In alternativa, dopo che il workflow è presente sul ramo predefinito, apri **Actions → Release → Run workflow** e inserisci il nome di un tag esistente. Il checkout usa quel tag; non viene pubblicato lo stato corrente di un altro ramo. Per pubblicare le modifiche nuove, il tag deve includerle.

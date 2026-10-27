@@ -9,17 +9,18 @@
 <p align="center">Le dirette italiane su Android TV, con un’interfaccia essenziale e un solo telecomando.</p>
 <p align="center">
   <a href="https://github.com/pjor94/LumeTV/releases">Tutte le release</a> ·
+  <a href="docs/GUIDA-UTENTE.md">Guida utente</a> ·
   <a href="#compilazione">Compila dai sorgenti</a> ·
   <a href="CHANGELOG.md">Novità</a> ·
   <a href="CONTRIBUTING.md">Contribuisci</a>
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.3/LumeTV-0.3.3.apk)
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.4.0/LumeTV-0.4.0.apk)
 >
 > APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.3) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.4.0) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Catalogo di Lume TV](docs/screenshots/catalog.png)
 
@@ -41,8 +42,8 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 - Elenco canali semitrasparente sulla sinistra della diretta, con loghi, programma in onda e filtro preferiti, senza interrompere la visione.
 - Preferiti e apertura dell’ultimo canale guardato.
 - Cambio canale con CH+/CH− su tutti i canali o solo sui preferiti, configurabile in **Opzioni**.
-- Guida con programma attuale e successivo, conservata sul dispositivo.
-- Pannello della diretta con orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
+- Guida TV a griglia con programmazione delle prossime ore, dettagli e filtro preferiti, conservata sul dispositivo.
+- Pannello della diretta con descrizione, orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
 - Recupero automatico delle interruzioni temporanee, con attesa del ritorno della rete.
 - Catalogo aggiornato automaticamente, con una copia locale disponibile al primo avvio.
 - Loghi dei canali nel catalogo, nella guida e nel pannello della diretta, scaricati dalle sorgenti originali e conservati sul dispositivo.
@@ -51,12 +52,32 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 
 Le integrazioni attuali comprendono Rai, Mediaset, Sky, La7, WBD/Discovery e URL diretti. La disponibilità dei singoli canali dipende dalle emittenti, dalla rete utilizzata e dagli eventuali eventi in corso.
 
-<details>
-  <summary>Guida TV</summary>
+## La nuova Guida TV
+
+La griglia mostra circa due ore e mezza alla volta, scorrendo fino alla fine del palinsesto disponibile. ↑/↓ cambia canale mantenendo l’orario, ←/→ passa tra i programmi; **Adesso** e **Stasera** raggiungono le rispettive fasce. OK sul programma in onda apre la diretta; sui programmi futuri mostra orari, descrizione quando disponibile e un’azione esplicita per guardare il canale ora.
+
+Nella Guida, CH+/CH− scorre i canali per pagina e i numeri raggiungono il canale senza avviare la riproduzione. OK prolungato gestisce i preferiti. Tornando dalla diretta si ritrovano canale e fascia oraria selezionati. I canali privi di palinsesto restano accessibili; disponibilità e copertura dipendono dalla sorgente.
 
 ![Guida programmi](docs/screenshots/guide.png)
 
+<details>
+  <summary>Altre schermate: dettagli, informazioni e canali durante la diretta</summary>
+
+**I dettagli del programma** — titolo completo, orari e descrizione, quando fornita dal palinsesto.
+
+![Dettagli di un programma nella Guida TV](docs/screenshots/guide-details.png)
+
+**Le informazioni della diretta** — descrizione del programma attuale, avanzamento e titolo successivo.
+
+![Informazioni del programma durante la diretta](docs/screenshots/live-info.png)
+
+**I canali, senza lasciare la visione** — elenco laterale con filtro preferiti e programma in onda.
+
+![Elenco canali durante la diretta](docs/screenshots/live-channels.png)
+
 </details>
+
+Per iniziare, consulta la **[guida utente illustrata](docs/GUIDA-UTENTE.md)**: installazione, telecomando, preferiti, palinsesto e aggiornamenti.
 
 ## Distribuzione e installazione
 
@@ -106,7 +127,7 @@ I tasti GUIDE e MENU aprono guida e catalogo quando il sistema della TV li rende
 
 In **Opzioni → CH+/CH−** puoi scegliere **Solo preferiti**. La scelta resta salvata sul dispositivo; i numeri e la selezione dal catalogo continuano ad accedere a tutti i canali. Se non hai preferiti, l’app ti invita ad aggiungerli con OK prolungato su una scheda.
 
-Durante la diretta, OK o INFO mostra per sei secondi gli orari del programma, l’avanzamento, i minuti rimanenti e il titolo successivo, quando disponibili. Il pannello si aggiorna anche al cambio di programma.
+Durante la diretta, OK o INFO mostra gli orari del programma, l’avanzamento, i minuti rimanenti, la descrizione e il titolo successivo, quando disponibili. Le descrizioni lunghe si leggono con **↑/↓**, mantenendo il video in riproduzione e fino a tre righe visibili. Il pannello resta per 15 secondi quando viene aperto con OK o INFO e contiene una descrizione; ogni scorrimento rinnova il tempo di lettura. Al cambio canale, o senza descrizione, resta per sei secondi. Si aggiorna anche al cambio di programma.
 
 Premi **←** per aprire l’elenco laterale: il focus parte dal canale in visione, contrassegnato da un punto azzurro. **↑/↓** scorre i canali senza cambiare la diretta; **OK** conferma la scelta e chiude l’elenco. I loghi, il programma in onda e la barra di avanzamento aiutano a scegliere. Una seconda pressione di **←** porta ai filtri **Tutti** e **Preferiti** in cima all’elenco; il filtro non modifica la modalità CH+/CH− delle Opzioni. **→** da un canale o **Indietro** richiude il pannello senza interrompere il video. L’apertura è immediata e la navigazione rispetta le animazioni disabilitate nelle impostazioni della TV.
 

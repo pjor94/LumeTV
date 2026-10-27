@@ -30,6 +30,8 @@ Il report viene scritto in `app/build/reports/live-resolvers.json`. Il test legg
 
 Per provare il parser su un file XMLTV/XZ già scaricato, aggiungi `-PguideFile=/percorso/guida.xz`. Non aggiungere l’intero feed al repository. La build debug include uno strumento di replay nativo; questo componente è escluso dalla release.
 
+Per il collaudo della Guida su un emulatore Android TV usa `python3 tools/smoke_guide.py --adb /percorso/adb --serial emulator-5560 --video /percorso/video-sintetico.mp4`, con APK debug già installata. Il test prepara un catalogo e un palinsesto locali, riproduce soltanto il video sintetico e ripristina cache, preferenze e dimensione del testo al termine. Non usarlo su una TV fisica. Report e schermate vengono salvati in `analysis/guide-smoke/`.
+
 ## Catalogo e risorse
 
 `python3 tools/update_catalog.py --refresh` aggiorna e valida la copia iniziale della playlist. Le risposte incomplete non sostituiscono quella salvata.

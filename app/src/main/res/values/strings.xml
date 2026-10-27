@@ -1,5 +1,11 @@
 <resources>
     <string name="app_name">Lume TV</string>
+    <string name="guide_watch_channel">▷  Guarda %1$s</string>
+    <string name="guide_watch_now">▷  Guarda il canale ora</string>
+    <string name="guide_hint_missing">↑↓ Canali  ←→ Programmi  OK Guarda</string>
+    <string name="guide_hint_live">↑↓ Canali  ←→ Programmi  OK Guarda  INFO Dettagli</string>
+    <string name="guide_hint_future">↑↓ Canali  ←→ Programmi  OK Dettagli</string>
+    <string name="live_description_scroll">↑↓  Leggi la descrizione completa</string>
     <string name="update_auto_check">Controlla automaticamente gli aggiornamenti</string>
     <plurals name="live_channel_count">
         <item quantity="one">%d canale</item>

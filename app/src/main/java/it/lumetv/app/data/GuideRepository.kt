@@ -41,13 +41,16 @@ class GuideRepository(context: Context, private val http: HttpClient, private va
             if (!cache.baseFile.exists() && !File(cache.baseFile.path + ".bak").exists()) return@synchronized emptyMap()
             val root = JSONObject(cache.openRead().bufferedReader().use { it.readText() })
             root.keys().asSequence().associateWith { key -> root.getJSONArray(key).objects().map { programme ->
-                Programme(programme.getString("title"), programme.getLong("start"), programme.getLong("end"))
+                Programme(programme.getString("title"), programme.getLong("start"), programme.getLong("end"),
+                    programme.optString("description").take(1600))
             } }
         }
         override fun write(programmes: Map<String, List<Programme>>) = synchronized(IntegrationStore.cacheLock) {
             val root = JSONObject()
             programmes.forEach { (id, shows) -> root.put(id, JSONArray().apply { shows.forEach { show ->
-                put(JSONObject().put("title", show.title).put("start", show.start).put("end", show.end))
+                put(JSONObject().put("title", show.title).put("start", show.start).put("end", show.end).apply {
+                    if (show.description.isNotBlank()) put("description", show.description)
+                })
             } }) }
             val output = cache.startWrite()
             try { output.write(root.toString().toByteArray(Charsets.UTF_8)); cache.finishWrite(output) }
@@ -115,6 +118,7 @@ internal object XmlTvGuideParser {
         var start = 0L
         var end = 0L
         var title = ""
+        var description = ""
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             if (event == XmlPullParser.START_TAG && parser.name == "channel") {
@@ -138,13 +142,21 @@ internal object XmlTvGuideParser {
                 start = timestamp(parser.getAttributeValue(null, "start"))
                 end = timestamp(parser.getAttributeValue(null, "stop"))
                 title = ""
+                description = ""
             } else if (event == XmlPullParser.START_TAG && parser.name == "title" && id in wanted && end > now) {
                 val italian = parser.getAttributeValue(null, "lang") == "it"
                 val text = parser.nextText().take(300)
                 if (title.isBlank() || italian) title = text
+            } else if (event == XmlPullParser.START_TAG && parser.name == "desc" && id in wanted && end > now) {
+                val italian = parser.getAttributeValue(null, "lang") == "it"
+                val text = parser.nextText().take(1600).trim()
+                if (description.isBlank() || italian) description = text
             } else if (event == XmlPullParser.END_TAG && parser.name == "programme" && id in wanted && title.isNotBlank() && start > 0 && end > start && end > now && start < now + 86_400_000) {
                 val shows = result.getOrPut(id) { mutableListOf() }
-                shows += Programme(title, start, end)
+                val show = Programme(title, start, end, description)
+                val duplicate = shows.indexOfFirst { it.start == start && it.end == end && it.title == title }
+                if (duplicate < 0) shows += show
+                else if (show.description.length > shows[duplicate].description.length) shows[duplicate] = show
                 shows.sortBy { it.start }
                 while (shows.size > MAX_PER_CHANNEL) shows.removeAt(shows.lastIndex)
             }

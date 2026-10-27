@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.0 · guida TV delle prossime ore — 2026-10-27
+
+- Guida TV nativa a griglia con scala temporale condivisa, cinque righe quando lo spazio lo consente, loghi e focus immediato nello stile Lume.
+- Programmi delle prossime ore, scorciatoie Adesso/Stasera, filtro Tutti/Preferiti e scheda con descrizione, quando fornita dal palinsesto.
+- Navigazione con riferimento orario stabile tra canali, ripristino dopo la diretta e aggiornamenti senza riposizionare la consultazione.
+- Celle con durata reale, trattamento dei vuoti, rimozione dei duplicati e gestione delle sovrapposizioni del feed.
+- In Guida, CH+/CH− sfoglia i canali e i numeri selezionano la riga; la riproduzione richiede una scelta esplicita.
+- Cache precedente compatibile; descrizioni limitate e facoltative, senza nuove dipendenze.
+- Descrizione del programma anche nelle informazioni del player, con tre righe visibili, scorrimento ↑/↓ per il testo completo e tempo di lettura esteso aprendo il pannello con OK o INFO.
+- Nuova guida utente in italiano, schermate aggiornate e galleria di catalogo, guida, dettagli e informazioni durante la diretta.
+
+Collaudo su emulatore Android TV: 17 verifiche superate, inclusi vuoti del palinsesto, programmi brevi, dettagli, preferiti, pressioni rapide, ritorno dalla riproduzione di un video sintetico e caratteri ingranditi. Verificati anche test JVM, Lint e build Debug/Release. Questa modifica non è stata provata su una TV fisica.
+
+Informazioni del player: 19 verifiche su emulatore con video sintetico, inclusi scorrimento del testo, continuità della riproduzione, tempi di lettura, assenza di descrizione, cambio programma e caratteri ingranditi. Controllati anche OK, selezione numerica e ripristino della descrizione dopo un messaggio sulla build finale.
+
+Per aggiornare dalla versione 0.3.3: **Opzioni → Aggiornamenti → Controlla ora**. Preferiti e impostazioni vengono conservati.
+
+[Guida utente](https://github.com/pjor94/LumeTV/blob/v0.4.0/docs/GUIDA-UTENTE.md) · [Schermate](https://github.com/pjor94/LumeTV/tree/v0.4.0/docs/screenshots)
+
 ## 0.3.3 · canali durante la diretta — 2026-10-27
 
 - Elenco canali semitrasparente sulla sinistra della diretta, aperto con freccia sinistra, con gli stessi colori, loghi e focus dell’interfaccia Lume TV.

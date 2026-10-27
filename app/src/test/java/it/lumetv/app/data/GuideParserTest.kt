@@ -6,6 +6,15 @@ import org.kxml2.io.KXmlParser
 import java.time.Instant
 
 class GuideParserTest {
+    @Test fun `future schedule retains descriptions, prefers Italian and removes duplicate entries`() {
+        val entry = """<programme channel="rai1" start="20261027200000 +0000" stop="20261027210000 +0000">
+            <title lang="it">Film</title><desc lang="it">Una serata speciale &amp; una storia.</desc><desc lang="en">A story.</desc></programme>"""
+        val shows = XmlTvGuideParser.parse(("<tv>" + entry + entry + "</tv>").byteInputStream(), setOf("rai1"),
+            Instant.parse("2026-10-27T18:00:00Z").toEpochMilli(), KXmlParser()).getValue("rai1")
+        assertEquals(1, shows.size)
+        assertEquals("Una serata speciale & una storia.", shows.single().description)
+    }
+
     @Test fun `channel artwork imports even when no programmes are current`() {
         val xml = """<tv>
             <channel id="Rai1.it"><display-name>Rai 1</display-name><icon src="http://epg-guide.com/icn/icons/rai1.png"/></channel>

@@ -6,7 +6,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-data class Programme(val title: String, val start: Long, val end: Long)
+data class Programme(val title: String, val start: Long, val end: Long, val description: String = "")
 
 internal interface GuideStore {
     var updated: Long
@@ -71,6 +71,7 @@ internal class GuideSync(
     private fun recent(saved: Long, time: Long, interval: Long) = saved > 0 && time >= saved && time - saved < interval
     private fun valid(programmes: Map<String, List<Programme>>, time: Long) = programmes.mapValues { (_, shows) ->
         shows.filter { it.title.isNotBlank() && it.start > 0 && it.end > it.start && it.end > time }
+            .distinctBy { Triple(it.start, it.end, it.title) }
             .sortedBy { it.start }.take(XmlTvGuideParser.MAX_PER_CHANNEL)
     }.filterValues { it.isNotEmpty() }
 }
