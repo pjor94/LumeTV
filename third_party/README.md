@@ -1,6 +1,6 @@
 # Sorgenti delle dipendenze
 
-Il progetto pubblica soltanto sorgenti. Il repository contiene codice, risorse, licenze e manifest delle dipendenze; gli archivi completi `LumeTV-<versione>-source.zip`, disponibili tra gli artefatti di GitHub Actions, contengono anche gli archivi upstream in `third_party/sources/`. Non vengono pubblicate APK.
+Il progetto pubblica APK firmate insieme ai sorgenti corrispondenti nelle [release su GitHub](https://github.com/pjor94/LumeTV/releases). Il repository contiene codice, risorse, licenze e manifest delle dipendenze; gli archivi completi `LumeTV-<versione>-source.zip`, allegati alle release e disponibili anche tra gli artefatti del workflow Android, contengono gli archivi upstream in `third_party/sources/`.
 
 Chi distribuisce una propria APK deve rendere disponibili i sorgenti corrispondenti secondo le licenze applicabili. Il pacchetto completo può essere usato a tale scopo soltanto se corrisponde alla versione effettivamente compilata; un collegamento al ramo principale non identifica necessariamente quei sorgenti.
 
@@ -27,7 +27,7 @@ Gitiles assegna timestamp nuovi agli archivi R8 a ogni richiesta. La modalità `
 
 Il download usa esclusivamente gli URL HTTPS bloccati nel manifest e verifica ogni checksum. Se cambiano le dipendenze, la procedura si interrompe: prima di aggiornare il lock occorre riesaminare licenze, sorgenti e avvisi. La cache locale `build/dependency-sources/` non va aggiunta a Git. Negli archivi già estratti sono utilizzate le copie in `third_party/sources/`.
 
-Il confezionamento ordinario richiede tutti i file sorgente sotto controllo versione. Per preparare una copia locale prima del commit, `--include-untracked` include anche nuovi sorgenti/documenti nelle directory del progetto ammesse; non include file ignorati, chiavi, build, appunti locali o la cronologia Git. Il workflow Android confeziona lo stesso checkout usato per le verifiche; i tag non attivano una pubblicazione di APK.
+Il confezionamento ordinario richiede tutti i file sorgente sotto controllo versione. Per preparare una copia locale prima del commit, `--include-untracked` include anche nuovi sorgenti/documenti nelle directory del progetto ammesse; non include file ignorati, chiavi, build, appunti locali o la cronologia Git. Il workflow Android confeziona lo stesso checkout usato per le verifiche. Il workflow Release compila, firma e pubblica l’APK e l’archivio completo dallo stesso tag, dopo aver verificato che le dipendenze effettive corrispondano al lock.
 
 ## Ricompilazione e installazione
 

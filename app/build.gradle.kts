@@ -12,12 +12,17 @@ android {
         applicationId = "it.lumetv.app"
         minSdk = 23
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.2.2"
+        versionCode = 5
+        versionName = "0.3.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
+        debug {
+            buildConfigField("String", "AURA_TRUSTED_CERTIFICATE_SHA256", "\"" + providers.gradleProperty("auraTrustedCertificateSha256")
+                .orElse("3ceae7f474128b6c7d9e2197497a34e7e8db301e984ff1bab2047703fac80aeb").get() + "\"")
+        }
         release {
+            buildConfigField("String", "AURA_TRUSTED_CERTIFICATE_SHA256", "\"" + providers.gradleProperty("auraTrustedCertificateSha256").orElse("").get() + "\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

@@ -1,6 +1,10 @@
 package it.lumetv.app
 
+import android.content.Intent
 import android.graphics.Color
+import it.lumetv.app.integration.IntegrationStore
+import it.lumetv.app.integration.LaunchRequest
+import it.lumetv.app.integration.LaunchQueue
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -37,6 +41,7 @@ import it.lumetv.core.ChannelNavigation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -67,6 +72,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var loading: LinearLayout
     private lateinit var loadingTitle: TextView
     private lateinit var errorBox: LinearLayout
+    private val launchQueue = LaunchQueue()
+    private var playerReady = false
+    private var explicitRequestSeen = false
+    private var launchMessage: String? = null
+    private var playbackGeneration = 0L
+    private var activePlaybackChannelId: String? = null
+    private var integrationDialog: android.app.AlertDialog? = null
     private var resolveJob: Job? = null
     private var guideJob: Job? = null
     private var catalogJob: Job? = null
@@ -121,14 +133,19 @@ class MainActivity : ComponentActivity() {
             onWaiting = { showRecoveryStatus("Connessione assente · Riprendo quando torna la rete…") },
             onScheduled = { attempt, maximum -> showRecoveryStatus("Riconnetto la diretta… Tentativo $attempt di $maximum") },
             onExhausted = ::showError)
+        currentFilter = savedInstanceState?.getString("filter") ?: "Tutti"
         buildUi()
+        if (savedInstanceState?.getBoolean("explicit_consumed") != true && intent.action == Intent.ACTION_VIEW) {
+            explicitRequestSeen = true
+            launchQueue.replace(LaunchRequest.parse(intent.dataString))
+        }
         tvPlayer.onBuffering = {
             if (!showingCatalog && !failed) { loading.visibility = View.VISIBLE; recovery.onBuffering() }
         }
         tvPlayer.onPlayingChanged = { playing ->
-            if (!showingCatalog && !failed && playing) {
+            if (!showingCatalog && !failed && playing && tvPlayer.isPlaying) {
                 loading.visibility = View.GONE
-                current?.let { repository.lastChannelId = it.id }
+                current?.takeIf { it.id == activePlaybackChannelId }?.let(repository::recordPlayback)
                 recovery.onPlaying()
             } else recovery.onNotPlaying()
         }
@@ -148,12 +165,15 @@ class MainActivity : ComponentActivity() {
             catalogLoaded = true
             programmes = guide.local()
             updateCatalog()
-            val previous = savedInstanceState?.getString("channel") ?: repository.lastChannelId
-            current = channels.firstOrNull { it.id == previous }
-            if (current != null) {
-                showingCatalog = false
-                if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) selectChannel(current!!)
-            } else focusFirstChannel()
+            if (launchQueue.pending != null) {
+                consumeLaunchRequest()
+            } else if (!explicitRequestSeen) {
+                val previous = savedInstanceState?.getString("channel") ?: repository.lastChannelId
+                current = channels.firstOrNull { it.id == previous }
+                showingCatalog = savedInstanceState?.getBoolean("catalog") ?: (current == null)
+                if (current != null && !showingCatalog && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) selectChannel(current!!)
+                else focusFirstChannel()
+            }
             refreshCatalog(false)
             refreshGuide()
         }
@@ -162,25 +182,101 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         tvPlayer.attach(video)
+        playerReady = true
         network.start()
         handler.post(tick)
         handler.post(catalogTick)
-        if (current != null && !showingCatalog) selectChannel(current!!)
+        if (!consumeLaunchRequest() && current != null && !showingCatalog) selectChannel(current!!)
     }
 
     override fun onStop() {
+        playerReady = false
         recovery.stop()
         network.stop()
         resolveJob?.cancel(); guideJob?.cancel(); catalogJob?.cancel()
         handler.removeCallbacksAndMessages(null)
         digits = ""
+        playbackGeneration++
+        activePlaybackChannelId = null
         tvPlayer.release()
         super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("channel", current?.id)
+        outState.putString("filter", currentFilter)
+        outState.putBoolean("catalog", showingCatalog)
+        outState.putBoolean("explicit_consumed", explicitRequestSeen && launchQueue.pending == null)
         super.onSaveInstanceState(outState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == Intent.ACTION_VIEW) {
+            explicitRequestSeen = true
+            launchQueue.replace(LaunchRequest.parse(intent.dataString))
+            integrationDialog?.dismiss()
+            recovery.stop()
+            resolveJob?.cancel()
+            playbackGeneration++
+            activePlaybackChannelId = null
+            tvPlayer.stop()
+            current = null
+            showingCatalog = true
+            consumeLaunchRequest()
+        }
+    }
+
+    private fun consumeLaunchRequest(): Boolean {
+        val request = launchQueue.consume(catalogLoaded && playerReady) ?: return false
+        when (request) {
+            is LaunchRequest.ChannelId -> {
+                val channel = channels.firstOrNull { it.id == request.id }
+                if (channel != null) selectChannel(channel)
+                else showRequestedCatalog("Tutti", "Canale non più disponibile · Scegli un canale dal catalogo")
+            }
+            LaunchRequest.Last -> {
+                val channel = channels.firstOrNull { it.id == repository.lastChannelId }
+                if (channel != null) selectChannel(channel)
+                else showRequestedCatalog("Tutti", "Nessun ultimo canale disponibile · Scegli un canale")
+            }
+            LaunchRequest.Catalog -> showRequestedCatalog("Tutti")
+            LaunchRequest.Favorites -> showRequestedCatalog("Preferiti")
+            LaunchRequest.Guide -> showRequestedCatalog("Guida TV")
+            LaunchRequest.Integration -> { showRequestedCatalog("Tutti"); showIntegrationOptions() }
+            LaunchRequest.Invalid -> showRequestedCatalog("Tutti", "Collegamento non valido · Scegli un canale dal catalogo")
+        }
+        return true
+    }
+
+    private fun showRequestedCatalog(filter: String, message: String? = null) {
+        playbackGeneration++
+        activePlaybackChannelId = null
+        current = null
+        tvPlayer.stop()
+        currentFilter = filter
+        launchMessage = message
+        buildTabs()
+        showCatalog()
+        if (message != null) status.text = message
+    }
+
+    private fun showIntegrationOptions() {
+        val enabled = IntegrationStore.allowed(this)
+        integrationDialog?.dismiss()
+        integrationDialog = android.app.AlertDialog.Builder(this).setTitle("Collegamento con AURA")
+            .setMessage("Condividi con AURA i canali, i preferiti, la guida e l’ultimo canale guardato su questa TV. " +
+                "I dati sono comuni al dispositivo, non ai profili AURA. Puoi revocare il collegamento in qualsiasi momento da Opzioni.")
+            .setPositiveButton(if (enabled) "Revoca collegamento" else "Consenti collegamento") { _, _ ->
+                IntegrationStore.setAllowed(this, !enabled)
+                status.text = if (enabled) "Collegamento con AURA revocato" else "Collegamento con AURA attivo"
+            }.setNegativeButton("Chiudi", null).show()
+    }
+
+    override fun onDestroy() {
+        integrationDialog?.dismiss()
+        super.onDestroy()
     }
 
     private fun buildUi() {
@@ -269,6 +365,7 @@ class MainActivity : ComponentActivity() {
         tabs.removeAllViews()
         listOf("Tutti", "Rai", "Mediaset", "Preferiti", "Guida TV").forEach { label ->
             val tab = TvStyle.button(this, label, currentFilter == label) {
+                launchMessage = null
                 currentFilter = label
                 buildTabs(); updateCatalog(); focusFirstChannel()
                 if (label == "Guida TV") refreshGuide()
@@ -284,8 +381,8 @@ class MainActivity : ComponentActivity() {
     private fun showOptions() {
         val mode = if (repository.zapFavoritesOnly) "solo preferiti" else "tutti i canali"
         android.app.AlertDialog.Builder(this).setTitle("Opzioni")
-            .setItems(arrayOf("CH+/CH−: $mode", "Informazioni", "Licenze e avvisi")) { _, index ->
-                when (index) { 0 -> showZappingOptions(); 1 -> showAbout(); 2 -> showLicenses() }
+            .setItems(arrayOf("CH+/CH−: $mode", "Collegamento con AURA", "Informazioni", "Licenze e avvisi")) { _, index ->
+                when (index) { 0 -> showZappingOptions(); 1 -> showIntegrationOptions(); 2 -> showAbout(); 3 -> showLicenses() }
             }.setNegativeButton("Chiudi", null).show()
     }
 
@@ -351,6 +448,7 @@ class MainActivity : ComponentActivity() {
         heading.text = when (currentFilter) { "Guida TV" -> "Ora. E tra poco."; "Preferiti" -> "I tuoi preferiti."; "Rai" -> "Il mondo Rai."; "Mediaset" -> "Il mondo Mediaset."; else -> "La TV, fatta semplice." }
         status.text = "${visible.size} canali  ·  ${if (currentFilter in setOf("Rai", "Mediaset")) "Tutti i canali $currentFilter della lista WLTV" else "Scegli un canale. Mettiti comodo."}"
         updateGuideStatus()
+        launchMessage?.let { status.text = it }
         syncStatus.text = if (repository.lastUpdated > 0) "●  Catalogo aggiornato" else "Catalogo automatico"
         empty.visibility = if (visible.isEmpty()) View.VISIBLE else View.GONE
         if (showingCatalog && (currentFocus == null || currentFocus === root)) focusFirstChannel()
@@ -370,6 +468,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectChannel(channel: Channel) {
+        launchMessage = null
         recovery.start()
         resolveJob?.cancel()
         handler.removeCallbacks(numberAction); digits = ""
@@ -382,7 +481,9 @@ class MainActivity : ComponentActivity() {
 
     private fun openCurrentChannel(isRetry: Boolean = false) {
         val channel = current ?: return
+        val generation = ++playbackGeneration
         resolveJob?.cancel()
+        activePlaybackChannelId = null
         tvPlayer.stop()
         if (!isRetry) loadingTitle.text = channel.name
         loading.visibility = View.VISIBLE
@@ -390,9 +491,13 @@ class MainActivity : ComponentActivity() {
         resolveJob = lifecycleScope.launch {
             try {
                 val stream = resolver.resolve(channel)
+                ensureActive()
+                if (generation != playbackGeneration || current?.id != channel.id || showingCatalog ||
+                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
+                activePlaybackChannelId = channel.id
                 tvPlayer.play(stream)
             } catch (cancelled: CancellationException) { throw cancelled }
-              catch (error: Exception) { recovery.onFailure(PlaybackFailure.fromSource(error)) }
+              catch (error: Exception) { if (generation == playbackGeneration) recovery.onFailure(PlaybackFailure.fromSource(error)) }
         }
     }
 

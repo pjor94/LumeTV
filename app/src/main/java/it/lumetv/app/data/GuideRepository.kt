@@ -2,6 +2,7 @@ package it.lumetv.app.data
 
 import android.content.Context
 import android.util.AtomicFile
+import it.lumetv.app.integration.IntegrationStore
 import android.util.Log
 import android.util.Xml
 import it.lumetv.core.Channel
@@ -18,6 +19,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class GuideRepository(context: Context, private val http: HttpClient) {
+    private val app = context.applicationContext
     private val prefs = context.getSharedPreferences("guide", Context.MODE_PRIVATE)
     private val cache = AtomicFile(File(context.filesDir, "guide.json"))
     // A slow TV may need longer to parse the guide than a stream session request.
@@ -35,14 +37,14 @@ class GuideRepository(context: Context, private val http: HttpClient) {
         override var failure: String
             get() = prefs.getString("failure", "").orEmpty()
             set(value) { prefs.edit().putString("failure", value).apply() }
-        override fun read(): Map<String, List<Programme>> {
-            if (!cache.baseFile.exists() && !File(cache.baseFile.path + ".bak").exists()) return emptyMap()
+        override fun read(): Map<String, List<Programme>> = synchronized(IntegrationStore.cacheLock) {
+            if (!cache.baseFile.exists() && !File(cache.baseFile.path + ".bak").exists()) return@synchronized emptyMap()
             val root = JSONObject(cache.openRead().bufferedReader().use { it.readText() })
-            return root.keys().asSequence().associateWith { key -> root.getJSONArray(key).objects().map { programme ->
+            root.keys().asSequence().associateWith { key -> root.getJSONArray(key).objects().map { programme ->
                 Programme(programme.getString("title"), programme.getLong("start"), programme.getLong("end"))
             } }
         }
-        override fun write(programmes: Map<String, List<Programme>>) {
+        override fun write(programmes: Map<String, List<Programme>>) = synchronized(IntegrationStore.cacheLock) {
             val root = JSONObject()
             programmes.forEach { (id, shows) -> root.put(id, JSONArray().apply { shows.forEach { show ->
                 put(JSONObject().put("title", show.title).put("start", show.start).put("end", show.end))
@@ -73,9 +75,10 @@ class GuideRepository(context: Context, private val http: HttpClient) {
     val lastUpdated: Long get() = store.updated
     val nextRetry: Long get() = store.retryAfter
     val failure: String get() = store.failure
-    suspend fun local(): Map<String, List<Programme>> = sync.local()
+    suspend fun local(): Map<String, List<Programme>> = sync.local().also { IntegrationStore.guideChanged(app, it, lastUpdated) }
     suspend fun refresh(channels: List<Channel>, force: Boolean = false): Map<String, List<Programme>>? = try {
         sync.refresh(channels.map { it.epgId }.filter { it.isNotBlank() }.toSet(), force)?.also { shows ->
+            IntegrationStore.guideChanged(app, shows, lastUpdated)
             Log.i("LumeGuide", "imported channels=${shows.size} programmes=${shows.values.sumOf { it.size }}")
         }
     } catch (error: Exception) {

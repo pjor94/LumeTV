@@ -44,7 +44,7 @@ Mantieni utilizzabili tutte le schermate con il telecomando. La riproduzione dev
 
 Gli adattamenti da altri progetti devono conservarne licenza e attribuzioni. I contributi a Lume TV vengono distribuiti con la licenza GPL-3.0-or-later del progetto.
 
-Il progetto pubblica soltanto sorgenti. Per preparare il repository e gli archivi, segui [la procedura di pubblicazione](docs/RELEASE.md). I workflow possono compilare le APK per verifica, ma non devono caricarle né pubblicarle.
+Le release pubblicano l’APK firmata insieme ai sorgenti corrispondenti. Per configurare la firma e preparare una versione, segui [la procedura di pubblicazione](docs/RELEASE.md). Il workflow Android verifica i contributi senza usare le chiavi; il workflow Release firma e pubblica soltanto tag di versione, dopo il superamento delle verifiche.
 
 ## Licenze e archivi sorgente
 

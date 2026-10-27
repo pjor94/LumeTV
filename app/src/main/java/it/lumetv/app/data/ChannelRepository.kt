@@ -2,6 +2,7 @@ package it.lumetv.app.data
 
 import android.content.Context
 import android.util.AtomicFile
+import it.lumetv.app.integration.IntegrationStore
 import it.lumetv.core.Channel
 import it.lumetv.core.ChannelNavigation
 import java.io.File
@@ -17,9 +18,9 @@ class ChannelRepository(context: Context, private val http: Transport) {
         override var lastAttempt: Long
             get() = prefs.getLong("catalog_attempted", 0)
             set(value) { prefs.edit().putLong("catalog_attempted", value).apply() }
-        override fun read(): String? = if (cache.baseFile.exists() || File(cache.baseFile.path + ".bak").exists())
-            cache.openRead().bufferedReader().use { it.readText() } else null
-        override fun write(text: String) {
+        override fun read(): String? = synchronized(IntegrationStore.cacheLock) { if (cache.baseFile.exists() || File(cache.baseFile.path + ".bak").exists())
+            cache.openRead().bufferedReader().use { it.readText() } else null }
+        override fun write(text: String) = synchronized(IntegrationStore.cacheLock) {
             val output = cache.startWrite()
             try { output.write(text.toByteArray(Charsets.UTF_8)); cache.finishWrite(output) }
             catch (error: Exception) { cache.failWrite(output); throw error }
@@ -30,7 +31,14 @@ class ChannelRepository(context: Context, private val http: Transport) {
     private val favoriteIds get() = prefs.getStringSet("favorites", emptySet()).orEmpty().toSet()
     var lastChannelId: String?
         get() = prefs.getString("last_channel", null)
-        set(value) { prefs.edit().putString("last_channel", value).apply() }
+        private set(value) { prefs.edit().putString("last_channel", value).apply() }
+
+    fun recordPlayback(channel: Channel) {
+        synchronized(IntegrationStore.cacheLock) {
+            prefs.edit().putString("last_channel", channel.id).putLong("last_played_at", System.currentTimeMillis()).apply()
+        }
+        IntegrationStore.changed(app)
+    }
     var zapFavoritesOnly: Boolean
         get() = prefs.getBoolean("zap_favorites_only", false)
         set(value) { prefs.edit().putBoolean("zap_favorites_only", value).apply() }
@@ -38,14 +46,18 @@ class ChannelRepository(context: Context, private val http: Transport) {
     fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int): Channel? =
         ChannelNavigation.next(channels, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
 
-    suspend fun local(): List<Channel> = sync.local()
-    suspend fun refresh(force: Boolean = false): List<Channel>? = sync.refresh(force)
+    suspend fun local(): List<Channel> = sync.local().also { IntegrationStore.catalogChanged(app, it, lastUpdated) }
+    suspend fun refresh(force: Boolean = false): List<Channel>? = sync.refresh(force)?.also { IntegrationStore.catalogChanged(app, it, lastUpdated) }
 
     fun isFavorite(channel: Channel) = channel.id in favoriteIds
     fun toggleFavorite(channel: Channel): Boolean {
+        val added = synchronized(IntegrationStore.cacheLock) {
         val ids = favoriteIds.toMutableSet()
         val added = if (channel.id in ids) { ids.remove(channel.id); false } else { ids.add(channel.id); true }
         prefs.edit().putStringSet("favorites", ids).apply()
+        added
+        }
+        IntegrationStore.changed(app)
         return added
     }
 

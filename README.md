@@ -8,6 +8,7 @@
 <h1 align="center">La TV, fatta semplice.</h1>
 <p align="center">Le dirette italiane su Android TV, con un’interfaccia essenziale e un solo telecomando.</p>
 <p align="center">
+  <a href="https://github.com/pjor94/LumeTV/releases">Scarica l’APK</a> ·
   <a href="#compilazione">Compila dai sorgenti</a> ·
   <a href="CHANGELOG.md">Novità</a> ·
   <a href="CONTRIBUTING.md">Contribuisci</a>
@@ -36,6 +37,7 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 - Pannello della diretta con orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
 - Recupero automatico delle interruzioni temporanee, con attesa del ritorno della rete.
 - Catalogo aggiornato automaticamente, con una copia locale disponibile al primo avvio.
+- Collegamento locale facoltativo con AURA: preferiti, guida e apertura dei canali dal launcher, revocabile in **Opzioni → Collegamento con AURA**. [Contratto e configurazione delle firme](docs/integration-aura.md).
 
 Le integrazioni attuali comprendono Rai, Mediaset, Sky, La7, WBD/Discovery e URL diretti. La disponibilità dei singoli canali dipende dalle emittenti, dalla rete utilizzata e dagli eventuali eventi in corso.
 
@@ -48,19 +50,21 @@ Le integrazioni attuali comprendono Rai, Mediaset, Sky, La7, WBD/Discovery e URL
 
 ## Distribuzione e installazione
 
-Il progetto viene pubblicato **solo come codice sorgente**. GitHub Actions esegue test, Lint e compilazione, conservando soltanto gli archivi sorgente e i report di verifica. Le APK si compilano localmente; non sono pubblicate dal progetto e non vengono caricate come artefatti CI.
+Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le versioni `0.x` e quelle con un suffisso come `-dev` sono indicate come pre-release.
 
 Richiede **Android TV o Google TV con Android 6.0 o successivo**. L’app è stata provata anche su Sony Bravia KD-55X81J con Android 12; codec e DRM possono comportarsi diversamente su altri dispositivi.
 
-1. Compila un’APK di sviluppo seguendo [Compilazione](#compilazione).
+1. Scarica `LumeTV-<versione>.apk` dagli allegati della [release desiderata](https://github.com/pjor94/LumeTV/releases), oppure compila un’APK di sviluppo seguendo [Compilazione](#compilazione).
 2. Copiala sulla TV e aprila con un gestore file.
 3. Se Android lo richiede, autorizza l’installazione per il gestore file utilizzato.
 
 Puoi installarla anche con ADB, dopo aver collegato e autorizzato la TV:
 
 ```sh
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r LumeTV-VERSIONE.apk
 ```
+
+Sostituisci `VERSIONE` con la versione scaricata. Gli aggiornamenti delle release usano la stessa chiave di firma. Se hai già installato una build debug o firmata con un’altra chiave, Android può richiedere di disinstallarla prima, cancellando preferiti e impostazioni locali.
 
 ## Telecomando
 
@@ -103,7 +107,7 @@ Servono JDK 17 e Android SDK 36. Configura l’SDK in Android Studio oppure nel 
 
 L’APK di sviluppo si trova in `app/build/outputs/apk/debug/`. Per contribuire, eseguire i test di rete o rigenerare le risorse grafiche, consulta [CONTRIBUTING.md](CONTRIBUTING.md).
 
-La compilazione e l’installazione locali restano disponibili. La pubblicazione del repository e degli archivi di soli sorgenti è descritta in [docs/RELEASE.md](docs/RELEASE.md); i tag non avviano workflow di firma o pubblicazione delle APK.
+La compilazione e l’installazione locali restano disponibili. La configurazione della firma e la pubblicazione automatica dell’APK e dei sorgenti tramite tag sono descritte in [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Privacy
 
