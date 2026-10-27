@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 · aggiornamenti dall’app — non pubblicata
+
+- Controllo automatico delle release GitHub all’avvio e ogni sei ore durante l’uso, con avviso nel catalogo e schermata Opzioni → Aggiornamenti.
+- Download annullabile e installazione guidata con telecomando tramite il programma di installazione Android.
+- Verifica di dimensione, checksum, package, versione e certificato dell’APK prima dell’installazione; rifiuto di downgrade, build incompatibili e firme diverse.
+- Metadati `update.json` generati e verificati dalla pipeline di release, inclusi nei checksum e negli allegati pubblicati.
+- Versioni numeriche senza suffisso di sviluppo, pubblicate come normali release GitHub anche nella serie `0.x`.
+
 ## 0.3.0-dev · integrazione AURA e release APK — 2026-10-27
 
 - Ripristinata la pipeline GitHub Actions per compilare, firmare e pubblicare l’APK sui tag di versione, anche con avvio manuale su un tag esistente.

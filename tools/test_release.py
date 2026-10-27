@@ -26,7 +26,7 @@ class ReleaseTest(unittest.TestCase):
         self.root.mkdir()
         self.output = self.root.parent / 'assets'
         files = {
-            'app/build.gradle.kts': 'versionName = "0.2.1"\nversionCode = 3\n',
+            'app/build.gradle.kts': 'versionName = "0.2.1"\nversionCode = 3\nminSdk = 23\n',
             'CHANGELOG.md': '# Changelog\n\n## 0.2.1\n\n- Current change.\n\n## 0.2.0\n\n- Old change.\n',
             'LICENSE': 'License fixture', 'README.md': 'Readme fixture',
             'THIRD_PARTY_NOTICES.md': 'WorldLiveTV attribution fixture',
@@ -60,7 +60,7 @@ class ReleaseTest(unittest.TestCase):
         self.git('-c', 'user.name=Release Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'Test fixture')
 
     def test_tag_must_match_version_and_checked_out_commit(self):
-        self.assertTrue(release.metadata(self.root, 'v0.2.1')['prerelease'])
+        self.assertFalse(release.metadata(self.root, 'v0.2.1')['prerelease'])
         for tag in ('v0.2.10', 'main', 'v0.2.1;echo test'):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 release.metadata(self.root, tag)
@@ -73,6 +73,19 @@ class ReleaseTest(unittest.TestCase):
         (self.root / 'README.md').write_text('Uncommitted')
         with self.assertRaisesRegex(ValueError, 'Commit source'):
             release.metadata(self.root, 'v0.2.1')
+
+    def test_only_explicit_version_suffixes_create_prereleases(self):
+        config = self.root / 'app/build.gradle.kts'
+        config.write_text('versionName = "0.2.2-beta.1"\nversionCode = 4\nminSdk = 23\n')
+        changelog = self.root / 'CHANGELOG.md'
+        changelog.write_text('## 0.2.2-beta.1\n\n- Technical test.\n\n' + changelog.read_text())
+        self.git('add', '.')
+        self.commit()
+        self.git('tag', 'v0.2.2-beta.1')
+        self.assertTrue(release.metadata(self.root, 'v0.2.2-beta.1')['prerelease'])
+        self.output.mkdir()
+        (self.output / 'LumeTV-0.2.2-beta.1.apk').write_bytes(b'APK fixture')
+        self.assertTrue(release.update_manifest(self.root, self.output)['prerelease'])
 
     def test_notes_use_exact_version_and_credit_upstream(self):
         path = self.root / 'CHANGELOG.md'
@@ -177,8 +190,11 @@ class ReleaseTest(unittest.TestCase):
         self.assertIn('--draft', calls[1])
         self.assertIn('--verify-tag', calls[1])
         self.assertTrue(any(x.endswith('-source.zip') for x in calls[1]))
+        self.assertTrue(any(x.endswith('/update.json') for x in calls[1]))
         self.assertIn('--draft=false', calls[2])
-        self.assertIn('--prerelease=true', calls[2])
+        self.assertIn('--prerelease=false', calls[2])
+        self.assertIn('--latest', calls[2])
+        self.assertNotIn('--prerelease', calls[1])
 
     def test_draft_can_resume_but_published_release_cannot_be_replaced(self):
         self.prepared()
@@ -211,6 +227,52 @@ class ReleaseTest(unittest.TestCase):
         (self.root / 'app/src/main/assets/THIRD_PARTY_NOTICES.md').write_text('Updated attribution')
         with self.assertRaisesRegex(ValueError, 'APK legal notice differs'):
             release.prepare(self.root, self.output)
+
+    def test_update_metadata_matches_the_apk_and_is_checksummed(self):
+        self.prepared()
+        info = json.loads((self.output / 'update.json').read_text())
+        apk = self.output / 'LumeTV-0.2.1.apk'
+        self.assertEqual({'schema': 1, 'applicationId': 'it.lumetv.app', 'versionName': '0.2.1', 'versionCode': 3,
+                          'minSdk': 23, 'prerelease': False,
+                          'apk': {'name': apk.name, 'size': apk.stat().st_size,
+                                  'sha256': hashlib.sha256(apk.read_bytes()).hexdigest()}}, info)
+        self.assertIn(hashlib.sha256((self.output / 'update.json').read_bytes()).hexdigest() + '  update.json\n',
+                      (self.output / 'SHA256SUMS').read_text())
+
+    def test_signing_checks_minimum_sdk_against_the_built_apk(self):
+        env = dict.fromkeys(release.SIGNING_SECRETS, 'fixture')
+        env['ANDROID_KEYSTORE_BASE64'] = base64.b64encode(b'key fixture').decode()
+        def command(*args, **kwargs):
+            if 'verify' in args:
+                output = 'Signer #1 certificate SHA-256 digest: ' + 'a' * 64 + '\n'
+            elif 'badging' in args:
+                output = f"package: name='it.lumetv.app' versionCode='3' versionName='0.2.1'\n{sdk_label}:'{minimum_sdk}'\n"
+            else:
+                Path(args[args.index('--out') + 1]).write_bytes(b'signed APK fixture')
+                output = ''
+            return subprocess.CompletedProcess(args, 0, stdout=output, stderr='')
+        with patch.dict('os.environ', env), patch.object(release, 'run', side_effect=command):
+            sdk_label = 'minSdkVersion'
+            minimum_sdk = 24
+            with self.assertRaisesRegex(ValueError, 'non-debuggable Lume TV release'):
+                release.sign(self.root, self.output, self.root / 'sdk')
+            minimum_sdk = 23
+            release.sign(self.root, self.output, self.root / 'sdk')
+            self.assertIn('a' * 64, (self.output / 'SIGNING-CERTIFICATE.txt').read_text())
+            sdk_label = 'sdkVersion'
+            release.sign(self.root, self.output, self.root / 'sdk')
+
+    def test_inconsistent_update_metadata_is_never_published_even_with_new_checksums(self):
+        self.prepared()
+        info = json.loads((self.output / 'update.json').read_text())
+        info['versionCode'] = 100
+        (self.output / 'update.json').write_text(json.dumps(info))
+        (self.output / 'SHA256SUMS').write_text(''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n'
+                                                    for path in release.assets(self.output, '0.2.1')))
+        calls, fake = self.fake_github()
+        with fake, self.assertRaisesRegex(ValueError, 'Update metadata'):
+            release.publish(self.root, self.output, 'v0.2.1', 'owner/repository')
+        self.assertFalse(calls)
 
 
 if __name__ == '__main__':

@@ -12,8 +12,8 @@ android {
         applicationId = "it.lumetv.app"
         minSdk = 23
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.3.0-dev"
+        versionCode = 7
+        versionName = "0.3.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {

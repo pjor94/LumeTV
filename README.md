@@ -17,7 +17,7 @@
 > [!TIP]
 > ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.0-dev/LumeTV-0.3.0-dev.apk)
 >
-> **v0.3.0-dev · pre-release** — APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
+> APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
 > [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.0-dev) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
@@ -44,6 +44,7 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 - Pannello della diretta con orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
 - Recupero automatico delle interruzioni temporanee, con attesa del ritorno della rete.
 - Catalogo aggiornato automaticamente, con una copia locale disponibile al primo avvio.
+- Controllo automatico delle nuove versioni su GitHub e aggiornamento guidato dal telecomando, da **Opzioni → Aggiornamenti**.
 - Collegamento locale facoltativo con AURA: preferiti, guida e apertura dei canali dal launcher, revocabile in **Opzioni → Collegamento con AURA**. [Contratto e configurazione delle firme](docs/integration-aura.md).
 
 Le integrazioni attuali comprendono Rai, Mediaset, Sky, La7, WBD/Discovery e URL diretti. La disponibilità dei singoli canali dipende dalle emittenti, dalla rete utilizzata e dagli eventuali eventi in corso.
@@ -57,7 +58,7 @@ Le integrazioni attuali comprendono Rai, Mediaset, Sky, La7, WBD/Discovery e URL
 
 ## Distribuzione e installazione
 
-Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le versioni `0.x` e quelle con un suffisso come `-dev` sono indicate come pre-release.
+Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
 Richiede **Android TV o Google TV con Android 6.0 o successivo**. L’app è stata provata anche su Sony Bravia KD-55X81J con Android 12; codec e DRM possono comportarsi diversamente su altri dispositivi.
 
@@ -72,6 +73,16 @@ adb install -r LumeTV-VERSIONE.apk
 ```
 
 Sostituisci `VERSIONE` con la versione scaricata. Gli aggiornamenti delle release usano la stessa chiave di firma. Se hai già installato una build debug o firmata con un’altra chiave, Android può richiedere di disinstallarla prima, cancellando preferiti e impostazioni locali.
+
+### Aggiornamenti dall’app
+
+Le versioni che includono l’aggiornatore controllano le release pubbliche di `pjor94/LumeTV` all’avvio e ogni sei ore mentre l’app è in uso. Un pulsante nel catalogo segnala una nuova versione compatibile; **Opzioni → Aggiornamenti** permette anche il controllo manuale. Il controllo non apre finestre durante la diretta. Non viene eseguito a TV spenta o con l’app chiusa.
+
+Scegli **Scarica e aggiorna** per scaricare l’APK, verificarne dimensione, SHA-256, package, versione e certificato di firma e aprire il programma di installazione Android. Se richiesto, consenti a **Lume TV** di installare app, poi conferma l’aggiornamento con il telecomando. La sostituzione dell’app può chiudere Lume: riaprila dal launcher. Preferiti e impostazioni vengono conservati negli aggiornamenti con la stessa firma. Puoi annullare un download o rinviare l’installazione; il controllo e il download non richiedono un account GitHub.
+
+Nella stessa schermata puoi disattivare i controlli automatici. Vengono proposte soltanto release pubblicate con `versionCode` maggiore e compatibili con Android sulla TV. Le vecchie release prive di `update.json` non vengono proposte. Il controllo considera fino a 100 release e verifica i metadati delle 20 più recenti ammesse agli aggiornamenti.
+
+La prima APK contenente l’aggiornatore va installata con la procedura manuale indicata sopra. Le build debug o con firma personalizzata non possono installare gli aggiornamenti ufficiali sopra la propria firma.
 
 ## Telecomando
 
@@ -118,7 +129,7 @@ La compilazione e l’installazione locali restano disponibili. La configurazion
 
 ## Privacy
 
-Lume TV non richiede un account e non contiene telemetria. Catalogo, guida e preferiti vengono conservati sul dispositivo; le sessioni anonime Mediaset restano in memoria. Per funzionare, l’app contatta i servizi di WLTV, EPG-Guide e delle emittenti.
+Lume TV non richiede un account e non contiene telemetria. Catalogo, guida e preferiti vengono conservati sul dispositivo; le sessioni anonime Mediaset restano in memoria. Per funzionare, l’app contatta i servizi di WLTV, EPG-Guide e delle emittenti. Il controllo aggiornamenti e il download delle APK contattano GitHub; puoi disattivare il controllo automatico nelle Opzioni.
 
 ## Sorgenti e diritti
 

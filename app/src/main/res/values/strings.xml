@@ -1,1 +1,4 @@
-<resources><string name="app_name">Lume TV</string></resources>
+<resources>
+    <string name="app_name">Lume TV</string>
+    <string name="update_auto_check">Controlla automaticamente gli aggiornamenti</string>
+</resources>

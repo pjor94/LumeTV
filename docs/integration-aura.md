@@ -1,6 +1,6 @@
 # Collegamento locale con AURA · versione 1
 
-Lume TV 0.3.0-dev offre l’integrazione sullo stesso dispositivo Android, senza server o bridge. In **Opzioni → Collegamento con AURA**, **Consenti collegamento** permette ad AURA di leggere catalogo, preferiti, guida e ultimo canale. **Revoca collegamento** interrompe la condivisione. I dati appartengono alla TV e sono comuni ai profili del launcher. La riproduzione resta in Lume TV.
+Lume TV offre l’integrazione sullo stesso dispositivo Android, senza server o bridge. In **Opzioni → Collegamento con AURA**, **Consenti collegamento** permette ad AURA di leggere catalogo, preferiti, guida e ultimo canale. **Revoca collegamento** interrompe la condivisione. I dati appartengono alla TV e sono comuni ai profili del launcher. La riproduzione resta in Lume TV.
 
 ## Apertura delle schermate
 

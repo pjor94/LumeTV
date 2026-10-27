@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <queries><package android:name="it.aura.tv" /></queries>
@@ -11,6 +12,10 @@
         android:networkSecurityConfig="@xml/network_security_config">
         <provider android:name=".integration.LumeIntegrationProvider"
             android:authorities="it.lumetv.app.integration" android:exported="true" android:grantUriPermissions="false" />
+        <provider android:name=".update.UpdateFileProvider" android:authorities="${applicationId}.updates"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths" />
+        </provider>
         <activity android:name=".MainActivity" android:exported="true"
             android:screenOrientation="landscape" android:launchMode="singleTask"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout">

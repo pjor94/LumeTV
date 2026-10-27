@@ -41,7 +41,7 @@ def metadata(root, tag):
     if run('git', 'status', '--porcelain', '--untracked-files=normal', root=root).stdout.strip():
         raise ValueError('Commit source changes before releasing')
     release_notes(root, version)
-    return {'version': version, 'tag': tag, 'commit': commit, 'prerelease': version.startswith('0.') or '-' in version}
+    return {'version': version, 'tag': tag, 'commit': commit, 'prerelease': '-' in version}
 
 
 def check_signing(env):
@@ -81,15 +81,34 @@ def sign(root, output_dir, sdk):
         raise ValueError('Use a dedicated release key instead of the Android debug certificate')
     badging = run(tools / 'aapt2', 'dump', 'badging', signed, root=root).stdout
     package = re.search(r"package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'", badging)
-    expected_code = re.search(r'versionCode\s*=\s*([0-9]+)', (root / 'app/build.gradle.kts').read_text())[1]
-    if not package or package.groups() != ('it.lumetv.app', expected_code, version) or 'application-debuggable' in badging:
+    config = (root / 'app/build.gradle.kts').read_text()
+    expected_code = re.search(r'versionCode\s*=\s*([0-9]+)', config)[1]
+    expected_sdk = re.search(r'minSdk\s*=\s*([0-9]+)', config)[1]
+    sdk_version = re.search(r"^(?:sdkVersion|minSdkVersion):'([0-9]+)'$", badging, re.M)
+    if not package or package.groups() != ('it.lumetv.app', expected_code, version) or 'application-debuggable' in badging or not sdk_version or sdk_version[1] != expected_sdk:
         raise ValueError('Signed APK must be the non-debuggable Lume TV release for this version')
     (output_dir / 'SIGNING-CERTIFICATE.txt').write_text(f'Lume TV {version}\nCertificate SHA-256: {cert[1].lower()}\n')
     print(f'Signed and verified {signed.name}')
 
 
 def assets(output_dir, version):
-    return [output_dir / f'LumeTV-{version}.apk', output_dir / f'LumeTV-{version}-source.zip', output_dir / 'SIGNING-CERTIFICATE.txt']
+    return [output_dir / f'LumeTV-{version}.apk', output_dir / f'LumeTV-{version}-source.zip',
+            output_dir / 'SIGNING-CERTIFICATE.txt', output_dir / 'update.json']
+
+
+def update_manifest(root, output_dir):
+    version = project_version(root)
+    config = (root / 'app/build.gradle.kts').read_text()
+    code = re.search(r'versionCode\s*=\s*([0-9]+)', config)
+    sdk = re.search(r'minSdk\s*=\s*([0-9]+)', config)
+    if not re.fullmatch(VERSION, version) or not code or not sdk or not 0 < int(code[1]) <= 2147483647 or not 0 < int(sdk[1]) <= 1000:
+        raise ValueError('Invalid Android version or minimum SDK for update metadata')
+    apk = output_dir / f'LumeTV-{version}.apk'
+    if not 0 < apk.stat().st_size <= 128 * 1024 * 1024:
+        raise ValueError('APK size is outside the updater limit')
+    return {'schema': 1, 'applicationId': 'it.lumetv.app', 'versionName': version,
+            'versionCode': int(code[1]), 'minSdk': int(sdk[1]), 'prerelease': '-' in version,
+            'apk': {'name': apk.name, 'size': apk.stat().st_size, 'sha256': hashlib.sha256(apk.read_bytes()).hexdigest()}}
 
 
 def verify_apk_notices(root, apk):
@@ -106,11 +125,12 @@ def prepare(root, output_dir):
     version = project_version(root)
     verify_apk_notices(root, output_dir / f'LumeTV-{version}.apk')
     build_archive(root, output_dir)
+    (output_dir / 'update.json').write_text(json.dumps(update_manifest(root, output_dir), indent=2) + '\n')
     paths = assets(output_dir, version)
     checksums = ''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in paths)
     (output_dir / 'SHA256SUMS').write_text(checksums)
     (output_dir / 'release-notes.md').write_text(release_notes(root, version))
-    print('Prepared APK, corresponding source, certificate fingerprint and checksums')
+    print('Prepared APK, corresponding source, certificate fingerprint, update metadata and checksums')
 
 
 def publish(root, output_dir, tag, repository):
@@ -121,6 +141,8 @@ def publish(root, output_dir, tag, repository):
     expected = ''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in paths)
     if (output_dir / 'SHA256SUMS').read_text() != expected:
         raise ValueError('Release asset checksum mismatch')
+    if json.loads((output_dir / 'update.json').read_text()) != update_manifest(root, output_dir):
+        raise ValueError('Update metadata does not match the APK and Android version')
     existing = run('gh', 'release', 'view', tag, '--repo', repository, '--json', 'isDraft', root=root, check=False)
     uploads = [*paths, output_dir / 'SHA256SUMS']
     if existing.returncode == 0:

@@ -36,6 +36,7 @@ import it.lumetv.app.ui.CatalogBackdrop
 import it.lumetv.app.ui.LiveBanner
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
+import it.lumetv.app.update.UpdateController
 import it.lumetv.core.Channel
 import it.lumetv.core.ChannelNavigation
 import kotlinx.coroutines.CancellationException
@@ -67,6 +68,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var heading: TextView
     private lateinit var clock: TextView
     private lateinit var syncStatus: TextView
+    private lateinit var updateNotice: TextView
+    private lateinit var updates: UpdateController
     private lateinit var banner: LiveBanner
     private var channelBannerVisible = false
     private lateinit var loading: LinearLayout
@@ -114,7 +117,7 @@ class MainActivity : ComponentActivity() {
     }
     private val catalogTick = object : Runnable {
         override fun run() {
-            if (catalogLoaded) { refreshCatalog(false); refreshGuide() }
+            if (catalogLoaded) { refreshCatalog(false); refreshGuide(); updates.checkAutomatically() }
             handler.postDelayed(this, 15 * 60_000L)
         }
     }
@@ -135,6 +138,10 @@ class MainActivity : ComponentActivity() {
             onExhausted = ::showError)
         currentFilter = savedInstanceState?.getString("filter") ?: "Tutti"
         buildUi()
+        updates = UpdateController(this) { version ->
+            updateNotice.contentDescription = "Aggiorna Lume TV alla versione $version"
+            updateNotice.visibility = if (version != null) View.VISIBLE else View.GONE
+        }
         if (savedInstanceState?.getBoolean("explicit_consumed") != true && intent.action == Intent.ACTION_VIEW) {
             explicitRequestSeen = true
             launchQueue.replace(LaunchRequest.parse(intent.dataString))
@@ -181,6 +188,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        updates.onStart()
         tvPlayer.attach(video)
         playerReady = true
         network.start()
@@ -190,6 +198,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        updates.onStop()
         playerReady = false
         recovery.stop()
         network.stop()
@@ -336,6 +345,8 @@ class MainActivity : ComponentActivity() {
         content.addView(gridArea, LinearLayout.LayoutParams(-1, 0, 1f))
         val footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         footer.addView(TvStyle.text(this, "OK  Guarda     /     OK prolungato  Preferiti     /     CH +/−  Cambia", 11f, TvStyle.muted), LinearLayout.LayoutParams(0, -2, 1f))
+        updateNotice = TvStyle.button(this, "Aggiorna Lume TV") { updates.show() }.apply { visibility = View.GONE }
+        footer.addView(updateNotice, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(16) })
         syncStatus = TvStyle.text(this, "Catalogo automatico", 10f, TvStyle.muted)
         footer.addView(syncStatus)
         content.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
@@ -381,8 +392,8 @@ class MainActivity : ComponentActivity() {
     private fun showOptions() {
         val mode = if (repository.zapFavoritesOnly) "solo preferiti" else "tutti i canali"
         android.app.AlertDialog.Builder(this).setTitle("Opzioni")
-            .setItems(arrayOf("CH+/CH−: $mode", "Collegamento con AURA", "Informazioni", "Licenze e avvisi")) { _, index ->
-                when (index) { 0 -> showZappingOptions(); 1 -> showIntegrationOptions(); 2 -> showAbout(); 3 -> showLicenses() }
+            .setItems(arrayOf("CH+/CH−: $mode", "Collegamento con AURA", "Aggiornamenti", "Informazioni", "Licenze e avvisi")) { _, index ->
+                when (index) { 0 -> showZappingOptions(); 1 -> showIntegrationOptions(); 2 -> updates.show(); 3 -> showAbout(); 4 -> showLicenses() }
             }.setNegativeButton("Chiudi", null).show()
     }
 
