@@ -1,19 +1,24 @@
 package it.lumetv.app.ui
 
 import android.content.Context
+import android.annotation.SuppressLint
 import android.content.res.ColorStateList
+import android.view.Gravity
 import android.text.TextUtils
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import it.lumetv.app.data.Programme
 import it.lumetv.app.data.ProgrammeWindow
+import it.lumetv.app.data.ChannelLogoRepository
 import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.core.Channel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class LiveBanner(context: Context) : LinearLayout(context) {
+@SuppressLint("ViewConstructor") // Programmatic UI with an activity-scoped image repository.
+class LiveBanner(context: Context, logos: ChannelLogoRepository) : LinearLayout(context) {
+    private val logo = ChannelLogoView(context, logos)
     private val title = TvStyle.text(context, "", 27f, bold = true)
     private val show = TvStyle.text(context, "", 17f)
     private val timing = TvStyle.text(context, "", 13f, TvStyle.muted).apply { fontFeatureSettings = "tnum" }
@@ -34,8 +39,13 @@ class LiveBanner(context: Context) : LinearLayout(context) {
         title.maxLines = 1; title.ellipsize = TextUtils.TruncateAt.END
         show.maxLines = 2; show.ellipsize = TextUtils.TruncateAt.END
         next.maxLines = 1; next.ellipsize = TextUtils.TruncateAt.END
-        addView(title)
-        addView(show, LayoutParams(-1, -2).apply { topMargin = context.dp(8) })
+        val header = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+        header.addView(logo, LayoutParams(context.dp(76), context.dp(60)).apply { rightMargin = context.dp(20) })
+        val description = LinearLayout(context).apply { orientation = VERTICAL }
+        description.addView(title)
+        description.addView(show, LayoutParams(-1, -2).apply { topMargin = context.dp(8) })
+        header.addView(description, LayoutParams(0, -2, 1f))
+        addView(header)
         addView(timing, LayoutParams(-1, -2).apply { topMargin = context.dp(6) })
         addView(progress, LayoutParams(-1, context.dp(4)).apply { topMargin = context.dp(9) })
         addView(next, LayoutParams(-1, -2).apply { topMargin = context.dp(9) })
@@ -44,6 +54,8 @@ class LiveBanner(context: Context) : LinearLayout(context) {
 
     fun bind(channel: Channel, programmes: List<Programme>, favoritesOnly: Boolean, now: Long = System.currentTimeMillis()) {
         hint.visibility = VISIBLE
+        logo.visibility = VISIBLE
+        logo.bind(channel)
         val window = ProgrammeWindow.at(programmes, now)
         title.text = "${channel.number.takeIf { it != 9999 }?.let { "$it  ·  " }.orEmpty()}${channel.name}"
         show.text = window.current?.title ?: "Diretta · Guida non disponibile per il programma attuale"
@@ -59,6 +71,7 @@ class LiveBanner(context: Context) : LinearLayout(context) {
     }
 
     fun message(title: String, subtitle: String) {
+        logo.unbind(); logo.visibility = GONE
         this.title.text = title
         show.text = subtitle
         timing.visibility = GONE; progress.visibility = GONE; next.visibility = GONE; hint.text = ""

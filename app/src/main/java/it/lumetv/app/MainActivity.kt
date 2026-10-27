@@ -23,6 +23,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private val http = HttpClient()
     private lateinit var repository: ChannelRepository
     private lateinit var guide: GuideRepository
+    private lateinit var logos: ChannelLogoRepository
     private lateinit var resolver: StreamResolver
     private lateinit var tvPlayer: TvPlayer
     private lateinit var recovery: PlaybackRecovery
@@ -128,7 +130,8 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         repository = ChannelRepository(this, http)
-        guide = GuideRepository(this, http)
+        logos = ChannelLogoRepository(this, http, lifecycleScope)
+        guide = GuideRepository(this, http, logos::updateSources)
         resolver = StreamResolver(http)
         tvPlayer = TvPlayer(this, http)
         network = NetworkMonitor(this) { online -> recovery.onNetworkChanged(online) }
@@ -138,6 +141,14 @@ class MainActivity : ComponentActivity() {
             onExhausted = ::showError)
         currentFilter = savedInstanceState?.getString("filter") ?: "Tutti"
         buildUi()
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                logos.revisions.collect {
+                    adapter.refreshLogos()
+                    if (channelBannerVisible && banner.visibility == View.VISIBLE) updateChannelBanner()
+                }
+            }
+        }
         updates = UpdateController(this) { version ->
             updateNotice.contentDescription = "Aggiorna Lume TV alla versione $version"
             updateNotice.visibility = if (version != null) View.VISIBLE else View.GONE
@@ -168,6 +179,7 @@ class MainActivity : ComponentActivity() {
             }
         })
         lifecycleScope.launch {
+            logos.local()
             channels = repository.local()
             catalogLoaded = true
             programmes = guide.local()
@@ -327,7 +339,7 @@ class MainActivity : ComponentActivity() {
         status = TvStyle.text(this, "Carico i tuoi canali…", 13f, TvStyle.muted)
         content.addView(status, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7); bottomMargin = dp(16) })
         val gridArea = FrameLayout(this)
-        adapter = ChannelAdapter(repository::isFavorite, ::selectChannel) { channel ->
+        adapter = ChannelAdapter(logos, repository::isFavorite, ::selectChannel) { channel ->
             val added = repository.toggleFavorite(channel)
             updateCatalog()
             status.text = if (added) "${channel.name} aggiunto ai preferiti" else "${channel.name} rimosso dai preferiti"
@@ -353,7 +365,7 @@ class MainActivity : ComponentActivity() {
         catalog.addView(content, FrameLayout.LayoutParams(-1, -1))
         root.addView(catalog, FrameLayout.LayoutParams(-1, -1))
 
-        banner = LiveBanner(this).apply { visibility = View.GONE }
+        banner = LiveBanner(this, logos).apply { visibility = View.GONE }
         root.addView(banner, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply {
             leftMargin = dp(46); rightMargin = dp(46); bottomMargin = dp(28)
         })

@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import it.lumetv.app.data.XmlTvGuideParser
+import it.lumetv.app.data.ChannelLogoRepository
+import it.lumetv.app.data.HttpClient
 import it.lumetv.core.M3uParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -27,7 +29,9 @@ class GuideReplayActivity : ComponentActivity() {
                     val wanted = M3uParser.parse(assets.open("channels.m3u").bufferedReader().use { it.readText() })
                         .filter { it.supported }.map { it.epgId }.toSet()
                     val now = System.currentTimeMillis()
-                    val shows = XZInputStream(source.inputStream(), 64 * 1024).use { XmlTvGuideParser.parse(it, wanted, now) }
+                    val logos = ChannelLogoRepository(this@GuideReplayActivity, HttpClient(), lifecycleScope)
+                    logos.local()
+                    val shows = XZInputStream(source.inputStream(), 64 * 1024).use { XmlTvGuideParser.parse(it, wanted, now, onLogos = logos::updateSources) }
                     require(shows["rai1"].orEmpty().any { it.start <= now && it.end > now })
                     require(shows["canale5"].orEmpty().any { it.start <= now && it.end > now })
                     val root = JSONObject()

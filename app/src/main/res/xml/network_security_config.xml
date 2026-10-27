@@ -5,5 +5,10 @@
         <domain includeSubdomains="true">streaming.bitonlive.net</domain>
         <!-- WLTV's public XMLTV endpoint can redirect to HTTP on this exact host. -->
         <domain includeSubdomains="false">api.epg-guide.com</domain>
+        <!-- Public channel artwork: the EPG service redirects icons to this exact host. -->
+        <domain includeSubdomains="false">epg-guide.com</domain>
+        <domain includeSubdomains="false">www.epg-guide.com</domain>
+        <domain includeSubdomains="false">116.202.210.205</domain>
+        <domain includeSubdomains="false">www.man-ga.it</domain>
     </domain-config>
 </network-security-config>

@@ -15,11 +15,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.0-dev/LumeTV-0.3.0-dev.apk)
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.2/LumeTV-0.3.2.apk)
 >
 > APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.0-dev) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.2) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Catalogo di Lume TV](docs/screenshots/catalog.png)
 
@@ -44,6 +44,7 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 - Pannello della diretta con orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
 - Recupero automatico delle interruzioni temporanee, con attesa del ritorno della rete.
 - Catalogo aggiornato automaticamente, con una copia locale disponibile al primo avvio.
+- Loghi dei canali nel catalogo, nella guida e nel pannello della diretta, scaricati dalle sorgenti originali e conservati sul dispositivo.
 - Controllo automatico delle nuove versioni su GitHub e aggiornamento guidato dal telecomando, da **Opzioni → Aggiornamenti**.
 - Collegamento locale facoltativo con AURA: preferiti, guida e apertura dei canali dal launcher, revocabile in **Opzioni → Collegamento con AURA**. [Contratto e configurazione delle firme](docs/integration-aura.md).
 
@@ -112,6 +113,8 @@ Il catalogo viene aggiornato ogni 24 ore mentre usi l’app. La lista inclusa ne
 RSI La1 e RSI La2 sono escluse dal catalogo incluso, dalla cache e dagli aggiornamenti, anche quando presenti nella lista sorgente.
 
 La guida usa il servizio [EPG-Guide](https://epg-guide.com/) e si aggiorna ogni sei ore. Non tutti i canali hanno un palinsesto disponibile. In caso di errore o di pausa richiesta dal servizio, Lume conserva i programmi già scaricati e riprova in seguito.
+
+I loghi del catalogo, della guida e del pannello della diretta vengono scaricati direttamente dagli indirizzi della playlist e della guida, poi conservati sul dispositivo. Le immagini salvate vengono ricontrollate dopo sette giorni e rimangono disponibili quando la sorgente non risponde. Le edizioni TGR possono condividere il marchio Rai 3, mantenendo separati i programmi regionali. Quando manca un logo, il suo spazio resta vuoto e il nome del canale rimane visibile, mantenendo gli allineamenti delle schede. Alcune sorgenti di immagini usano HTTP: le eccezioni sono limitate alle destinazioni previste e il download controlla anche i redirect.
 
 Il pulsante ↻ permette di richiedere un aggiornamento. Le modifiche alle API delle emittenti possono invece richiedere una nuova versione dell’app.
 

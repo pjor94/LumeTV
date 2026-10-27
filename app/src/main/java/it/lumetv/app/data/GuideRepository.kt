@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-class GuideRepository(context: Context, private val http: HttpClient) {
+class GuideRepository(context: Context, private val http: HttpClient, private val onLogos: (Map<String, String>) -> Unit = {}) {
     private val app = context.applicationContext
     private val prefs = context.getSharedPreferences("guide", Context.MODE_PRIVATE)
     private val cache = AtomicFile(File(context.filesDir, "guide.json"))
@@ -59,7 +59,7 @@ class GuideRepository(context: Context, private val http: HttpClient) {
             val input = response.body?.byteStream() ?: throw SourceException("Guida TV non disponibile.")
             input.use { compressed ->
                 XZInputStream(LimitedInputStream(compressed, 32L * 1024 * 1024), 64 * 1024).use { xz ->
-                    XmlTvGuideParser.parse(LimitedInputStream(xz, 350L * 1024 * 1024), wanted, now)
+                    XmlTvGuideParser.parse(LimitedInputStream(xz, 350L * 1024 * 1024), wanted, now, onLogos = onLogos)
                 }
             }
         }
@@ -70,6 +70,10 @@ class GuideRepository(context: Context, private val http: HttpClient) {
         if (prefs.getInt("policy_version", 0) < 1) {
             prefs.edit().putInt("policy_version", 1).putLong("updated", 0)
                 .putLong("retry_after", 0).putLong("attempted", 0).remove("failure").apply()
+        }
+        // Import channel artwork once on upgrade, retaining any server retry deadline.
+        if (prefs.getInt("logo_metadata_version", 0) < 1) {
+            prefs.edit().putInt("logo_metadata_version", 1).putLong("updated", 0).apply()
         }
     }
     val lastUpdated: Long get() = store.updated
@@ -94,11 +98,16 @@ class GuideRepository(context: Context, private val http: HttpClient) {
 internal object XmlTvGuideParser {
     const val MAX_PER_CHANNEL = 96
     private val formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss Z", Locale.ROOT)
-    fun parse(input: InputStream, wanted: Set<String>, now: Long, parser: XmlPullParser = Xml.newPullParser()): Map<String, List<Programme>> {
+    fun parse(input: InputStream, wanted: Set<String>, now: Long, parser: XmlPullParser = Xml.newPullParser(),
+              onLogos: (Map<String, String>) -> Unit = {}): Map<String, List<Programme>> {
         val result = mutableMapOf<String, MutableList<Programme>>()
         val canonical = wanted.groupBy { it.lowercase(Locale.ROOT).removeSuffix(".it") }.filterValues { it.size == 1 }.mapValues { it.value.single() }
         // These are explicit IDs/display names observed in the WLTV feed, not fuzzy matches.
         val aliases = mapOf("rairadio2visualradio" to "rairadio2", "Rai3TGR.it" to "rai3tgrveneto")
+        val logos = linkedMapOf<String, String>()
+        val logoWanted = wanted + setOf("rai3", "rairadio2visualradio")
+        val logoCanonical = logoWanted.groupBy { it.lowercase(Locale.ROOT).removeSuffix(".it") }.filterValues { it.size == 1 }.mapValues { it.value.single() }
+        var logoId = ""
         // Some pull parsers do not expose this optional feature; their default is already false.
         if (parser.getFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL)) parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false)
         parser.setInput(input, "UTF-8")
@@ -108,7 +117,18 @@ internal object XmlTvGuideParser {
         var title = ""
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
-            if (event == XmlPullParser.START_TAG && parser.name == "programme") {
+            if (event == XmlPullParser.START_TAG && parser.name == "channel") {
+                val wireId = parser.getAttributeValue(null, "id").orEmpty()
+                logoId = when {
+                    wireId in logoWanted -> wireId
+                    aliases[wireId] in logoWanted -> aliases.getValue(wireId)
+                    else -> logoCanonical[wireId.lowercase(Locale.ROOT).removeSuffix(".it")].orEmpty()
+                }
+            } else if (event == XmlPullParser.START_TAG && parser.name == "icon" && logoId.isNotEmpty()) {
+                LogoPolicy.url(parser.getAttributeValue(null, "src").orEmpty())?.let { logos.putIfAbsent(logoId, it.toString()) }
+            } else if (event == XmlPullParser.END_TAG && parser.name == "channel") {
+                logoId = ""
+            } else if (event == XmlPullParser.START_TAG && parser.name == "programme") {
                 val wireId = parser.getAttributeValue(null, "channel").orEmpty()
                 id = when {
                     wireId in wanted -> wireId
@@ -130,6 +150,7 @@ internal object XmlTvGuideParser {
             }
             event = parser.next()
         }
+        onLogos(logos)
         return result
     }
 

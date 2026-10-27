@@ -17,7 +17,7 @@ A WorldLiveTV, WLTV Group e ai collaboratori del progetto originale va il merito
 
 ## Guida programmi
 
-I palinsesti provengono dal servizio esterno [EPG-Guide](https://epg-guide.com/). I dati vengono scaricati e conservati nella cache del dispositivo; non sono inclusi nella distribuzione del codice.
+I palinsesti e parte dei loghi dei canali provengono dal servizio esterno [EPG-Guide](https://epg-guide.com/). Altri loghi provengono dagli indirizzi indicati nella playlist WLTV. Dati e immagini vengono scaricati direttamente dalle sorgenti e conservati nella cache del dispositivo; non sono inclusi nella distribuzione del codice. I marchi restano dei rispettivi titolari.
 
 ## Librerie
 
@@ -41,7 +41,7 @@ Testi integrali nell’app, in **Opzioni → Licenze e avvisi**, e nei sorgenti 
 
 ### Sorgenti corrispondenti
 
-Il progetto pubblica soltanto [codice sorgente](https://github.com/pjor94/LumeTV). Gli archivi completi `LumeTV-<versione>-source.zip`, conservati tra gli artefatti del workflow Android in [GitHub Actions](https://github.com/pjor94/LumeTV/actions), comprendono gli script di compilazione/installazione e gli archivi upstream in `third_party/sources/`. Non vengono pubblicate APK. Versioni, revisioni, licenze, URL e checksum sono registrati in `third_party/sources.lock.json`. Istruzioni in `third_party/README.md`.
+Il progetto pubblica [codice sorgente](https://github.com/pjor94/LumeTV) e APK firmate nelle [release su GitHub](https://github.com/pjor94/LumeTV/releases). Ogni APK è accompagnata dall’archivio completo `LumeTV-<versione>-source.zip`, con gli script di compilazione/installazione e gli archivi upstream in `third_party/sources/`. Il workflow Android conserva gli archivi anche tra gli artefatti di [GitHub Actions](https://github.com/pjor94/LumeTV/actions). Versioni, revisioni, licenze, URL e checksum sono registrati in `third_party/sources.lock.json`. Istruzioni in `third_party/README.md`.
 
 Chi ridistribuisce una propria APK deve fornire i sorgenti corrispondenti secondo le licenze applicabili, comprese le dipendenze richieste; il pacchetto deve corrispondere alla compilazione distribuita.
 

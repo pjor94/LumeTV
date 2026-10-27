@@ -6,6 +6,31 @@ import org.kxml2.io.KXmlParser
 import java.time.Instant
 
 class GuideParserTest {
+    @Test fun `channel artwork imports even when no programmes are current`() {
+        val xml = """<tv>
+            <channel id="Rai1.it"><display-name>Rai 1</display-name><icon src="http://epg-guide.com/icn/icons/rai1.png"/></channel>
+            <channel id="rai3"><icon src="http://epg-guide.com/icn/icons/rai3.png"/></channel>
+            <channel id="other"><icon src="https://example.com/other.png"/></channel>
+            <programme channel="rai1" start="20251025130000 +0000" stop="20251025140000 +0000"><icon src="https://example.com/poster.png"/><title>Old</title></programme>
+            </tv>"""
+        var logos = emptyMap<String, String>()
+        val shows = XmlTvGuideParser.parse(xml.byteInputStream(), setOf("rai1", "rai3tgrlazio"),
+            Instant.parse("2026-10-27T13:30:00Z").toEpochMilli(), KXmlParser()) { logos = it }
+        assertTrue(shows.isEmpty())
+        assertEquals(setOf("rai1", "rai3"), logos.keys)
+        assertEquals("http://epg-guide.com/icn/icons/rai1.png", logos["rai1"])
+    }
+
+    @Test fun `unsafe artwork and programme posters cannot enter the logo index`() {
+        val xml = """<tv><channel id="rai1"><icon src="http://127.0.0.1/logo.png"/></channel>
+            <channel id="canale5"><icon src="http://untrusted.example.com/logo.png"/></channel>
+            <programme channel="rai1" start="20261027130000 +0000" stop="20261027140000 +0000"><icon src="https://example.com/poster.png"/><title>Now</title></programme></tv>"""
+        var logos = emptyMap<String, String>()
+        XmlTvGuideParser.parse(xml.byteInputStream(), setOf("rai1", "canale5"),
+            Instant.parse("2026-10-27T13:30:00Z").toEpochMilli(), KXmlParser()) { logos = it }
+        assertTrue(logos.isEmpty())
+    }
+
     @Test fun `guide parses timezone offsets and prefers Italian titles`() {
         val xml = """<tv>
             <programme channel="rai1" start="20261025130000 +0100" stop="20261025140000 +0100">

@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.3.1 · aggiornamenti dall’app — non pubblicata
+## 0.3.2 · loghi dei canali e aggiornamenti dall’app — 2026-10-27
 
+- Loghi dei canali nel catalogo, nella guida TV e nel pannello della diretta, con superfici adattate al contrasto, proporzioni preservate e spazio vuoto quando il logo non è disponibile.
+- Download diretto dalle sorgenti originali, cache locale con verifica settimanale, richieste condivise e limiti su immagini e redirect; riuso del marchio Rai 3 per le edizioni TGR senza condividere i palinsesti.
 - Controllo automatico delle release GitHub all’avvio e ogni sei ore durante l’uso, con avviso nel catalogo e schermata Opzioni → Aggiornamenti.
 - Download annullabile e installazione guidata con telecomando tramite il programma di installazione Android.
 - Verifica di dimensione, checksum, package, versione e certificato dell’APK prima dell’installazione; rifiuto di downgrade, build incompatibili e firme diverse.
 - Metadati `update.json` generati e verificati dalla pipeline di release, inclusi nei checksum e negli allegati pubblicati.
 - Versioni numeriche senza suffisso di sviluppo, pubblicate come normali release GitHub anche nella serie `0.x`.
+
+Per aggiornare dalle build che includono già l’aggiornatore: **Opzioni → Aggiornamenti → Controlla ora**. Chi usa ancora `0.3.0-dev` deve installare manualmente questa APK una prima volta.
 
 ## 0.3.0-dev · integrazione AURA e release APK — 2026-10-27
 

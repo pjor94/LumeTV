@@ -5,6 +5,10 @@
         <domain includeSubdomains="true">streaming.bitonlive.net</domain>
         <!-- WLTV's public XMLTV endpoint can redirect to HTTP on this exact host. -->
         <domain includeSubdomains="false">api.epg-guide.com</domain>
+        <domain includeSubdomains="false">epg-guide.com</domain>
+        <domain includeSubdomains="false">www.epg-guide.com</domain>
+        <domain includeSubdomains="false">116.202.210.205</domain>
+        <domain includeSubdomains="false">www.man-ga.it</domain>
         <!-- Emulator-only fixture host; the release policy remains unchanged. -->
         <domain includeSubdomains="false">10.0.2.2</domain>
     </domain-config>

@@ -8,9 +8,11 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import it.lumetv.app.data.Programme
+import it.lumetv.app.data.ChannelLogoRepository
 import it.lumetv.core.Channel
 import it.lumetv.app.ui.TvStyle.dp
 import java.text.SimpleDateFormat
@@ -18,6 +20,7 @@ import java.util.Date
 import java.util.Locale
 
 class ChannelAdapter(
+    private val logos: ChannelLogoRepository,
     private val favorite: (Channel) -> Boolean,
     private val choose: (Channel) -> Unit,
     private val toggleFavorite: (Channel) -> Unit,
@@ -29,20 +32,29 @@ class ChannelAdapter(
     var currentId: String? = null
     var guidePlaceholder = "Guida assente per questo canale · OK per la diretta"
 
-    class Holder(val card: LinearLayout, val number: TextView, val badge: TextView, val name: TextView, val show: TextView) : RecyclerView.ViewHolder(card)
+    class Holder(val card: LinearLayout, val number: TextView, val badge: TextView, val name: TextView,
+                 val show: TextView, val logo: ChannelLogoView) : RecyclerView.ViewHolder(card)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val context = parent.context
         val card = LinearLayout(context).apply {
             id = View.generateViewId()
-            orientation = LinearLayout.VERTICAL
+            orientation = if (viewType == 1) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
             isFocusable = true; isClickable = true; isLongClickable = true
             descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-            setPadding(context.dp(19), context.dp(15), context.dp(19), context.dp(15))
+            setPadding(context.dp(18), context.dp(13), context.dp(18), context.dp(13))
             layoutParams = RecyclerView.LayoutParams(-1, context.dp(if (viewType == 1) 108 else 140)).apply {
                 setMargins(context.dp(7), context.dp(7), context.dp(7), context.dp(7))
             }
         }
+        val logo = ChannelLogoView(context, logos)
+        val content = if (viewType == 1) LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            card.addView(logo, LinearLayout.LayoutParams(context.dp(76), context.dp(60)).apply { rightMargin = context.dp(20) })
+            card.addView(this, LinearLayout.LayoutParams(0, -1, 1f))
+        } else card
         val top = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val number = TvStyle.text(context, "", 11f, TvStyle.muted).apply {
             fontFeatureSettings = "tnum"; letterSpacing = 0.06f
@@ -50,21 +62,26 @@ class ChannelAdapter(
         }
         val badge = TvStyle.text(context, "", 10f, TvStyle.accent, true)
         top.addView(number, LinearLayout.LayoutParams(0, -2, 1f)); top.addView(badge)
-        card.addView(top)
-        val name = TvStyle.text(context, "", 29f, bold = true).apply {
+        content.addView(top)
+        if (viewType == 0) {
+            val brand = FrameLayout(context)
+            brand.addView(logo, FrameLayout.LayoutParams(context.dp(76), context.dp(48), Gravity.START or Gravity.CENTER_VERTICAL))
+            content.addView(brand, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        val name = TvStyle.text(context, "", if (viewType == 1) 23f else 21f, bold = true).apply {
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.CENTER_VERTICAL
         }
-        card.addView(name, LinearLayout.LayoutParams(-1, 0, 1f))
+        content.addView(name, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(if (viewType == 1) 6 else 0) })
         val show = TvStyle.text(context, "", 11f, TvStyle.muted).apply {
             maxLines = if (viewType == 1) 2 else 1; ellipsize = TextUtils.TruncateAt.END
         }
-        card.addView(show)
+        content.addView(show, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(5) })
         card.setOnFocusChangeListener { view, focused ->
             view.elevation = if (focused) context.dp(8).toFloat() else 0f
             TvStyle.focusMotion(view, focused, if (viewType == 1) 1.012f else 1.04f)
         }
-        return Holder(card, number, badge, name, show)
+        return Holder(card, number, badge, name, show, logo)
     }
 
     override fun getItemViewType(position: Int) = if (guideMode) 1 else 0
@@ -80,7 +97,8 @@ class ChannelAdapter(
             else -> ""
         }
         holder.name.text = channel.name
-        holder.name.textSize = when { guideMode -> 23f; channel.name.length > 18 -> 22f; channel.name.length > 12 -> 25f; else -> 30f }
+        holder.name.textSize = when { guideMode -> 23f; channel.name.length > 18 -> 17f; channel.name.length > 12 -> 19f; else -> 21f }
+        holder.logo.bind(channel)
         val now = System.currentTimeMillis()
         val shows = programmes[channel.epgId].orEmpty().filter { it.end > now }
         val current = shows.firstOrNull { it.start <= now }
@@ -105,9 +123,19 @@ class ChannelAdapter(
     }
 
     override fun onViewRecycled(holder: Holder) {
+        holder.logo.unbind()
         holder.card.animate().cancel()
         holder.card.scaleX = 1f; holder.card.scaleY = 1f; holder.card.elevation = 0f
         super.onViewRecycled(holder)
+    }
+
+    fun refreshLogos() {
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount, "logo")
+    }
+
+    override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isNotEmpty() && payloads.all { it == "logo" }) holder.logo.bind(items[position])
+        else super.onBindViewHolder(holder, position, payloads)
     }
 
     private fun tint(channel: Channel): Int = when {
