@@ -67,7 +67,7 @@ class LiveBanner(context: Context, logos: ChannelLogoRepository) : LinearLayout(
         }
         next.text = window.next?.let { "A seguire  ·  ${time(it.start)}  ${it.title}" }.orEmpty()
         next.visibility = if (window.next == null) GONE else VISIBLE
-        hint.text = "OK  Info / Riprendi     ·     Indietro  Canali     ·     CH +/−  ${if (favoritesOnly) "Preferiti" else "Cambia"}"
+        hint.text = "←  Canali     ·     OK  Info / Riprendi     ·     Indietro  Catalogo     ·     CH +/−  ${if (favoritesOnly) "Preferiti" else "Cambia"}"
     }
 
     fun message(title: String, subtitle: String) {

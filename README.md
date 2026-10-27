@@ -15,11 +15,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.2/LumeTV-0.3.2.apk)
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.3/LumeTV-0.3.3.apk)
 >
 > APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.2) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.3) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Catalogo di Lume TV](docs/screenshots/catalog.png)
 
@@ -38,6 +38,7 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 - Canali Rai, Rai/TGR e Mediaset presenti nella lista WLTV, insieme alle altre sorgenti supportate.
 - Riproduzione a tutto schermo di flussi HLS e DASH, con supporto Widevine quando richiesto dall’emittente.
 - Navigazione con telecomando, selezione numerica e cambio canale con CH+/CH−.
+- Elenco canali semitrasparente sulla sinistra della diretta, con loghi, programma in onda e filtro preferiti, senza interrompere la visione.
 - Preferiti e apertura dell’ultimo canale guardato.
 - Cambio canale con CH+/CH− su tutti i canali o solo sui preferiti, configurabile in **Opzioni**.
 - Guida con programma attuale e successivo, conservata sul dispositivo.
@@ -95,6 +96,9 @@ La prima APK contenente l’aggiornatore va installata con la procedura manuale 
 | CH+/CH− | Passa al canale successivo o precedente |
 | Numeri | Seleziona il numero del canale |
 | OK durante la diretta | Mostra le informazioni e riprende la riproduzione se in pausa |
+| ← durante la diretta | Apre l’elenco canali sulla sinistra, mantenendo la diretta in riproduzione |
+| ↑/↓ e OK nell’elenco laterale | Scorre i canali e apre quello scelto |
+| → da un canale, oppure Indietro | Chiude l’elenco laterale e continua la visione |
 | OK prolungato su una scheda | Aggiunge o rimuove un preferito |
 | ↻ | Aggiorna catalogo e guida |
 
@@ -103,6 +107,8 @@ I tasti GUIDE e MENU aprono guida e catalogo quando il sistema della TV li rende
 In **Opzioni → CH+/CH−** puoi scegliere **Solo preferiti**. La scelta resta salvata sul dispositivo; i numeri e la selezione dal catalogo continuano ad accedere a tutti i canali. Se non hai preferiti, l’app ti invita ad aggiungerli con OK prolungato su una scheda.
 
 Durante la diretta, OK o INFO mostra per sei secondi gli orari del programma, l’avanzamento, i minuti rimanenti e il titolo successivo, quando disponibili. Il pannello si aggiorna anche al cambio di programma.
+
+Premi **←** per aprire l’elenco laterale: il focus parte dal canale in visione, contrassegnato da un punto azzurro. **↑/↓** scorre i canali senza cambiare la diretta; **OK** conferma la scelta e chiude l’elenco. I loghi, il programma in onda e la barra di avanzamento aiutano a scegliere. Una seconda pressione di **←** porta ai filtri **Tutti** e **Preferiti** in cima all’elenco; il filtro non modifica la modalità CH+/CH− delle Opzioni. **→** da un canale o **Indietro** richiude il pannello senza interrompere il video. L’apertura è immediata e la navigazione rispetta le animazioni disabilitate nelle impostazioni della TV.
 
 Per le interruzioni recuperabili, Lume prova a riaprire la diretta fino a tre volte, dopo 2, 5 e 10 secondi, richiedendo nuovamente l’indirizzo del flusso. Se manca la connessione, attende che torni. I tentativi si annullano aprendo il catalogo, cambiando canale o mettendo l’app in standby. Gli errori DRM, i formati non supportati e le richieste di pausa del servizio restano gestiti con un messaggio e il pulsante **Riprova**.
 

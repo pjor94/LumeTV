@@ -1,4 +1,8 @@
 <resources>
     <string name="app_name">Lume TV</string>
     <string name="update_auto_check">Controlla automaticamente gli aggiornamenti</string>
+    <plurals name="live_channel_count">
+        <item quantity="one">%d canale</item>
+        <item quantity="other">%d canali</item>
+    </plurals>
 </resources>

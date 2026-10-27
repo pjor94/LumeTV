@@ -35,6 +35,7 @@ import it.lumetv.app.playback.PlaybackRecovery
 import it.lumetv.app.ui.ChannelAdapter
 import it.lumetv.app.ui.CatalogBackdrop
 import it.lumetv.app.ui.LiveBanner
+import it.lumetv.app.ui.LiveChannelPanel
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.app.update.UpdateController
@@ -73,6 +74,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var updateNotice: TextView
     private lateinit var updates: UpdateController
     private lateinit var banner: LiveBanner
+    private lateinit var liveChannels: LiveChannelPanel
+    private var liveChannelsReturnFocus: View? = null
     private var channelBannerVisible = false
     private lateinit var loading: LinearLayout
     private lateinit var loadingTitle: TextView
@@ -114,6 +117,7 @@ class MainActivity : ComponentActivity() {
     private val tick = object : Runnable {
         override fun run() {
             clock.text = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date())
+            liveChannels.refreshProgrammes()
             handler.postDelayed(this, 30_000)
         }
     }
@@ -145,6 +149,7 @@ class MainActivity : ComponentActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 logos.revisions.collect {
                     adapter.refreshLogos()
+                    liveChannels.refreshLogos()
                     if (channelBannerVisible && banner.visibility == View.VISIBLE) updateChannelBanner()
                 }
             }
@@ -170,7 +175,8 @@ class MainActivity : ComponentActivity() {
         tvPlayer.onError = { error -> if (!showingCatalog) recovery.onFailure(error) }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (!showingCatalog) showCatalog()
+                if (liveChannels.isOpen) closeLiveChannels()
+                else if (!showingCatalog) showCatalog()
                 else if (current != null && !failed) {
                     showingCatalog = false; catalog.visibility = View.GONE; video.visibility = View.VISIBLE
                     resumeLive()
@@ -211,6 +217,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         updates.onStop()
+        closeLiveChannels(restoreFocus = false)
         playerReady = false
         recovery.stop()
         network.stop()
@@ -381,6 +388,14 @@ class MainActivity : ComponentActivity() {
             visibility = View.GONE
         }
         root.addView(errorBox, FrameLayout.LayoutParams(dp(580), -2, Gravity.CENTER))
+        liveChannels = LiveChannelPanel(this, logos, repository::isFavorite, { channel ->
+            if (channel.id == current?.id && !failed) {
+                closeLiveChannels()
+                if (!tvPlayer.isPlaying && !recovery.isRecovering) resumeLive()
+                showChannelBanner()
+            } else selectChannel(channel)
+        }, ::closeLiveChannels)
+        root.addView(liveChannels, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
     }
 
@@ -491,6 +506,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun selectChannel(channel: Channel) {
+        closeLiveChannels(restoreFocus = false)
         launchMessage = null
         recovery.start()
         resolveJob?.cancel()
@@ -532,6 +548,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showCatalog() {
+        closeLiveChannels(restoreFocus = false)
         recovery.stop()
         resolveJob?.cancel()
         handler.removeCallbacks(hideBanner); handler.removeCallbacks(bannerTick); handler.removeCallbacks(numberAction); digits = ""
@@ -556,7 +573,27 @@ class MainActivity : ComponentActivity() {
         buttons.addView(TvStyle.button(this, "Scegli un canale") { showCatalog() })
         errorBox.addView(buttons)
         errorBox.visibility = View.VISIBLE
-        retry.requestFocus()
+        if (!liveChannels.isOpen) retry.requestFocus()
+    }
+
+    private fun showLiveChannels() {
+        if (showingCatalog || current == null || channels.isEmpty()) return
+        handler.removeCallbacks(numberAction); digits = ""
+        handler.removeCallbacks(hideBanner); handler.removeCallbacks(bannerTick)
+        banner.visibility = View.GONE
+        liveChannelsReturnFocus = currentFocus
+        liveChannels.show(channels, programmes, current?.id)
+    }
+
+    private fun closeLiveChannels(restoreFocus: Boolean = true) {
+        if (!liveChannels.isOpen) return
+        liveChannels.dismiss()
+        val previous = liveChannelsReturnFocus
+        liveChannelsReturnFocus = null
+        if (restoreFocus) {
+            if (failed) errorBox.requestFocus()
+            else if (previous?.isShown != true || !previous.requestFocus()) root.requestFocus()
+        }
     }
 
     private fun resumeLive() {
@@ -568,6 +605,7 @@ class MainActivity : ComponentActivity() {
 
     private fun showChannelBanner() {
         if (current == null) return
+        closeLiveChannels()
         channelBannerVisible = true
         updateChannelBanner()
         displayBanner()
@@ -579,6 +617,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showBanner(title: String, subtitle: String) {
+        closeLiveChannels()
         channelBannerVisible = false
         handler.removeCallbacks(bannerTick)
         banner.message(title, subtitle)
@@ -599,6 +638,7 @@ class MainActivity : ComponentActivity() {
                     channels = updated
                     current = updated.firstOrNull { it.id == current?.id } ?: current
                     if (showingCatalog) updateCatalog()
+                    liveChannels.update(channels, programmes, current?.id)
                 }
                 syncStatus.text = if (repository.lastUpdated > 0) "●  Catalogo aggiornato" else "Catalogo automatico"
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -632,6 +672,7 @@ class MainActivity : ComponentActivity() {
                 guideLoading = false
                 if (showingCatalog) updateCatalog()
                 else if (channelBannerVisible && banner.visibility == View.VISIBLE) updateChannelBanner()
+                liveChannels.update(channels, programmes, current?.id)
             }
         }
     }
@@ -650,7 +691,13 @@ class MainActivity : ComponentActivity() {
 
     private fun handleRemoteKey(event: KeyEvent): Boolean {
         if (event.action != KeyEvent.ACTION_DOWN) return false
+        if (!showingCatalog && event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !liveChannels.isOpen) {
+            if (event.repeatCount == 0) showLiveChannels()
+            return true
+        }
+        if (liveChannels.isOpen && liveChannels.handleDirection(event.keyCode)) return true
         if (event.keyCode in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 && event.repeatCount == 0) {
+            closeLiveChannels()
             digits = (digits + (event.keyCode - KeyEvent.KEYCODE_0)).takeLast(4)
             handler.removeCallbacks(numberAction); handler.postDelayed(numberAction, 1_000)
             if (!showingCatalog) showBanner(digits, "Selezione canale…")
@@ -670,7 +717,7 @@ class MainActivity : ComponentActivity() {
                 }
                 return true
             }
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (!showingCatalog && !failed) {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (!showingCatalog && !failed && !liveChannels.isOpen) {
                 if (!tvPlayer.isPlaying && !recovery.isRecovering) {
                     resumeLive()
                 }

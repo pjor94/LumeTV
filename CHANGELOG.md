@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.3 · canali durante la diretta — 2026-10-27
+
+- Elenco canali semitrasparente sulla sinistra della diretta, aperto con freccia sinistra, con gli stessi colori, loghi e focus dell’interfaccia Lume TV.
+- Scorrimento con il telecomando senza interrompere la riproduzione; OK cambia diretta e chiude l’elenco, freccia destra o Indietro torna alla visione.
+- Apertura sul canale attivo, filtro Tutti/Preferiti, programma in onda e avanzamento aggiornati durante la consultazione; indicazione del nuovo comando nel pannello informazioni.
+- Focus stabile con pressioni rapide, canali fuori schermo e preferiti vuoti; comandi leggibili anche sopra le scritte del video e rispetto delle animazioni disabilitate sulla TV.
+
+Collaudo su emulatore Android TV: 15 verifiche superate, inclusi continuità della riproduzione, cambio canale, filtri, tasti numerici e CH+/CH−. Anteprima controllata anche su una diretta reale.
+
+Per aggiornare dalla versione 0.3.2: **Opzioni → Aggiornamenti → Controlla ora**.
+
 ## 0.3.2 · loghi dei canali e aggiornamenti dall’app — 2026-10-27
 
 - Loghi dei canali nel catalogo, nella guida TV e nel pannello della diretta, con superfici adattate al contrasto, proporzioni preservate e spazio vuoto quando il logo non è disponibile.
