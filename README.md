@@ -8,11 +8,18 @@
 <h1 align="center">La TV, fatta semplice.</h1>
 <p align="center">Le dirette italiane su Android TV, con un’interfaccia essenziale e un solo telecomando.</p>
 <p align="center">
-  <a href="https://github.com/pjor94/LumeTV/releases">Scarica l’APK</a> ·
+  <a href="https://github.com/pjor94/LumeTV/releases">Tutte le release</a> ·
   <a href="#compilazione">Compila dai sorgenti</a> ·
   <a href="CHANGELOG.md">Novità</a> ·
   <a href="CONTRIBUTING.md">Contribuisci</a>
 </p>
+
+> [!TIP]
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.3.0-dev/LumeTV-0.3.0-dev.apk)
+>
+> **v0.3.0-dev · pre-release** — APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
+>
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.3.0-dev) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Catalogo di Lume TV](docs/screenshots/catalog.png)
 
