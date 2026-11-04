@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 · Cosa guardare, vista Focus — 2026-11-04
+
+- Nuova schermata nativa Focus: descrizione e azioni a sinistra, programmi selezionabili a destra con il telecomando.
+- Viste Ora, Tra poco (90 minuti) e Stasera (20:30–24:00), ricerca in titoli, descrizioni e canali e filtro preferiti.
+- Preferiti in evidenza e indicazione dei programmi che stanno terminando; selezione conservata dopo aggiornamenti, standby e ritorno dalla diretta.
+- Promemoria locali per i programmi futuri, mostrati due minuti prima mentre Lume è aperta, con apertura del canale solo su conferma.
+- Navigazione principale Canali / Cosa guardare / Guida TV; filtri Tutti, Rai, Mediaset e Preferiti all’interno di Canali.
+- Collaudo della guida basato sulla fascia oraria accessibile, indipendente dal cambio di minuto dell’orologio.
+
+Verifiche: 117 test JVM e 28 test Python superati; due test di rete facoltativi esclusi. Collaudo su emulatore Android TV con 21 controlli Focus e 17 controlli della Guida, inclusi ricerca, preferiti, promemoria, pressioni rapide, ritorno dalla diretta sintetica e caratteri ingranditi. Build Debug/Release e Android Lint completati. Questa versione non è stata provata su una TV fisica.
+
 ## 0.4.0 · guida TV delle prossime ore — 2026-10-27
 
 - Guida TV nativa a griglia con scala temporale condivisa, cinque righe quando lo spazio lo consente, loghi e focus immediato nello stile Lume.

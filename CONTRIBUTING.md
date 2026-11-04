@@ -32,6 +32,8 @@ Per provare il parser su un file XMLTV/XZ già scaricato, aggiungi `-PguideFile=
 
 Per il collaudo della Guida su un emulatore Android TV usa `python3 tools/smoke_guide.py --adb /percorso/adb --serial emulator-5560 --video /percorso/video-sintetico.mp4`, con APK debug già installata. Il test prepara un catalogo e un palinsesto locali, riproduce soltanto il video sintetico e ripristina cache, preferenze e dimensione del testo al termine. Non usarlo su una TV fisica. Report e schermate vengono salvati in `analysis/guide-smoke/`.
 
+Per Cosa guardare usa `python3 tools/smoke_discovery.py --adb /percorso/adb --serial emulator-5560 --video /percorso/video-sintetico.mp4`. Verifica la navigazione Focus, ricerca, preferiti, promemoria, riproduzione sintetica e ripristino con testo ingrandito. Anche questo test è riservato a un emulatore temporaneo e ripristina i dati al termine; i risultati sono in `analysis/discovery-smoke/`.
+
 ## Catalogo e risorse
 
 `python3 tools/update_catalog.py --refresh` aggiorna e valida la copia iniziale della playlist. Le risposte incomplete non sostituiscono quella salvata.

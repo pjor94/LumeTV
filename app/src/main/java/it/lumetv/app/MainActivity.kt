@@ -38,6 +38,7 @@ import it.lumetv.app.ui.CatalogBackdrop
 import it.lumetv.app.ui.LiveBanner
 import it.lumetv.app.ui.LiveChannelPanel
 import it.lumetv.app.ui.GuideView
+import it.lumetv.app.ui.DiscoveryView
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.app.update.UpdateController
@@ -68,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var grid: RecyclerView
     private lateinit var adapter: ChannelAdapter
     private lateinit var tabs: LinearLayout
+    private lateinit var channelFilters: LinearLayout
     private lateinit var status: TextView
     private lateinit var empty: TextView
     private lateinit var heading: TextView
@@ -78,6 +80,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var banner: LiveBanner
     private lateinit var liveChannels: LiveChannelPanel
     private lateinit var guideView: GuideView
+    private lateinit var discoveryView: DiscoveryView
+    private lateinit var reminders: ProgrammeReminders
+    private var reminderDialog: android.app.AlertDialog? = null
     private lateinit var catalogFooter: LinearLayout
     private var liveChannelsReturnFocus: View? = null
     private var channelBannerVisible = false
@@ -100,6 +105,8 @@ class MainActivity : ComponentActivity() {
     private var programmes = emptyMap<String, List<Programme>>()
     private var current: Channel? = null
     private var currentFilter = "Tutti"
+    private var lastChannelFilter = "Tutti"
+    private val channelSections = listOf("Tutti", "Rai", "Mediaset", "Preferiti")
     private var showingCatalog = true
     private var failed = false
     private var digits = ""
@@ -118,8 +125,10 @@ class MainActivity : ComponentActivity() {
         val channel = number?.let { ChannelNavigation.byNumber(channels, it) }
         if (channel != null) {
             if (showingCatalog && currentFilter == "Guida TV") guideView.selectChannel(channel.id)
+            else if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.selectChannel(channel.id)
             else selectChannel(channel)
         } else if (showingCatalog && currentFilter == "Guida TV") guideView.showMessage("Canale $number non presente")
+        else if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.showMessage("Canale $number non presente")
         else showBanner("Canale $number non presente", "Scegli un canale dall’elenco")
     }
     private val tick = object : Runnable {
@@ -127,6 +136,8 @@ class MainActivity : ComponentActivity() {
             clock.text = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date())
             liveChannels.refreshProgrammes()
             if (showingCatalog && currentFilter == "Guida TV") { guideView.tick(); updateGuideStatus() }
+            if (showingCatalog && currentFilter == "Cosa guardare") { discoveryView.tick(); updateGuideStatus() }
+            checkProgrammeReminders()
             handler.postDelayed(this, 30_000)
         }
     }
@@ -143,6 +154,7 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         repository = ChannelRepository(this, http)
+        reminders = ProgrammeReminders(this)
         logos = ChannelLogoRepository(this, http, lifecycleScope)
         guide = GuideRepository(this, http, logos::updateSources)
         resolver = StreamResolver(http)
@@ -153,14 +165,17 @@ class MainActivity : ComponentActivity() {
             onScheduled = { attempt, maximum -> showRecoveryStatus("Riconnetto la diretta… Tentativo $attempt di $maximum") },
             onExhausted = ::showError)
         currentFilter = savedInstanceState?.getString("filter") ?: "Tutti"
+        lastChannelFilter = savedInstanceState?.getString("channel_filter")?.takeIf { it in channelSections } ?: "Tutti"
         buildUi()
         guideView.restoreState(savedInstanceState)
+        discoveryView.restoreState(savedInstanceState)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 logos.revisions.collect {
                     adapter.refreshLogos()
                     liveChannels.refreshLogos()
                     guideView.refreshLogos()
+                    discoveryView.refreshLogos()
                     if (channelBannerVisible && banner.visibility == View.VISIBLE) updateChannelBanner()
                 }
             }
@@ -187,12 +202,13 @@ class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (liveChannels.isOpen) closeLiveChannels()
+                else if (showingCatalog && currentFilter == "Cosa guardare" && discoveryView.handleBack()) Unit
                 else if (!showingCatalog) showCatalog()
                 else if (current != null && !failed) {
                     showingCatalog = false; catalog.visibility = View.GONE; video.visibility = View.VISIBLE
                     resumeLive()
                     showChannelBanner()
-                } else if (currentFilter == "Guida TV") {
+                } else if (currentFilter == "Guida TV" || currentFilter == "Cosa guardare") {
                     currentFilter = "Tutti"; buildTabs(); updateCatalog(); focusFirstChannel()
                 } else finish()
             }
@@ -233,6 +249,8 @@ class MainActivity : ComponentActivity() {
         updates.onStop()
         closeLiveChannels(restoreFocus = false)
         guideView.deactivate()
+        discoveryView.deactivate()
+        reminderDialog?.dismiss(); reminderDialog = null
         playerReady = false
         recovery.stop()
         network.stop()
@@ -248,9 +266,11 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("channel", current?.id)
         outState.putString("filter", currentFilter)
+        outState.putString("channel_filter", lastChannelFilter)
         outState.putBoolean("catalog", showingCatalog)
         outState.putBoolean("explicit_consumed", explicitRequestSeen && launchQueue.pending == null)
         guideView.saveState(outState)
+        discoveryView.saveState(outState)
         super.onSaveInstanceState(outState)
     }
 
@@ -288,6 +308,7 @@ class MainActivity : ComponentActivity() {
             LaunchRequest.Catalog -> showRequestedCatalog("Tutti")
             LaunchRequest.Favorites -> showRequestedCatalog("Preferiti")
             LaunchRequest.Guide -> showRequestedCatalog("Guida TV")
+            LaunchRequest.Discover -> showRequestedCatalog("Cosa guardare")
             LaunchRequest.Integration -> { showRequestedCatalog("Tutti"); showIntegrationOptions() }
             LaunchRequest.Invalid -> showRequestedCatalog("Tutti", "Collegamento non valido · Scegli un canale dal catalogo")
         }
@@ -320,6 +341,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         integrationDialog?.dismiss()
+        reminderDialog?.dismiss()
         super.onDestroy()
     }
 
@@ -351,6 +373,7 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(4), dp(4), dp(4), dp(4))
             background = TvStyle.rounded(0xB21C2028.toInt(), dp(28).toFloat(), 0x14FFFFFF, dp(1))
         }
+        channelFilters = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; clipChildren = false }
         top.addView(tabs, LinearLayout.LayoutParams(-2, dp(50)))
         buildTabs()
         top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
@@ -361,6 +384,7 @@ class MainActivity : ComponentActivity() {
         content.addView(heading, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(23) })
         status = TvStyle.text(this, "Carico i tuoi canali…", 13f, TvStyle.muted)
         content.addView(status, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7); bottomMargin = dp(16) })
+        content.addView(channelFilters, LinearLayout.LayoutParams(-1, dp(36)).apply { bottomMargin = dp(9) })
         val gridArea = FrameLayout(this)
         adapter = ChannelAdapter(logos, repository::isFavorite, ::selectChannel) { channel ->
             val added = repository.toggleFavorite(channel)
@@ -381,8 +405,15 @@ class MainActivity : ComponentActivity() {
             val added = repository.toggleFavorite(channel)
             updateCatalog()
             guideView.showMessage(channel.name + if (added) " aggiunto ai preferiti" else " rimosso dai preferiti")
-        }, { tabs.getChildAt(4)?.requestFocus() }).apply { visibility = View.GONE }
+        }, { tabs.findViewWithTag<View>("Guida TV")?.requestFocus() }).apply { visibility = View.GONE }
         gridArea.addView(guideView, FrameLayout.LayoutParams(-1, -1))
+        discoveryView = DiscoveryView(this, logos, repository::isFavorite, { channel ->
+            repository.toggleFavorite(channel)
+            updateCatalog()
+        }, reminders, ::selectChannel, {
+            currentFilter = lastChannelFilter; buildTabs(); updateCatalog(); focusFirstChannel()
+        }, { tabs.findViewWithTag<View>("Cosa guardare")?.requestFocus() }).apply { visibility = View.GONE }
+        gridArea.addView(discoveryView, FrameLayout.LayoutParams(-1, -1))
         content.addView(gridArea, LinearLayout.LayoutParams(-1, 0, 1f))
         val footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         catalogFooter = footer
@@ -424,14 +455,24 @@ class MainActivity : ComponentActivity() {
 
     private fun buildTabs() {
         tabs.removeAllViews()
-        listOf("Tutti", "Rai", "Mediaset", "Preferiti", "Guida TV").forEach { label ->
-            val tab = TvStyle.button(this, label, currentFilter == label) {
+        if (currentFilter in channelSections) lastChannelFilter = currentFilter
+        listOf("Canali", "Cosa guardare", "Guida TV").forEach { label ->
+            val selected = if (label == "Canali") currentFilter in channelSections else currentFilter == label
+            val tab = TvStyle.button(this, label, selected) {
                 launchMessage = null
-                currentFilter = label
+                currentFilter = if (label == "Canali") lastChannelFilter else label
                 buildTabs(); updateCatalog(); focusFirstChannel()
-                if (label == "Guida TV") refreshGuide()
-            }
+                if (label == "Guida TV" || label == "Cosa guardare") refreshGuide()
+            }.apply { tag = label }
             tabs.addView(tab, LinearLayout.LayoutParams(-2, -1).apply { rightMargin = dp(2) })
+        }
+        channelFilters.removeAllViews()
+        channelSections.forEach { label ->
+            channelFilters.addView(TvStyle.button(this, label, currentFilter == label) {
+                launchMessage = null; currentFilter = label
+                buildTabs(); updateCatalog(); focusFirstChannel()
+            }.apply { textSize = 12f; minHeight = 0; setPadding(dp(16), dp(5), dp(16), dp(5)) },
+                LinearLayout.LayoutParams(-2, -1).apply { rightMargin = dp(6) })
         }
         val refresh = TvStyle.button(this, "↻", false) { refreshCatalog(true); refreshGuide(true) }.apply { contentDescription = "Aggiorna canali e guida TV" }
         refresh.setPadding(dp(13), dp(8), dp(13), dp(8))
@@ -498,36 +539,46 @@ class MainActivity : ComponentActivity() {
             else -> channels
         }
         val guideMode = currentFilter == "Guida TV"
+        val discoveryMode = currentFilter == "Cosa guardare"
+        val programmeMode = guideMode || discoveryMode
         adapter.guideMode = false
         adapter.items = visible
         adapter.programmes = programmes
         adapter.currentId = current?.id
         (grid.layoutManager as GridLayoutManager).spanCount = 4
         adapter.notifyDataSetChanged()
-        grid.visibility = if (guideMode) View.GONE else View.VISIBLE
-        heading.visibility = if (guideMode) View.GONE else View.VISIBLE
-        status.visibility = if (guideMode) View.GONE else View.VISIBLE
-        catalogFooter.visibility = if (guideMode) View.GONE else View.VISIBLE
+        grid.visibility = if (programmeMode) View.GONE else View.VISIBLE
+        heading.visibility = if (programmeMode) View.GONE else View.VISIBLE
+        status.visibility = if (programmeMode) View.GONE else View.VISIBLE
+        channelFilters.visibility = if (programmeMode) View.GONE else View.VISIBLE
+        catalogFooter.visibility = if (programmeMode) View.GONE else View.VISIBLE
         guideView.visibility = if (guideMode) View.VISIBLE else View.GONE
         if (guideMode) guideView.submit(channels, programmes, current?.id)
         else guideView.deactivate()
+        discoveryView.visibility = if (discoveryMode) View.VISIBLE else View.GONE
+        if (discoveryMode) discoveryView.submit(channels, programmes)
+        else discoveryView.deactivate()
         heading.text = when (currentFilter) { "Guida TV" -> "Ora. E tra poco."; "Preferiti" -> "I tuoi preferiti."; "Rai" -> "Il mondo Rai."; "Mediaset" -> "Il mondo Mediaset."; else -> "La TV, fatta semplice." }
         status.text = "${visible.size} canali  ·  ${if (currentFilter in setOf("Rai", "Mediaset")) "Tutti i canali $currentFilter della lista WLTV" else "Scegli un canale. Mettiti comodo."}"
         updateGuideStatus()
         launchMessage?.let { status.text = it }
         syncStatus.text = if (repository.lastUpdated > 0) "●  Catalogo aggiornato" else "Catalogo automatico"
-        empty.visibility = if (!guideMode && visible.isEmpty()) View.VISIBLE else View.GONE
+        empty.visibility = if (!programmeMode && visible.isEmpty()) View.VISIBLE else View.GONE
         if (showingCatalog && (currentFocus == null || currentFocus === root)) focusFirstChannel()
     }
 
     private fun focusFirstChannel() {
+        if (currentFilter == "Cosa guardare") {
+            discoveryView.post { if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.focusSelection() }
+            return
+        }
         if (currentFilter == "Guida TV") {
             guideView.post { if (showingCatalog && currentFilter == "Guida TV") guideView.focusSelection() }
             return
         }
         if (adapter.items.isEmpty()) {
-            val index = listOf("Tutti", "Rai", "Mediaset", "Preferiti", "Guida TV").indexOf(currentFilter).coerceAtLeast(0)
-            tabs.getChildAt(index)?.requestFocus()
+            val index = channelSections.indexOf(currentFilter).coerceAtLeast(0)
+            channelFilters.getChildAt(index)?.requestFocus()
             return
         }
         if (adapter.items.isNotEmpty()) grid.post {
@@ -539,6 +590,7 @@ class MainActivity : ComponentActivity() {
 
     private fun selectChannel(channel: Channel) {
         guideView.dismissDetails()
+        discoveryView.deactivate()
         closeLiveChannels(restoreFocus = false)
         launchMessage = null
         recovery.start()
@@ -664,6 +716,22 @@ class MainActivity : ComponentActivity() {
         handler.postDelayed(hideBanner, if (reading && banner.hasDescription) 15_000 else 6_000)
     }
 
+    private fun checkProgrammeReminders() {
+        if (!catalogLoaded || reminderDialog?.isShowing == true || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
+        val channel = channels.firstOrNull { it.id == due.channelId } ?: return
+        val start = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(due.start))
+        reminderDialog = android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.discovery_reminder_title)
+            .setMessage(getString(R.string.discovery_reminder_message, due.title, channel.name, start))
+            .setPositiveButton(R.string.discovery_watch) { _, _ -> selectChannel(channel) }
+            .setNegativeButton(R.string.discovery_later, null).create().also { dialog ->
+                dialog.setOnDismissListener { reminderDialog = null }
+                dialog.show()
+                dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).requestFocus()
+            }
+    }
+
     private fun refreshCatalog(force: Boolean) {
         if (catalogJob?.isActive == true) return
         catalogJob = lifecycleScope.launch {
@@ -685,7 +753,7 @@ class MainActivity : ComponentActivity() {
         val now = System.currentTimeMillis()
         val covered = channels.count { channel -> programmes[channel.epgId].orEmpty().any { it.end > now } }
         adapter.guidePlaceholder = if (guideLoading && covered == 0) "Carico la guida…" else "Guida assente per questo canale · OK per la diretta"
-        if (currentFilter != "Guida TV") return
+        if (currentFilter != "Guida TV" && currentFilter != "Cosa guardare") return
         val message = when {
             guideLoading -> "Aggiorno la guida TV…"
             covered > 0 -> ""
@@ -694,6 +762,7 @@ class MainActivity : ComponentActivity() {
             else -> "La guida verrà aggiornata automaticamente  ·  ↻ Aggiorna ora"
         }
         guideView.setStatus(message)
+        discoveryView.setStatus(message)
     }
 
     private fun refreshGuide(force: Boolean = false) {
@@ -727,6 +796,10 @@ class MainActivity : ComponentActivity() {
 
     private fun handleRemoteKey(event: KeyEvent): Boolean {
         if (showingCatalog && currentFilter == "Guida TV" && guideView.handleKey(event)) return true
+        if (showingCatalog && currentFilter == "Cosa guardare") {
+            if (discoveryView.handleKey(event)) return true
+            if (discoveryView.isEditing) return false
+        }
         if (event.action != KeyEvent.ACTION_DOWN) return false
         if (!showingCatalog && event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT && !liveChannels.isOpen) {
             if (event.repeatCount == 0) showLiveChannels()
@@ -745,16 +818,19 @@ class MainActivity : ComponentActivity() {
             handler.removeCallbacks(numberAction); handler.postDelayed(numberAction, 1_000)
             if (!showingCatalog) showBanner(digits, "Selezione canale…")
             else if (currentFilter == "Guida TV") guideView.showMessage("Canale $digits…")
+            else if (currentFilter == "Cosa guardare") discoveryView.showMessage("Canale $digits…")
             else status.text = "Canale $digits…"
             return true
         }
         when (event.keyCode) {
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                if (showingCatalog && currentFilter == "Guida TV") guideView.pageChannels(1) else zap(1)
+                if (showingCatalog && currentFilter == "Guida TV") guideView.pageChannels(1)
+                else if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.page(1) else zap(1)
                 return true
             }
             KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                if (showingCatalog && currentFilter == "Guida TV") guideView.pageChannels(-1) else zap(-1)
+                if (showingCatalog && currentFilter == "Guida TV") guideView.pageChannels(-1)
+                else if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.page(-1) else zap(-1)
                 return true
             }
             KeyEvent.KEYCODE_GUIDE -> { currentFilter = "Guida TV"; buildTabs(); showCatalog(); refreshGuide(); return true }

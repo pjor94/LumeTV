@@ -87,6 +87,7 @@ def main():
     video_url = "http://10.0.2.2:" + str(server.server_port) + "/" + args.video.name
     paths = ["files/channels.m3u", "files/guide.json", "shared_prefs/guide.xml", "shared_prefs/lume.xml", "shared_prefs/app_updates.xml"]
     stop()
+    adb("shell", "run-as", PACKAGE, "mkdir", "-p", "files", "shared_prefs")
     backup = {path: read(path) for path in paths}
     font_scale = adb("shell", "settings", "get", "system", "font_scale").decode().strip()
     now = int(adb("shell", "date", "+%s").strip()) * 1000
@@ -140,7 +141,7 @@ def main():
         passed("Indietro ripristina il focus", focused().get("content-desc") == before_dialog)
         click("Ora successiva", description=True)
         future = focused().get("content-desc")
-        future_times = sorted(t for t in texts(nodes()) if re.fullmatch(r"\d\d:\d\d", t))
+        future_window = next(n.get("content-desc") for n in nodes() if n.get("content-desc", "").startswith("Fascia oraria:"))
         frames_before = adb("logcat", "-d", "-s", "LumePlayer:I").count(b"first_frame")
         click("▷ Guarda il canale ora")
         deadline = time.monotonic() + 15
@@ -155,7 +156,7 @@ def main():
         key(4)
         returned = nodes()
         passed("Ritorno dalla diretta conserva programma e fascia", focused(returned).get("content-desc") == future and
-               sorted(t for t in texts(returned) if re.fullmatch(r"\d\d:\d\d", t)) == future_times)
+               any(n.get("content-desc") == future_window for n in returned))
         (args.output / "guide.png").write_bytes(adb("exec-out", "screencap", "-p"))
         adb("shell", "input", "keyevent", "--longpress", "23")
         click("★ Preferiti")

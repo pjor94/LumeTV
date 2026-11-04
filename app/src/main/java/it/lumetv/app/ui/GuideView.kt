@@ -418,6 +418,7 @@ private class GuideTimelineView(
         binding = true
         this.currentId = currentId
         timeFormat.timeZone = TimeZone.getDefault()
+        contentDescription = context.getString(R.string.guide_time_window, time(navigation.windowStart), time(navigation.windowStart + GuideSchedule.WINDOW))
         nowLabel = timeFormat.format(Date())
         axisTicks = generateSequence(GuideSchedule.halfHour(navigation.windowStart)) { it + GuideSchedule.HALF_HOUR }
             .takeWhile { it <= navigation.windowStart + GuideSchedule.WINDOW }

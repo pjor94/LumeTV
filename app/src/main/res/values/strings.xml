@@ -1,6 +1,45 @@
 <resources>
     <string name="app_name">Lume TV</string>
+    <string name="discovery_title">Cosa guardare</string>
+    <string name="discovery_now">Ora</string>
+    <string name="discovery_soon">Tra poco</string>
+    <string name="discovery_tonight">Stasera</string>
+    <string name="discovery_favorites">★ Solo preferiti</string>
+    <string name="discovery_search">Cerca</string>
+    <string name="discovery_search_hint">Programma o canale</string>
+    <string name="discovery_close_search">Chiudi la ricerca</string>
+    <string name="discovery_description">Descrizione del programma · ↑↓ per leggere</string>
+    <string name="discovery_open_channels">Apri i canali</string>
+    <string name="discovery_subtitle_now">In onda adesso, con il tempo per goderteli.</string>
+    <string name="discovery_subtitle_soon">Il prossimo programma, prima che inizi.</string>
+    <string name="discovery_subtitle_tonight">La tua serata, dalle 20:30 in poi.</string>
+    <string name="discovery_empty">Nessun programma in questa fascia.</string>
+    <string name="discovery_empty_search">Nessun programma trovato.</string>
+    <string name="discovery_empty_copy">Prova un’altra fascia oraria. Tutti i canali restano disponibili nel catalogo.</string>
+    <string name="discovery_empty_search_copy">Prova con il nome del programma o del canale, oppure cambia fascia oraria.</string>
+    <string name="discovery_empty_favorites_copy">Aggiungi canali ai preferiti o disattiva il filtro per vedere gli altri programmi.</string>
+    <string name="discovery_channel_missing">Nessun programma del canale in questa fascia · Prova Ora o apri i canali</string>
+    <string name="discovery_live">IN ONDA ADESSO</string>
+    <string name="discovery_next">A SEGUIRE</string>
+    <string name="discovery_watch">▷ Guarda ora</string>
+    <string name="discovery_remind">Avvisami</string>
+    <string name="discovery_reminder_active">✓ Avviso attivo</string>
+    <string name="discovery_reminder_saved">Avviso salvato · Ti avviserò 2 minuti prima, mentre Lume è aperta</string>
+    <string name="discovery_reminder_removed">Avviso rimosso</string>
+    <string name="discovery_reminder_title">Sta per iniziare</string>
+    <string name="discovery_reminder_message">%1$s\n%2$s · %3$s</string>
+    <string name="discovery_later">Più tardi</string>
+    <string name="discovery_no_description">Descrizione non disponibile per questo programma.</string>
+    <string name="discovery_add_favorite">Aggiungi %1$s ai preferiti</string>
+    <string name="discovery_remove_favorite">Rimuovi %1$s dai preferiti</string>
+    <string name="discovery_close">Chiudi</string>
+    <string name="discovery_ending">Sta terminando</string>
+    <string name="discovery_remaining">Restano %1$d min</string>
+    <string name="discovery_starts_in">Tra %1$d min</string>
+    <string name="discovery_hint_live">↑↓ Programmi  ← Azioni  OK Guarda  INFO Dettagli  OK prolungato Preferiti</string>
+    <string name="discovery_hint_future">↑↓ Programmi  ← Azioni  OK Avvisami  INFO Dettagli  OK prolungato Preferiti</string>
     <string name="guide_watch_channel">▷  Guarda %1$s</string>
+    <string name="guide_time_window">Fascia oraria: %1$s–%2$s</string>
     <string name="guide_watch_now">▷  Guarda il canale ora</string>
     <string name="guide_hint_missing">↑↓ Canali  ←→ Programmi  OK Guarda</string>
     <string name="guide_hint_live">↑↓ Canali  ←→ Programmi  OK Guarda  INFO Dettagli</string>
@@ -10,5 +49,9 @@
     <plurals name="live_channel_count">
         <item quantity="one">%d canale</item>
         <item quantity="other">%d canali</item>
+    </plurals>
+    <plurals name="discovery_programme_count">
+        <item quantity="one">%d programma</item>
+        <item quantity="other">%d programmi</item>
     </plurals>
 </resources>

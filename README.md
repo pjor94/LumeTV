@@ -16,13 +16,13 @@
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.4.0/LumeTV-0.4.0.apk)
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.5.0/LumeTV-0.5.0.apk)
 >
 > APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.4.0) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.5.0) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
-![Catalogo di Lume TV](docs/screenshots/catalog.png)
+![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
 Lume TV è un’app per Android TV e Google TV dedicata alla televisione italiana in diretta. Il catalogo ha una schermata propria; quando scegli un canale, il video occupa tutto lo schermo. L’interfaccia è nativa, scritta in Kotlin, e la riproduzione usa AndroidX Media3.
 
@@ -43,6 +43,7 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 - Preferiti e apertura dell’ultimo canale guardato.
 - Cambio canale con CH+/CH− su tutti i canali o solo sui preferiti, configurabile in **Opzioni**.
 - Guida TV a griglia con programmazione delle prossime ore, dettagli e filtro preferiti, conservata sul dispositivo.
+- Cosa guardare: vista Focus con dettagli affiancati, programmi Ora/Tra poco/Stasera, ricerca, filtro preferiti e avvisi locali per i programmi futuri mentre l’app è aperta.
 - Pannello della diretta con descrizione, orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
 - Recupero automatico delle interruzioni temporanee, con attesa del ritorno della rete.
 - Catalogo aggiornato automaticamente, con una copia locale disponibile al primo avvio.

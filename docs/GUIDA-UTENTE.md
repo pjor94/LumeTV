@@ -1,6 +1,8 @@
-# Guida utente · Lume TV 0.4
+# Guida utente · Lume TV 0.5
 
 La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google TV: scegli un canale, guarda a tutto schermo e scopri cosa c’è nelle prossime ore con lo stesso telecomando.
+
+Cosa guardare e la nuova navigazione Canali / Cosa guardare / Guida TV sono disponibili dalla versione 0.5.0.
 
 [Scarica l’ultima versione](https://github.com/pjor94/LumeTV/releases/latest) · [Torna al progetto](../README.md) · [Novità della versione](../CHANGELOG.md)
 
@@ -8,6 +10,7 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 - [Installazione e primo avvio](#installazione-e-primo-avvio)
 - [Scegliere un canale](#scegliere-un-canale)
+- [Cosa guardare](#cosa-guardare)
 - [Informazioni durante la visione](#informazioni-durante-la-visione)
 - [Elenco canali durante la diretta](#elenco-canali-durante-la-diretta)
 - [Consultare la Guida TV](#consultare-la-guida-tv)
@@ -20,7 +23,7 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.4.0.apk**.
+1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.5.0.apk**.
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
@@ -33,7 +36,7 @@ Se l’app è già installata da una release ufficiale, segui [Aggiornare Lume T
 
 ![Catalogo dei canali](screenshots/catalog.png)
 
-Nel catalogo trovi numero, nome e logo dei canali. Le sezioni in alto permettono di passare tra **Tutti**, **Rai**, **Mediaset**, **Preferiti** e **Guida TV**.
+Nel catalogo trovi numero, nome e logo dei canali. Le sezioni in alto sono **Canali**, **Cosa guardare** e **Guida TV**. All’interno di Canali, i filtri **Tutti**, **Rai**, **Mediaset** e **Preferiti** permettono di restringere l’elenco.
 
 - Usa le **frecce** per spostare la selezione: la scheda evidenziata è quella che aprirai.
 - Premi **OK** per guardare il canale a tutto schermo.
@@ -41,6 +44,23 @@ Nel catalogo trovi numero, nome e logo dei canali. Le sezioni in alto permettono
 - Premi **Indietro** durante la visione per tornare al catalogo; dal catalogo, Indietro riprende la diretta già aperta.
 
 L’app ricorda l’ultimo canale riprodotto e lo riapre al successivo avvio, se ancora disponibile.
+
+## Cosa guardare
+
+Apri **Cosa guardare** dalla navigazione in alto. La vista Focus mostra i dettagli del programma selezionato sulla sinistra e l’elenco dei programmi sulla destra. La selezione da sola non avvia la diretta.
+
+![Vista Focus con palinsesto di esempio](screenshots/discovery.png)
+
+- **Ora** mostra il programma in onda di ogni canale. I preferiti compaiono per primi; i programmi vicini alla fine sono segnalati e seguono gli altri dello stesso gruppo.
+- **Tra poco** mostra il prossimo programma di ogni canale che inizia entro 90 minuti, in ordine di inizio.
+- **Stasera** mostra fino a due programmi per canale che occupano parte della fascia 20:30–24:00 di oggi, secondo il fuso della TV.
+- **Solo preferiti** restringe i risultati. **Cerca** cerca parole nei titoli, nelle descrizioni e nei nomi dei canali della fascia selezionata; accenti e maiuscole non cambiano i risultati.
+
+Usa **↑/↓** per scegliere il programma, **←** per raggiungere le azioni sulla sinistra e **→** per tornare all’elenco. **OK** guarda un programma in onda o attiva/disattiva il promemoria per uno futuro. **INFO** apre la descrizione completa; **OK prolungato** e la stella a sinistra gestiscono il canale preferito. **CH+/CH−** scorre per pagina. I numeri selezionano un canale nei risultati senza avviare la diretta. Nella ricerca, i numeri vengono scritti nel testo.
+
+**Avvisami** salva il promemoria sulla TV. Lume mostra un avviso circa due minuti prima mentre l’app è aperta; puoi scegliere **Guarda ora** o **Più tardi**. La diretta non cambia automaticamente. Gli avvisi non vengono mostrati fuori dall’app né riproposti dopo un lungo standby. Per annullare un promemoria, scegli di nuovo **Avviso attivo** sul programma.
+
+Fascia, ricerca, filtro e programma selezionato vengono conservati. Dopo la riproduzione, Indietro torna alla stessa consultazione. I risultati dipendono dai palinsesti disponibili; **Apri i canali** permette di raggiungere anche i canali privi di guida.
 
 ## Informazioni durante la visione
 
@@ -142,6 +162,8 @@ Catalogo e palinsesti hanno aggiornamenti separati: il **catalogo ogni 24 ore**,
 | Diretta o catalogo | Numeri | Apri un canale per numero |
 | Guida | Numeri | Seleziona la riga senza avviare la diretta |
 | Guida | CH+/CH− | Scorri per pagina |
+| Cosa guardare | ↑/↓, ←/→ | Seleziona un programma e raggiungi le azioni |
+| Cosa guardare | OK / INFO | Guarda o imposta un avviso / leggi i dettagli |
 | Diretta | Indietro | Torna al catalogo |
 | Catalogo con una diretta aperta | Indietro | Riprendi la diretta |
 | App | GUIDE / MENU | Apri Guida / catalogo, se la TV inoltra il tasto all’app |

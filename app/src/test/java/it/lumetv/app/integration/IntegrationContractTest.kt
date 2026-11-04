@@ -18,6 +18,7 @@ class IntegrationContractTest {
         assertEquals(LaunchRequest.Catalog, LaunchRequest.parse("lumetv://catalog"))
         assertEquals(LaunchRequest.Favorites, LaunchRequest.parse("lumetv://favorites"))
         assertEquals(LaunchRequest.Guide, LaunchRequest.parse("lumetv://guide"))
+        assertEquals(LaunchRequest.Discover, LaunchRequest.parse("lumetv://discover"))
         assertEquals(LaunchRequest.Integration, LaunchRequest.parse("lumetv://integration"))
         listOf(null, "", "https://channel/$id", "lumetv://channel/$id?stream=x", "lumetv://channel/$id#x",
             "lumetv://channel/$id/", "lumetv://channel/%30${id.drop(1)}", "lumetv://user@catalog",

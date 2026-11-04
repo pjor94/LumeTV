@@ -13,6 +13,7 @@ sealed interface LaunchRequest {
     data object Catalog : LaunchRequest
     data object Favorites : LaunchRequest
     data object Guide : LaunchRequest
+    data object Discover : LaunchRequest
     data object Integration : LaunchRequest
     data object Invalid : LaunchRequest
 
@@ -24,7 +25,7 @@ sealed interface LaunchRequest {
             else if (uri.host == "channel" && Regex("/[a-f0-9]{24}").matches(uri.rawPath.orEmpty())) ChannelId(uri.rawPath.drop(1))
             else if (uri.rawPath.orEmpty().isNotEmpty()) Invalid
             else when (uri.host) {
-                "last" -> Last; "catalog" -> Catalog; "favorites" -> Favorites; "guide" -> Guide
+                "last" -> Last; "catalog" -> Catalog; "favorites" -> Favorites; "guide" -> Guide; "discover" -> Discover
                 "integration" -> Integration; else -> Invalid
             }
         } catch (_: Exception) { Invalid }
