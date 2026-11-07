@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Lume TV</string>
+    <string name="exit_app">Esci</string>
+    <string name="exit_app_title">Uscire da Lume TV?</string>
+    <string name="exit_app_message">Vuoi chiudere l’app?</string>
+    <string name="exit_app_cancel">Annulla</string>
     <string name="discovery_title">Cosa guardare</string>
     <string name="discovery_now">Ora</string>
     <string name="discovery_soon">Tra poco</string>

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.1 · Uscita dall’app — 2026-11-07
+
+- Pulsante **Esci** nella navigazione in alto, dopo Opzioni, disponibile in Canali, Cosa guardare e Guida TV.
+- Conferma di chiusura anche premendo Indietro dalla Home di Canali, con Annulla selezionato all’apertura. Indietro nella conferma annulla l’uscita; preferiti, impostazioni e ultimo canale guardato restano salvati.
+- Da Guida TV e Cosa guardare, Indietro torna prima a Canali dopo aver chiuso eventuali dettagli o ricerca; dal catalogo non riprende più automaticamente la diretta.
+- Player e sessione multimediale rilasciati prima della chiusura del task, evitando il conflitto alla riapertura immediata dell’app.
+
+Verifiche: 117 test JVM e 28 test Python superati; due test di rete facoltativi esclusi. Collaudo su emulatore Android TV con 24 controlli, inclusi focus, annullamento, selezione numerica in attesa, ritorno dalla diretta sintetica, chiusura del task e riapertura immediata. Build Debug/Release e Android Lint completati. Questa versione non è stata provata su una TV fisica.
+
+Per aggiornare dalla versione 0.5.0: **Opzioni → Aggiornamenti → Controlla ora**. Preferiti e impostazioni vengono conservati.
+
 ## 0.5.0 · Cosa guardare, vista Focus — 2026-11-04
 
 - Nuova schermata nativa Focus: descrizione e azioni a sinistra, programmi selezionabili a destra con il telecomando.

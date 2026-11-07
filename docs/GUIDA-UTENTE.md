@@ -3,6 +3,7 @@
 La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google TV: scegli un canale, guarda a tutto schermo e scopri cosa c’è nelle prossime ore con lo stesso telecomando.
 
 Cosa guardare e la nuova navigazione Canali / Cosa guardare / Guida TV sono disponibili dalla versione 0.5.0.
+Il pulsante Esci e la conferma con Indietro dalla Home sono disponibili dalla versione 0.5.1.
 
 [Scarica l’ultima versione](https://github.com/pjor94/LumeTV/releases/latest) · [Torna al progetto](../README.md) · [Novità della versione](../CHANGELOG.md)
 
@@ -16,6 +17,7 @@ Cosa guardare e la nuova navigazione Canali / Cosa guardare / Guida TV sono disp
 - [Consultare la Guida TV](#consultare-la-guida-tv)
 - [Preferiti e cambio canale](#preferiti-e-cambio-canale)
 - [Aggiornare Lume TV](#aggiornare-lume-tv)
+- [Uscire dall’app](#uscire-dallapp)
 - [Telecomando: riferimento rapido](#telecomando-riferimento-rapido)
 - [Se qualcosa non funziona](#se-qualcosa-non-funziona)
 
@@ -23,7 +25,7 @@ Cosa guardare e la nuova navigazione Canali / Cosa guardare / Guida TV sono disp
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.5.0.apk**.
+1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.5.1.apk**.
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
@@ -41,7 +43,7 @@ Nel catalogo trovi numero, nome e logo dei canali. Le sezioni in alto sono **Can
 - Usa le **frecce** per spostare la selezione: la scheda evidenziata è quella che aprirai.
 - Premi **OK** per guardare il canale a tutto schermo.
 - Digita un **numero** per raggiungere direttamente il canale corrispondente.
-- Premi **Indietro** durante la visione per tornare al catalogo; dal catalogo, Indietro riprende la diretta già aperta.
+- Premi **Indietro** durante la visione per tornare al catalogo; dalla Home di Canali, Indietro chiede conferma per chiudere l’app.
 
 L’app ricorda l’ultimo canale riprodotto e lo riapre al successivo avvio, se ancora disponibile.
 
@@ -147,6 +149,14 @@ Il controllo automatico avviene all’avvio e ogni sei ore mentre usi l’app. P
 
 Catalogo e palinsesti hanno aggiornamenti separati: il **catalogo ogni 24 ore**, la **guida ogni sei ore**. **↻** nel catalogo richiede un aggiornamento di entrambi.
 
+## Uscire dall’app
+
+Scegli **Esci** nella navigazione in alto, subito dopo **Opzioni**. Il pulsante è disponibile in **Canali**, **Cosa guardare** e **Guida TV**. Puoi aprire la stessa conferma premendo **Indietro** dalla Home di Canali, anche quando hai già guardato una diretta.
+
+Alla domanda **Uscire da Lume TV?**, il pulsante **Annulla** è selezionato all’apertura. Scegli **Esci** per chiudere l’app; **Annulla** o **Indietro** chiude soltanto la conferma e ti lascia sulla schermata. Preferiti, impostazioni e ultimo canale guardato vengono conservati.
+
+Durante la diretta, Indietro torna prima al catalogo o alla consultazione da cui hai aperto il canale. Da Guida TV e Cosa guardare, Indietro chiude prima eventuali dettagli o ricerca aperti, poi torna a **Canali → Tutti**; un’altra pressione apre la conferma di uscita.
+
 ## Telecomando: riferimento rapido
 
 | Dove sei | Tasto | Azione |
@@ -165,7 +175,9 @@ Catalogo e palinsesti hanno aggiornamenti separati: il **catalogo ogni 24 ore**,
 | Cosa guardare | ↑/↓, ←/→ | Seleziona un programma e raggiungi le azioni |
 | Cosa guardare | OK / INFO | Guarda o imposta un avviso / leggi i dettagli |
 | Diretta | Indietro | Torna al catalogo |
-| Catalogo con una diretta aperta | Indietro | Riprendi la diretta |
+| Home di Canali | Indietro | Chiedi conferma per chiudere l’app |
+| Guida TV / Cosa guardare | Indietro | Chiudi dettagli o ricerca aperti, poi torna a Canali |
+| Conferma di uscita | Indietro | Annulla e continua a usare Lume TV |
 | App | GUIDE / MENU | Apri Guida / catalogo, se la TV inoltra il tasto all’app |
 
 Alcuni telecomandi riservano GUIDE, MENU o INFO alle funzioni della TV. Puoi sempre aprire la Guida dalla navigazione del catalogo e mostrare le info della diretta con OK.

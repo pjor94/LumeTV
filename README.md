@@ -16,11 +16,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.5.0/LumeTV-0.5.0.apk)
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.5.1/LumeTV-0.5.1.apk)
 >
 > APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.5.0) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.5.1) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -114,7 +114,8 @@ La prima APK contenente l’aggiornatore va installata con la procedura manuale 
 | --- | --- |
 | Frecce e OK | Sfoglia il catalogo e apri un canale |
 | Indietro durante la diretta | Torna al catalogo |
-| Indietro dal catalogo | Riprende la diretta, se aperta |
+| Indietro da Canali | Chiede conferma per chiudere l’app |
+| Indietro da Guida TV o Cosa guardare | Chiude la ricerca o i dettagli aperti, poi torna a Canali |
 | CH+/CH− | Passa al canale successivo o precedente |
 | Numeri | Seleziona il numero del canale |
 | OK durante la diretta | Mostra le informazioni e riprende la riproduzione se in pausa |
@@ -125,6 +126,8 @@ La prima APK contenente l’aggiornatore va installata con la procedura manuale 
 | ↻ | Aggiorna catalogo e guida |
 
 I tasti GUIDE e MENU aprono guida e catalogo quando il sistema della TV li rende disponibili all’app.
+
+Per chiudere Lume TV scegli **Esci**, in alto dopo **Opzioni**, oppure premi **Indietro** dalla Home di Canali. La conferma apre con **Annulla** selezionato: scegli **Esci** per chiudere, oppure **Annulla** o Indietro per continuare. Il pulsante è disponibile anche in Guida TV e Cosa guardare. Preferiti, impostazioni e ultimo canale guardato vengono conservati.
 
 In **Opzioni → CH+/CH−** puoi scegliere **Solo preferiti**. La scelta resta salvata sul dispositivo; i numeri e la selezione dal catalogo continuano ad accedere a tutti i canali. Se non hai preferiti, l’app ti invita ad aggiungerli con OK prolungato su una scheda.
 

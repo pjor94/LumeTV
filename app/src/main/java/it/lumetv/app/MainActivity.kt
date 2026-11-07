@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var discoveryView: DiscoveryView
     private lateinit var reminders: ProgrammeReminders
     private var reminderDialog: android.app.AlertDialog? = null
+    private var exitDialog: android.app.AlertDialog? = null
     private lateinit var catalogFooter: LinearLayout
     private var liveChannelsReturnFocus: View? = null
     private var channelBannerVisible = false
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
     private val launchQueue = LaunchQueue()
     private var playerReady = false
     private var explicitRequestSeen = false
+    private var initialPlaybackCancelled = false
     private var launchMessage: String? = null
     private var playbackGeneration = 0L
     private var activePlaybackChannelId: String? = null
@@ -204,13 +206,9 @@ class MainActivity : ComponentActivity() {
                 if (liveChannels.isOpen) closeLiveChannels()
                 else if (showingCatalog && currentFilter == "Cosa guardare" && discoveryView.handleBack()) Unit
                 else if (!showingCatalog) showCatalog()
-                else if (current != null && !failed) {
-                    showingCatalog = false; catalog.visibility = View.GONE; video.visibility = View.VISIBLE
-                    resumeLive()
-                    showChannelBanner()
-                } else if (currentFilter == "Guida TV" || currentFilter == "Cosa guardare") {
+                else if (currentFilter == "Guida TV" || currentFilter == "Cosa guardare") {
                     currentFilter = "Tutti"; buildTabs(); updateCatalog(); focusFirstChannel()
-                } else finish()
+                } else showExitConfirmation()
             }
         })
         lifecycleScope.launch {
@@ -218,13 +216,14 @@ class MainActivity : ComponentActivity() {
             channels = repository.local()
             catalogLoaded = true
             programmes = guide.local()
+            if (isFinishing || isDestroyed) return@launch
             updateCatalog()
             if (launchQueue.pending != null) {
                 consumeLaunchRequest()
             } else if (!explicitRequestSeen) {
                 val previous = savedInstanceState?.getString("channel") ?: repository.lastChannelId
                 current = channels.firstOrNull { it.id == previous }
-                showingCatalog = savedInstanceState?.getBoolean("catalog") ?: (current == null)
+                showingCatalog = initialPlaybackCancelled || (savedInstanceState?.getBoolean("catalog") ?: (current == null))
                 if (current != null && !showingCatalog && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) selectChannel(current!!)
                 else focusFirstChannel()
             }
@@ -251,16 +250,22 @@ class MainActivity : ComponentActivity() {
         guideView.deactivate()
         discoveryView.deactivate()
         reminderDialog?.dismiss(); reminderDialog = null
-        playerReady = false
-        recovery.stop()
+        exitDialog?.dismiss(); exitDialog = null
         network.stop()
-        resolveJob?.cancel(); guideJob?.cancel(); catalogJob?.cancel()
+        guideJob?.cancel(); catalogJob?.cancel()
         handler.removeCallbacksAndMessages(null)
         digits = ""
+        releasePlayback()
+        super.onStop()
+    }
+
+    private fun releasePlayback() {
+        playerReady = false
+        recovery.stop()
+        resolveJob?.cancel()
         playbackGeneration++
         activePlaybackChannelId = null
         tvPlayer.release()
-        super.onStop()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -281,6 +286,7 @@ class MainActivity : ComponentActivity() {
             explicitRequestSeen = true
             launchQueue.replace(LaunchRequest.parse(intent.dataString))
             integrationDialog?.dismiss()
+            exitDialog?.dismiss()
             recovery.stop()
             resolveJob?.cancel()
             playbackGeneration++
@@ -342,6 +348,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         integrationDialog?.dismiss()
         reminderDialog?.dismiss()
+        exitDialog?.dismiss()
         super.onDestroy()
     }
 
@@ -478,6 +485,32 @@ class MainActivity : ComponentActivity() {
         refresh.setPadding(dp(13), dp(8), dp(13), dp(8))
         tabs.addView(refresh, LinearLayout.LayoutParams(dp(42), -1))
         tabs.addView(TvStyle.button(this, "Opzioni") { showOptions() }.apply { setPadding(dp(13), dp(8), dp(13), dp(8)) }, LinearLayout.LayoutParams(-2, -1))
+        tabs.addView(TvStyle.button(this, getString(R.string.exit_app)) { showExitConfirmation() }.apply {
+            setPadding(dp(13), dp(8), dp(13), dp(8))
+        }, LinearLayout.LayoutParams(-2, -1))
+    }
+
+    private fun showExitConfirmation() {
+        if (isFinishing || isDestroyed || exitDialog?.isShowing == true) return
+        // User navigation takes precedence over playback still queued during startup.
+        initialPlaybackCancelled = true
+        launchQueue.consume(true)
+        // A pending numeric selection must not open a channel beneath the confirmation.
+        handler.removeCallbacks(numberAction); digits = ""
+        exitDialog = android.app.AlertDialog.Builder(this)
+            .setTitle(R.string.exit_app_title)
+            .setMessage(R.string.exit_app_message)
+            .setPositiveButton(R.string.exit_app) { _, _ ->
+                // A new instance can start before onStop; release the media session first.
+                releasePlayback()
+                finishAndRemoveTask()
+            }
+            .setNegativeButton(R.string.exit_app_cancel, null)
+            .create().also { dialog ->
+                dialog.setOnDismissListener { exitDialog = null }
+                dialog.show()
+                dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).requestFocus()
+            }
     }
 
     private fun showOptions() {
@@ -717,7 +750,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkProgrammeReminders() {
-        if (!catalogLoaded || reminderDialog?.isShowing == true || !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        if (!catalogLoaded || reminderDialog?.isShowing == true || exitDialog?.isShowing == true ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
         val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
         val channel = channels.firstOrNull { it.id == due.channelId } ?: return
         val start = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(due.start))
