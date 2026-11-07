@@ -1,26 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Broadcaster flows adapted from WorldLiveTV 1.2.14 + hotfix 121417 (WLTV Group).
 // Modified by the Lume TV project, 2026-10-25: Kotlin/Android port and Media3 integration.
+// Modified by the Lume TV project, 2026-11-07: delegate La7 to its La7 Play integration.
 package it.lumetv.app.data
 
 import it.lumetv.core.Channel
 import it.lumetv.core.DrmSpec
 import it.lumetv.core.ResolvedStream
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.StringReader
-import java.util.UUID
 import javax.xml.parsers.DocumentBuilderFactory
 import org.xml.sax.InputSource
 
 class StreamResolver(private val http: Transport) {
     private val rai = RaiResolver(http)
     private val mediaset = MediasetResolver(http)
+    private val la7 = La7Resolver(http)
 
     suspend fun resolve(channel: Channel): ResolvedStream = withContext(Dispatchers.Default) { when (channel.broadcaster) {
         "rai", "rainewsrg" -> rai.resolve(channel)
@@ -31,27 +30,11 @@ class StreamResolver(private val http: Transport) {
             val data = JSONObject(http.get("https://video.sky.it/api/v1/getLivestream?id=$id&isMobile=false"))
             ResolvedStream(requireUrl(data.optString("streaming_url")), "application/x-mpegURL")
         }
-        "la7" -> resolveLa7(channel)
+        "la7" -> la7.resolve(channel)
         "discovery" -> resolveDiscovery(channel)
         "direct" -> ResolvedStream(channel.source, headers = channel.headers)
         else -> throw SourceException("Questa emittente non è ancora supportata.")
     } }
-
-    private suspend fun resolveLa7(channel: Channel): ResolvedStream {
-        val host = "https://www.la7.it"
-        val headers = HttpClient.browserHeaders(host)
-        val path = if (channel.key == "La7c") "/live-la7cinema" else "/dirette-tv"
-        val page = http.get(host + path, headers)
-        val url = Regex("[\"]?dash[\"]?\\s*:\\s*[\"']([^\"']+)").find(page)?.groupValues?.get(1)
-            ?: throw SourceException("La diretta La7 non è disponibile.")
-        val tokenPath = Regex("preTokenUrl\\s*=\\s*\"([^\"]+)\"").find(page)?.groupValues?.get(1)
-            ?: throw SourceException("Autorizzazione La7 non disponibile.")
-        val tokenUrl = host.toHttpUrl().resolve(tokenPath)?.toString() ?: throw SourceException("Autorizzazione La7 non valida.")
-        val token = JSONObject(http.get(tokenUrl, headers)).getString("preAuthToken")
-        return ResolvedStream(requireUrl(url), "application/dash+xml", headers,
-            DrmSpec("https://la7.prod.conax.cloud/widevine/license?d=${System.currentTimeMillis() / 1000}",
-                headers + mapOf("Content-Type" to "application/octet-stream", "preAuthorization" to token)))
-    }
 
     private suspend fun resolveDiscovery(channel: Channel): ResolvedStream {
         val configs = mapOf(

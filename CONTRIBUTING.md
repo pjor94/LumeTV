@@ -26,7 +26,13 @@ Per verificare i resolver con le emittenti:
 ./gradlew :app:testDebugUnitTest -PliveSources=true --rerun-tasks
 ```
 
-Il report viene scritto in `app/build/reports/live-resolvers.json`. Il test legge manifest limitati e non richiede licenze DRM. Eseguilo con moderazione: disponibilità e limiti dei servizi possono variare.
+I report vengono scritti in `app/build/reports/live-resolvers.json` (Rai e Mediaset) e `app/build/reports/live-la7-resolvers.json` (La7 e La7 Cinema). I test leggono manifest limitati e non richiedono licenze DRM. Eseguili con moderazione: disponibilità e limiti dei servizi possono variare.
+
+Per controllare soltanto La7 e La7 Cinema:
+
+```sh
+./gradlew :app:testDebugUnitTest -PliveSources=true --tests 'it.lumetv.app.data.La7LiveResolverTest' --rerun-tasks
+```
 
 Per provare il parser su un file XMLTV/XZ già scaricato, aggiungi `-PguideFile=/percorso/guida.xz`. Non aggiungere l’intero feed al repository. La build debug include uno strumento di replay nativo; questo componente è escluso dalla release.
 

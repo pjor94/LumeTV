@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2 · Ripristinata la diretta La7 — 2026-11-07
+
+- Aggiornata la risoluzione di La7 e La7 Cinema al nuovo sito La7 Play: configurazione del player, endpoint del token e licenza Widevine letti dalla nuova pagina della diretta.
+- Aggiunti test di regressione per il formato della pagina e un controllo di rete facoltativo dedicato ai due canali.
+
+Verifiche: 124 test JVM e 28 test Python superati; tre controlli facoltativi esclusi dalla suite ordinaria. Controllo di rete La7 eseguito separatamente con token disponibili e manifest DASH HTTP 206 per entrambi i canali. Lint, build Debug/Release e verifica dei sorgenti delle dipendenze completati.
+
+Collaudo su emulatore Android TV 14 con dirette reali: video, audio e autorizzazione Widevine per La7 e La7 Cinema, osservati per almeno 45 secondi ciascuno, cambio canale e riapertura dell’app. Brevi buffering recuperati automaticamente, senza errori di riproduzione. Questa versione non è stata provata su una TV fisica.
+
+Per aggiornare dalla versione 0.5.1: **Opzioni → Aggiornamenti → Controlla ora**. Preferiti e impostazioni vengono conservati.
+
 ## 0.5.1 · Uscita dall’app — 2026-11-07
 
 - Pulsante **Esci** nella navigazione in alto, dopo Opzioni, disponibile in Canali, Cosa guardare e Guida TV.

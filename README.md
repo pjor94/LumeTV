@@ -16,11 +16,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.5.1/LumeTV-0.5.1.apk)
+> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.5.2/LumeTV-0.5.2.apk)
 >
 > APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.5.1) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.5.2) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 

@@ -25,7 +25,7 @@ Il pulsante Esci e la conferma con Indietro dalla Home sono disponibili dalla ve
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.5.1.apk**.
+1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.5.2.apk**.
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
