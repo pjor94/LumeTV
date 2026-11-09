@@ -115,6 +115,7 @@ class LiveChannelAdapter(
         description.addView(progress, LinearLayout.LayoutParams(-1, context.dp(2)).apply { topMargin = context.dp(7) })
         row.addView(description, LinearLayout.LayoutParams(0, -2, 1f))
         val holder = Holder(row, number, logo, name, badge, programme, progress)
+        TvStyle.buttonSemantics(row)
         row.setOnFocusChangeListener { view, focused ->
             updateColors(holder)
             TvStyle.focusMotion(view, focused, 1.015f)
@@ -139,8 +140,9 @@ class LiveChannelAdapter(
             else -> ""
         }
         holder.row.background = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused), TvStyle.rounded(TvStyle.white, context.dp(16).toFloat()))
+            addState(intArrayOf(android.R.attr.state_focused, android.R.attr.state_pressed), TvStyle.rounded(TvStyle.pressed, context.dp(16).toFloat()))
             addState(intArrayOf(android.R.attr.state_pressed), TvStyle.rounded(TvStyle.raised, context.dp(16).toFloat()))
+            addState(intArrayOf(android.R.attr.state_focused), TvStyle.rounded(TvStyle.white, context.dp(16).toFloat()))
             addState(intArrayOf(), TvStyle.rounded(if (current) 0x2699CAFF else 0x08FFFFFF,
                 context.dp(16).toFloat(), if (current) 0x6699CAFF else 0x10FFFFFF, context.dp(1)))
         }

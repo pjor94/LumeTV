@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.Gravity
@@ -52,8 +53,8 @@ class GuideView(
     private val title = TvStyle.text(context, "", 27f, bold = true)
     private val timing = TvStyle.text(context, "", 12f, TvStyle.muted)
     private val date = TvStyle.text(context, "", 12f, TvStyle.muted)
-    private val hint = TvStyle.text(context, "", 11f, TvStyle.muted)
-    private val guideStatus = TvStyle.text(context, "", 10f, TvStyle.muted)
+    private val hint = TvStyle.text(context, "", 12f, TvStyle.muted)
+    private val guideStatus = TvStyle.text(context, "", 12f, TvStyle.muted)
     private val all = control("Tutti") { changeFilter(false) }
     private val favorites = control("★ Preferiti") { changeFilter(true) }
     private val nowButton = control("Adesso") { jump(System.currentTimeMillis()) }
@@ -199,16 +200,27 @@ class GuideView(
                 KeyEvent.KEYCODE_DPAD_RIGHT -> { if (navigation.moveProgramme(1)) render(true); return true }
             }
         }
-        val focused = (controls + watch).indexOfFirst { it.hasFocus() }
+        if (watch.hasFocus()) {
+            when (key) {
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    (controls.lastOrNull { it.isShown && it.isEnabled } ?: all).requestFocus()
+                    return true
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> { exitUp(); return true }
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> return true
+            }
+        }
+        val focused = controls.indexOfFirst { it.hasFocus() }
         if (focused >= 0) {
             when (key) {
                 KeyEvent.KEYCODE_DPAD_DOWN -> { focusSelection(); return true }
                 KeyEvent.KEYCODE_DPAD_UP -> {
                     gridActive = false; focusGeneration++
-                    exitUp(); return true
+                    if (focused >= controls.indexOf(nowButton) && watch.isShown) watch.requestFocus() else exitUp()
+                    return true
                 }
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    val available = (controls + watch).filter { it.isShown && it.isEnabled }
+                    val available = controls.filter { it.isShown && it.isEnabled }
                     val position = available.indexOfFirst { it.hasFocus() }
                     val target = (position + if (key == KeyEvent.KEYCODE_DPAD_RIGHT) 1 else -1).coerceIn(0, available.lastIndex)
                     available.getOrNull(target)?.requestFocus()
@@ -223,6 +235,7 @@ class GuideView(
         TvStyle.text(context, label, 12f, TvStyle.muted, true).apply {
             id = View.generateViewId()
             isFocusable = true; isClickable = true
+            TvStyle.buttonSemantics(this)
             gravity = Gravity.CENTER; contentDescription = description
             setPadding(context.dp(13), context.dp(5), context.dp(13), context.dp(5))
             setOnClickListener { action() }
@@ -268,8 +281,7 @@ class GuideView(
     private fun styleControl(view: TextView, selected: Boolean) {
         val focused = view.hasFocus()
         view.setTextColor(if (focused) TvStyle.background else if (selected) TvStyle.white else TvStyle.muted)
-        view.background = TvStyle.rounded(if (focused) TvStyle.white else if (selected) TvStyle.raised else Color.TRANSPARENT,
-            context.dp(20).toFloat())
+        view.background = TvStyle.focusBackground(context, selected)
     }
 
     private fun updateDetails() {
@@ -397,19 +409,23 @@ private class GuideTimelineView(
     private var nowLabel = ""
     private val cells = mutableListOf<Cell>()
     private val logoViews = mutableListOf<ChannelLogoView>()
+    private val brands = mutableListOf<Pair<LinearLayout, Channel>>()
+    private data class LayoutKey(val width: Int, val height: Int, val window: Long, val rowCount: Int, val zone: String,
+                                 val rows: List<Pair<Channel, List<GuideSlot>>>, val currentId: String?)
+    private var boundLayout: LayoutKey? = null
     private var currentId: String? = null
     private var binding = false
     var selectedView: View? = null
         private set
     private data class Cell(val view: LinearLayout, val title: TextView, val timing: TextView,
-                            val channel: Channel, val slot: GuideSlot)
+                            val channel: Channel, val slot: GuideSlot, var visualState: Int = -1)
 
     init { setWillNotDraw(false); clipChildren = true; isFocusable = false }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         val fontExtra = ((resources.configuration.fontScale - 1f).coerceAtLeast(0f) * context.dp(34)).toInt()
-        val count = ((h - axisHeight + gap) / (context.dp(44) + fontExtra + gap)).coerceIn(1, 5)
+        val count = ((h - axisHeight + gap) / (context.dp(48) + fontExtra + gap)).coerceIn(1, 5)
         onRowsChanged(count)
     }
 
@@ -423,27 +439,38 @@ private class GuideTimelineView(
         axisTicks = generateSequence(GuideSchedule.halfHour(navigation.windowStart)) { it + GuideSchedule.HALF_HOUR }
             .takeWhile { it <= navigation.windowStart + GuideSchedule.WINDOW }
             .map { it to timeFormat.format(Date(it)) }.toList()
-        logoViews.forEach { it.unbind() }
-        removeAllViews(); cells.clear(); logoViews.clear(); selectedView = null
         val rows = navigation.channels.drop(navigation.rowStart).take(navigation.rowCount)
+            .map { it to navigation.slots(it) }
+        val layout = LayoutKey(width, height, navigation.windowStart, navigation.rowCount, timeFormat.timeZone.id, rows, currentId)
+        if (layout == boundLayout) {
+            // D-pad selection and clock ticks keep the same views, focus IDs and logo requests.
+            selectedView = cells.firstOrNull { it.channel.id == navigation.channelId && navigation.selected(it.slot) }?.view
+            binding = false
+            updateFocus()
+            invalidate()
+            return
+        }
+        boundLayout = layout
+        logoViews.forEach { it.unbind() }
+        removeAllViews(); cells.clear(); logoViews.clear(); brands.clear(); selectedView = null
         if (rows.isEmpty()) {
             val empty = TvStyle.text(context, "Nessun canale in questa vista", 17f, TvStyle.muted).apply { gravity = Gravity.CENTER }
             addView(empty, LayoutParams(-1, -1))
         }
         val rowHeight = ((height - axisHeight - gap * (navigation.rowCount - 1)) / navigation.rowCount).coerceAtLeast(1)
         val laneWidth = width - laneLeft
-        rows.forEachIndexed { index, channel ->
+        rows.forEachIndexed { index, (channel, slots) ->
             val top = axisHeight + index * (rowHeight + gap)
             val brand = LinearLayout(context).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(context.dp(5), 0, context.dp(5), 0)
-                background = TvStyle.rounded(if (channel.id == navigation.channelId) 0xFF1C2634.toInt() else Color.TRANSPARENT, context.dp(9).toFloat())
                 contentDescription = channel.name + ", guarda la diretta"
                 setOnClickListener { onActivate(channel, GuideSlot(navigation.anchor, navigation.anchor + 1, null)) }
                 setOnLongClickListener { onFavorite(channel); true }
             }
-            brand.addView(TvStyle.text(context, if (channel.number == 9999) "" else "%02d".format(channel.number), 10f, TvStyle.muted).apply { fontFeatureSettings = "tnum" },
-                LinearLayout.LayoutParams(context.dp(20), -2))
+            brands += brand to channel
+            brand.addView(TvStyle.text(context, if (channel.number == 9999) "" else "%02d".format(channel.number), 12f, TvStyle.muted).apply { fontFeatureSettings = "tnum" },
+                LinearLayout.LayoutParams((context.dp(24) * resources.configuration.fontScale).toInt(), -2))
             val logo = ChannelLogoView(context, logos, compact = true).apply { bind(channel) }
             logoViews += logo
             brand.addView(logo, LinearLayout.LayoutParams(context.dp(32), context.dp(32)).apply { rightMargin = context.dp(7) })
@@ -451,13 +478,14 @@ private class GuideTimelineView(
                 maxLines = 1; ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, -2, 1f))
             addView(brand, LayoutParams(laneLeft - context.dp(8), rowHeight).apply { topMargin = top })
-            navigation.slots(channel).forEach { slot ->
+            slots.forEach { slot ->
                 val left = laneLeft + ((slot.start - navigation.windowStart).toDouble() / GuideSchedule.WINDOW * laneWidth).toInt()
                 val right = laneLeft + ((slot.end - navigation.windowStart).toDouble() / GuideSchedule.WINDOW * laneWidth).toInt()
                 val cellWidth = (right - left - context.dp(3)).coerceAtLeast(1)
                 val view = LinearLayout(context).apply {
                     id = View.generateViewId(); orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_VERTICAL
                     isFocusableInTouchMode = true; isClickable = true; isLongClickable = true
+                    TvStyle.buttonSemantics(this)
                     setPadding(context.dp(9), context.dp(5), context.dp(9), context.dp(5))
                 }
                 val show = slot.programme
@@ -465,7 +493,7 @@ private class GuideTimelineView(
                     if (show != null) TvStyle.white else TvStyle.muted, show != null).apply {
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 }
-                val timing = TvStyle.text(context, show?.let { time(it.start) + "–" + time(it.end) } ?: "OK per la diretta", 10f, TvStyle.muted).apply {
+                val timing = TvStyle.text(context, show?.let { time(it.start) + "–" + time(it.end) } ?: "OK per la diretta", 12f, TvStyle.muted).apply {
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END; fontFeatureSettings = "tnum"
                 }
                 if (cellWidth < context.dp(42) || show == null && cellWidth < context.dp(100)) {
@@ -499,18 +527,35 @@ private class GuideTimelineView(
 
     fun updateFocus() {
         val now = System.currentTimeMillis()
+        brands.forEach { (view, channel) ->
+            val selected = channel.id == navigation.channelId
+            if (view.background == null || view.isSelected != selected) {
+                view.isSelected = selected
+                view.background = TvStyle.rounded(if (selected) 0xFF1C2634.toInt() else Color.TRANSPARENT, context.dp(9).toFloat())
+            }
+        }
         cells.forEach { cell ->
             val focused = cell.view.hasFocus()
             val selected = cell.channel.id == navigation.channelId && navigation.selected(cell.slot)
             val live = cell.slot.programme?.let { it.start <= now && it.end > now } == true
-            cell.view.background = TvStyle.rounded(when {
-                focused -> TvStyle.white
+            val visualState = (if (focused) 1 else 0) or (if (selected) 2 else 0) or (if (live) 4 else 0)
+            if (visualState == cell.visualState) return@forEach
+            cell.visualState = visualState
+            cell.view.isSelected = selected
+            val normal = when {
                 selected -> 0xFF354961.toInt()
                 live -> 0xFF243244.toInt()
                 cell.slot.programme == null -> 0xFF141A23.toInt()
                 else -> 0xFF1D232D.toInt()
-            }, context.dp(9).toFloat(), if (focused || selected) TvStyle.accent else Color.TRANSPARENT,
-                context.dp(if (focused) 2 else 1))
+            }
+            val radius = context.dp(9).toFloat()
+            cell.view.background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_focused, android.R.attr.state_pressed),
+                    TvStyle.rounded(TvStyle.pressed, radius, TvStyle.accent, context.dp(2)))
+                addState(intArrayOf(android.R.attr.state_pressed), TvStyle.rounded(TvStyle.raised, radius))
+                addState(intArrayOf(android.R.attr.state_focused), TvStyle.rounded(TvStyle.white, radius, TvStyle.accent, context.dp(2)))
+                addState(intArrayOf(), TvStyle.rounded(normal, radius, if (selected) TvStyle.accent else Color.TRANSPARENT, context.dp(1)))
+            }
             cell.title.setTextColor(if (focused) TvStyle.background else if (cell.slot.programme == null) TvStyle.muted else TvStyle.white)
             cell.timing.setTextColor(if (focused) 0xFF495363.toInt() else TvStyle.muted)
         }
@@ -526,7 +571,7 @@ private class GuideTimelineView(
         val laneWidth = width - laneLeft
         if (laneWidth <= 0 || navigation.windowStart == 0L) return
         paint.typeface = axisTypeface
-        paint.textSize = context.dp(11).toFloat() * resources.configuration.fontScale
+        paint.textSize = context.dp(12).toFloat() * resources.configuration.fontScale
         paint.color = TvStyle.muted
         canvas.drawText("CANALI", context.dp(5).toFloat(), context.dp(16).toFloat(), paint)
         val nowX = laneLeft + ((now - navigation.windowStart).toDouble() / GuideSchedule.WINDOW * laneWidth).toFloat()

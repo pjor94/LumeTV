@@ -10,7 +10,9 @@ import android.os.Build
 import android.provider.Settings
 import android.view.Gravity
 import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.animation.DecelerateInterpolator
+import android.widget.Button
 import android.widget.TextView
 
 object TvStyle {
@@ -21,14 +23,26 @@ object TvStyle {
     val accent = Color.rgb(153, 202, 255)
     val muted = Color.rgb(162, 167, 179)
     val subtle = Color.rgb(113, 120, 134)
+    val pressed = Color.rgb(207, 212, 221)
     fun Context.dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     fun rounded(color: Int, radius: Float, stroke: Int = Color.TRANSPARENT, width: Int = 0) = GradientDrawable().apply {
         setColor(color); cornerRadius = radius; if (width > 0) setStroke(width, stroke)
     }
-    fun focusBackground(context: Context, selected: Boolean = false) = StateListDrawable().apply {
-        addState(intArrayOf(android.R.attr.state_focused), rounded(white, context.dp(24).toFloat()))
-        addState(intArrayOf(android.R.attr.state_pressed), rounded(0xFFCFD4DD.toInt(), context.dp(24).toFloat()))
-        addState(intArrayOf(), rounded(if (selected) raised else Color.TRANSPARENT, context.dp(24).toFloat()))
+    fun focusBackground(context: Context, selected: Boolean = false, primary: Boolean = false) = StateListDrawable().apply {
+        val radius = context.dp(24).toFloat()
+        addState(intArrayOf(android.R.attr.state_focused, android.R.attr.state_pressed), rounded(pressed, radius))
+        addState(intArrayOf(android.R.attr.state_pressed), rounded(if (primary) pressed else raised, radius))
+        addState(intArrayOf(android.R.attr.state_focused), rounded(white, radius,
+            if (primary) accent else Color.TRANSPARENT, if (primary) context.dp(2) else 0))
+        addState(intArrayOf(), rounded(if (primary) white else if (selected) raised else Color.TRANSPARENT, radius))
+    }
+    fun buttonSemantics(view: View) {
+        view.accessibilityDelegate = object : View.AccessibilityDelegate() {
+            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = Button::class.java.name
+            }
+        }
     }
     fun text(context: Context, text: String, size: Float, color: Int = white, bold: Boolean = false) = TextView(context).apply {
         this.text = text; textSize = size; setTextColor(color)
@@ -49,6 +63,8 @@ object TvStyle {
     fun button(context: Context, label: String, selected: Boolean = false, action: () -> Unit) = text(context, label, 14f, if (selected) white else muted, selected).apply {
         gravity = Gravity.CENTER
         isFocusable = true; isClickable = true
+        isSelected = selected
+        buttonSemantics(this)
         minHeight = context.dp(42)
         setPadding(context.dp(18), context.dp(9), context.dp(18), context.dp(9))
         background = focusBackground(context, selected)

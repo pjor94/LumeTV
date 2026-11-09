@@ -40,6 +40,8 @@ Per il collaudo della Guida su un emulatore Android TV usa `python3 tools/smoke_
 
 Per Cosa guardare usa `python3 tools/smoke_discovery.py --adb /percorso/adb --serial emulator-5560 --video /percorso/video-sintetico.mp4`. Verifica la navigazione Focus, ricerca, preferiti, promemoria, riproduzione sintetica e ripristino con testo ingrandito. Anche questo test è riservato a un emulatore temporaneo e ripristina i dati al termine; i risultati sono in `analysis/discovery-smoke/`.
 
+Per verificare aggiornamento dei programmi nel catalogo, stati accessibili, pressione di OK, animazioni disabilitate e testo ingrandito usa `python3 tools/smoke_ui.py --adb /percorso/adb --serial emulator-5560`. Richiede ImageMagick per confrontare il colore del pulsante durante la pressione. Non avvia dirette e ripristina dati e impostazioni al termine; report e schermate sono in `analysis/ui-smoke/`. Il test della Guida controlla anche la navigazione tra le righe dei comandi e il riutilizzo delle celle durante gli spostamenti.
+
 Per l’uscita dall’app usa `python3 tools/smoke_exit.py --adb /percorso/adb --serial emulator-5560 --video /percorso/video-sintetico.mp4`. Verifica pulsante Esci, Back dalla Home, conferma, annullamento e ritorno dalla diretta sintetica. Usa soltanto un emulatore temporaneo con APK debug già installata; il test ripristina cache e preferenze al termine e salva i risultati in `analysis/exit-smoke/`.
 
 ## Catalogo e risorse

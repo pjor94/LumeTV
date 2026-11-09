@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
         override fun run() {
             clock.text = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date())
             liveChannels.refreshProgrammes()
+            if (showingCatalog && currentFilter in channelSections) adapter.refreshProgrammes()
             if (showingCatalog && currentFilter == "Guida TV") { guideView.tick(); updateGuideStatus() }
             if (showingCatalog && currentFilter == "Cosa guardare") { discoveryView.tick(); updateGuideStatus() }
             checkProgrammeReminders()
@@ -424,10 +425,10 @@ class MainActivity : ComponentActivity() {
         content.addView(gridArea, LinearLayout.LayoutParams(-1, 0, 1f))
         val footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         catalogFooter = footer
-        footer.addView(TvStyle.text(this, "OK  Guarda     /     OK prolungato  Preferiti     /     CH +/−  Cambia", 11f, TvStyle.muted), LinearLayout.LayoutParams(0, -2, 1f))
+        footer.addView(TvStyle.text(this, "OK  Guarda     /     OK prolungato  Preferiti     /     CH +/−  Cambia", 12f, TvStyle.muted), LinearLayout.LayoutParams(0, -2, 1f))
         updateNotice = TvStyle.button(this, "Aggiorna Lume TV") { updates.show() }.apply { visibility = View.GONE }
         footer.addView(updateNotice, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(16) })
-        syncStatus = TvStyle.text(this, "Catalogo automatico", 10f, TvStyle.muted)
+        syncStatus = TvStyle.text(this, "Catalogo automatico", 12f, TvStyle.muted)
         footer.addView(syncStatus)
         content.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         catalog.addView(content, FrameLayout.LayoutParams(-1, -1))

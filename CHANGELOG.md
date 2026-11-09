@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.3 · Telecomando e leggibilità — 2026-11-09
+
+- Il catalogo aggiorna il programma in onda ogni 30 secondi, conservando focus e posizione senza ricaricare le schede.
+- La pressione di OK ha una conferma visiva distinta dal focus su pulsanti, schede e programmi. Le animazioni del focus restano brevi, interrompibili e rispettano le animazioni disabilitate nelle impostazioni della TV.
+- Nella Guida, le frecce orizzontali restano sulla riga dei comandi; le frecce verticali raggiungono l’azione Guarda. Le celle e i loghi vengono riutilizzati durante gli spostamenti nella stessa fascia.
+- Orari, indicazioni del telecomando e altri testi secondari ingranditi; contrasto maggiore sulle schede focalizzate e spazio per i numeri canale con testo al 130%.
+- Pulsanti con ruolo accessibile, selezione esposta ai servizi di accessibilità e preferiti inclusi nelle descrizioni delle schede. Focus visibile anche sul comando per chiudere la ricerca.
+- Collaudo ampliato per aggiornamento dei programmi, pressione di OK, navigazione della Guida, continuità della diretta nell’elenco canali e ripristino dei promemoria.
+
+Verifiche: 124 test JVM e 28 test Python superati; tre controlli facoltativi esclusi dalla suite ordinaria. Build Debug/Release, Android Lint e verifica dei sorgenti delle dipendenze completati.
+
+Collaudo su emulatore Android TV 14 a 1080p: 85 controlli con palinsesto e video sintetici locali, inclusi testo al 130%, animazioni disabilitate, preferiti, promemoria e uscita dall’app. Questa versione non è stata provata su una TV fisica; la sintesi vocale TalkBack non è stata verificata.
+
+Per aggiornare dalla versione 0.5.2: **Opzioni → Aggiornamenti → Controlla ora**. Preferiti e impostazioni vengono conservati.
+
 ## 0.5.2 · Ripristinata la diretta La7 — 2026-11-07
 
 - Aggiornata la risoluzione di La7 e La7 Cinema al nuovo sito La7 Play: configurazione del player, endpoint del token e licenza Widevine letti dalla nuova pagina della diretta.

@@ -42,6 +42,7 @@ class ChannelAdapter(
             orientation = if (viewType == 1) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true; isClickable = true; isLongClickable = true
+            TvStyle.buttonSemantics(this)
             descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
             setPadding(context.dp(18), context.dp(13), context.dp(18), context.dp(13))
             layoutParams = RecyclerView.LayoutParams(-1, context.dp(if (viewType == 1) 108 else 140)).apply {
@@ -56,7 +57,7 @@ class ChannelAdapter(
             card.addView(this, LinearLayout.LayoutParams(0, -1, 1f))
         } else card
         val top = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val number = TvStyle.text(context, "", 11f, TvStyle.muted).apply {
+        val number = TvStyle.text(context, "", 12f, TvStyle.muted).apply {
             fontFeatureSettings = "tnum"; letterSpacing = 0.06f
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }
@@ -73,11 +74,13 @@ class ChannelAdapter(
             gravity = Gravity.CENTER_VERTICAL
         }
         content.addView(name, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(if (viewType == 1) 6 else 0) })
-        val show = TvStyle.text(context, "", 11f, TvStyle.muted).apply {
+        val show = TvStyle.text(context, "", 12f, TvStyle.muted).apply {
             maxLines = if (viewType == 1) 2 else 1; ellipsize = TextUtils.TruncateAt.END
         }
         content.addView(show, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(5) })
         card.setOnFocusChangeListener { view, focused ->
+            number.setTextColor(if (focused) TvStyle.white else TvStyle.muted)
+            show.setTextColor(if (focused) TvStyle.white else TvStyle.muted)
             view.elevation = if (focused) context.dp(8).toFloat() else 0f
             TvStyle.focusMotion(view, focused, if (viewType == 1) 1.012f else 1.04f)
         }
@@ -97,27 +100,24 @@ class ChannelAdapter(
             else -> ""
         }
         holder.name.text = channel.name
+        val secondaryColor = if (holder.card.hasFocus()) TvStyle.white else TvStyle.muted
+        holder.number.setTextColor(secondaryColor)
+        holder.show.setTextColor(secondaryColor)
         holder.name.textSize = when { guideMode -> 23f; channel.name.length > 18 -> 17f; channel.name.length > 12 -> 19f; else -> 21f }
         holder.logo.bind(channel)
-        val now = System.currentTimeMillis()
-        val shows = programmes[channel.epgId].orEmpty().filter { it.end > now }
-        val current = shows.firstOrNull { it.start <= now }
-        val next = shows.firstOrNull { it.start > now }
-        holder.show.text = if (guideMode) {
-            listOfNotNull(current?.let { "ORA  ${it.title}" }, next?.let { "${time(it.start)}  ${it.title}" })
-                .joinToString("\n").ifBlank { guidePlaceholder }
-        } else current?.title ?: "In diretta"
+        bindProgramme(holder, channel)
         val tint = tint(channel)
-        fun panel(focused: Boolean) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            intArrayOf(if (focused) brighten(tint) else tint, if (focused) TvStyle.raised else TvStyle.surface)).apply {
+        fun panel(focused: Boolean, pressed: Boolean = false) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            intArrayOf(if (pressed) TvStyle.raised else if (focused) brighten(tint) else tint,
+                if (pressed || focused) TvStyle.raised else TvStyle.surface)).apply {
             cornerRadius = context.dp(18).toFloat()
-            setStroke(context.dp(1), if (focused) TvStyle.white else 0x12FFFFFF)
+            setStroke(context.dp(1), if (pressed) TvStyle.accent else if (focused) TvStyle.white else 0x12FFFFFF)
         }
         holder.card.background = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed), panel(false, pressed = true))
             addState(intArrayOf(android.R.attr.state_focused), panel(true))
             addState(intArrayOf(), panel(false))
         }
-        holder.card.contentDescription = "${channel.number}, ${channel.name}, ${holder.show.text}" + if (channel.id == currentId) ", canale corrente" else ""
         holder.card.setOnClickListener { choose(channel) }
         holder.card.setOnLongClickListener { toggleFavorite(channel); true }
     }
@@ -133,9 +133,32 @@ class ChannelAdapter(
         if (itemCount > 0) notifyItemRangeChanged(0, itemCount, "logo")
     }
 
+    fun refreshProgrammes() {
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount, "programme")
+    }
+
+    private fun bindProgramme(holder: Holder, channel: Channel) {
+        val now = System.currentTimeMillis()
+        val shows = programmes[channel.epgId].orEmpty().filter { it.end > now }
+        val current = shows.firstOrNull { it.start <= now }
+        val next = shows.firstOrNull { it.start > now }
+        val label = if (guideMode) {
+            listOfNotNull(current?.let { "ORA  ${it.title}" }, next?.let { "${time(it.start)}  ${it.title}" })
+                .joinToString("\n").ifBlank { guidePlaceholder }
+        } else current?.title ?: "In diretta"
+        if (holder.show.text.toString() != label) holder.show.text = label
+        holder.card.contentDescription = listOfNotNull(
+            channel.number.takeIf { it != 9999 }?.toString(), channel.name, holder.show.text.toString(),
+            "canale corrente".takeIf { channel.id == currentId }, "preferito".takeIf { favorite(channel) },
+        ).joinToString(", ")
+    }
+
     override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
-        if (payloads.isNotEmpty() && payloads.all { it == "logo" }) holder.logo.bind(items[position])
-        else super.onBindViewHolder(holder, position, payloads)
+        if (payloads.isEmpty()) super.onBindViewHolder(holder, position, payloads)
+        else {
+            if ("logo" in payloads) holder.logo.bind(items[position])
+            if ("programme" in payloads) bindProgramme(holder, items[position])
+        }
     }
 
     private fun tint(channel: Channel): Int = when {

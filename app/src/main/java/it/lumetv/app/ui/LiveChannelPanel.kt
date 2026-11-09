@@ -103,7 +103,7 @@ class LiveChannelPanel(
         }
         body.addView(empty, LayoutParams(-1, -1))
         panel.addView(body, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = context.dp(12) })
-        panel.addView(TvStyle.text(context, "←  Filtri    ↑↓  Scorri    OK  Guarda    →  Chiudi", 11f, TvStyle.muted).apply {
+        panel.addView(TvStyle.text(context, "←  Filtri    ↑↓  Scorri    OK  Guarda    →  Chiudi", 12f, TvStyle.muted).apply {
             gravity = Gravity.CENTER
             setPadding(context.dp(8), context.dp(9), context.dp(8), context.dp(9))
             background = TvStyle.rounded(0xB30A0B0E.toInt(), context.dp(16).toFloat())
@@ -132,7 +132,6 @@ class LiveChannelPanel(
             tab.background = TvStyle.focusBackground(context, selected)
             tab.setTextColor(if (tab.hasFocus()) TvStyle.background else if (selected) TvStyle.white else TvStyle.muted)
             tab.isSelected = selected
-            tab.contentDescription = "${tab.text}${if (selected) ", selezionato" else ""}"
         }
     }
 

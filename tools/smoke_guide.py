@@ -122,6 +122,27 @@ def main():
         adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "lumetv://guide", "-n", PACKAGE + "/.MainActivity")
         initial = nodes()
         passed("Apertura sul programma attuale", "Notizie in diretta" in focused(initial).get("content-desc", ""))
+        key(19)
+        passed("Filtro attivo espone lo stato selezionato", focused().get("selected") == "true")
+        key(22, 22, 22, 22)
+        passed("Freccia destra percorre soltanto la riga dei controlli", focused().get("text") == "›")
+        key(22)
+        passed("Il bordo destro della toolbar non salta alla riga superiore", focused().get("text") == "›")
+        key(19)
+        passed("Freccia su raggiunge Guarda nella riga superiore", focused().get("text", "").startswith("▷"))
+        key(20)
+        passed("Freccia giu da Guarda torna alla toolbar", focused().get("text") == "›")
+        key(20)
+        # Native view IDs expose whether a D-pad step recreated the visible grid.
+        def visible_view_ids():
+            hierarchy = adb("shell", "dumpsys", "activity", "top").decode(errors="replace")
+            return set(re.findall(r"android\.widget\.LinearLayout\{[^\n]*?\s#([0-9a-f]+)(?:\s|\})", hierarchy))
+
+        before_ids = visible_view_ids()
+        key(22)
+        after_ids = visible_view_ids()
+        passed("Spostamento nella fascia conserva le celle native", bool(before_ids) and before_ids == after_ids)
+        key(21)
         click("★ Preferiti")
         passed("Preferiti vuoti utilizzabili", "La guida dei tuoi preferiti." in texts(nodes()))
         click("Tutti")
@@ -167,8 +188,11 @@ def main():
         key(8)  # Numeric 1 selects the row, without playback.
         time.sleep(1.2)
         passed("Numero canale seleziona la riga senza aprire la diretta", "Rai 1," in focused().get("content-desc", ""))
+        page_rows = sum(node.get("content-desc", "").endswith(", guarda la diretta") for node in nodes())
         key(166)
-        passed("CH+ sfoglia i canali per pagina", "Canale 6," in focused().get("content-desc", ""))
+        next_number = page_rows + 1
+        next_name = ("Rai " if next_number <= 3 else "Canale ") + str(next_number)
+        passed("CH+ sfoglia i canali per pagina", page_rows > 0 and focused().get("content-desc", "").startswith(next_name + ","))
         click("Adesso")
         key(8)
         time.sleep(1.2)
@@ -179,10 +203,14 @@ def main():
         key(23)
         before_scale = focused().get("content-desc")
         adb("shell", "settings", "put", "system", "font_scale", "1.3")
-        time.sleep(1)
+        time.sleep(2)
         large = nodes()
         passed("Caratteri ingranditi e ricreazione conservano la selezione", focused(large).get("content-desc") == before_scale)
         (args.output / "guide-large-text.png").write_bytes(adb("exec-out", "screencap", "-p"))
+        key(8, 7, 13)  # Channel 106 also exercises three-digit labels at 130% text.
+        time.sleep(1.2)
+        passed("Numero a tre cifre navigabile con testo ingrandito", "Canale di validazione 106" in focused().get("content-desc", ""))
+        (args.output / "guide-large-channel-number.png").write_bytes(adb("exec-out", "screencap", "-p"))
         report = {"device": args.serial, "checks": checks, "passed": len(checks), "playback": "local synthetic MP4",
                   "scope": "Android TV emulator; physical TV not tested"}
         (args.output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")

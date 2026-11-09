@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.graphics.drawable.StateListDrawable
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputType
@@ -51,8 +52,8 @@ class DiscoveryView(
     private val prefs = context.getSharedPreferences("discovery", Context.MODE_PRIVATE)
     private val date = TvStyle.text(context, "", 12f, TvStyle.muted)
     private val subtitle = TvStyle.text(context, "", 12f, TvStyle.muted)
-    private val results = TvStyle.text(context, "", 11f, TvStyle.muted)
-    private val hint = TvStyle.text(context, "", 10f, TvStyle.muted)
+    private val results = TvStyle.text(context, "", 12f, TvStyle.muted)
+    private val hint = TvStyle.text(context, "", 12f, TvStyle.muted)
     private val nowControl = control(context.getString(R.string.discovery_now)) { changePeriod(DiscoveryPeriod.NOW) }
     private val soonControl = control(context.getString(R.string.discovery_soon)) { changePeriod(DiscoveryPeriod.SOON) }
     private val tonightControl = control(context.getString(R.string.discovery_tonight)) { changePeriod(DiscoveryPeriod.TONIGHT) }
@@ -198,9 +199,14 @@ class DiscoveryView(
 
     private fun control(label: String, action: () -> Unit) = TvStyle.text(context, label, 12f, TvStyle.muted, true).apply {
         id = View.generateViewId(); isFocusable = true; isClickable = true; gravity = Gravity.CENTER
+        TvStyle.buttonSemantics(this)
+        background = TvStyle.focusBackground(context)
         setPadding(context.dp(14), context.dp(5), context.dp(14), context.dp(5))
         setOnClickListener { action() }
-        setOnFocusChangeListener { _, _ -> styleControls() }
+        setOnFocusChangeListener { _, focused ->
+            setTextColor(if (focused) TvStyle.background else TvStyle.muted)
+            styleControls()
+        }
     }
 
     fun submit(channels: List<Channel>, programmes: Map<String, List<Programme>>) {
@@ -318,11 +324,11 @@ class DiscoveryView(
             tonightControl to (controller.period == DiscoveryPeriod.TONIGHT), favoritesControl to controller.favoritesOnly,
             searchControl to searchVisible).forEach { (view, selected) ->
             val focused = view.hasFocus()
-            view.background = TvStyle.rounded(if (focused) TvStyle.white else if (selected) TvStyle.raised else Color.TRANSPARENT, context.dp(22).toFloat())
+            view.background = TvStyle.focusBackground(context, selected)
             view.setTextColor(if (focused) TvStyle.background else if (selected) TvStyle.white else TvStyle.muted)
             view.isSelected = selected
         }
-        action.background = TvStyle.rounded(TvStyle.white, context.dp(22).toFloat(), if (action.hasFocus()) TvStyle.accent else Color.TRANSPARENT, context.dp(2))
+        action.background = TvStyle.focusBackground(context, primary = true)
         action.setTextColor(TvStyle.background)
         favoriteAction.background = TvStyle.focusBackground(context)
         val isFavorite = controller.selected?.channel?.let(favorite) == true
@@ -469,11 +475,12 @@ class DiscoveryView(
             row.addView(logo, LayoutParams(context.dp(36), context.dp(30)).apply { rightMargin = context.dp(10) })
             val copy = LinearLayout(context).apply { orientation = VERTICAL }
             val title = TvStyle.text(context, "", 14f, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
-            val meta = TvStyle.text(context, "", 10f, TvStyle.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; fontFeatureSettings = "tnum" }
+            TvStyle.buttonSemantics(row)
+            val meta = TvStyle.text(context, "", 12f, TvStyle.muted).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; fontFeatureSettings = "tnum" }
             copy.addView(title); copy.addView(meta, LayoutParams(-1, -2).apply { topMargin = context.dp(4) })
             row.addView(copy, LayoutParams(0, -2, 1f))
-            val status = TvStyle.text(context, "", 10f, TvStyle.accent).apply { gravity = Gravity.END; maxLines = 2 }
-            row.addView(status, LayoutParams(context.dp(63), -2).apply { leftMargin = context.dp(8) })
+            val status = TvStyle.text(context, "", 12f, TvStyle.accent).apply { gravity = Gravity.END; maxLines = 2 }
+            row.addView(status, LayoutParams(context.dp(76), -2).apply { leftMargin = context.dp(8) })
             val holder = Holder(row, logo, title, meta, status)
             row.setOnFocusChangeListener { _, focused ->
                 if (focused) {
@@ -507,8 +514,13 @@ class DiscoveryView(
         private fun styleRow(holder: Holder) {
             val position = holder.bindingAdapterPosition
             val selected = items.getOrNull(position)?.key == controller.selectedKey
-            holder.row.background = TvStyle.rounded(if (selected) 0xFF26364A.toInt() else 0xFF171C24.toInt(), context.dp(12).toFloat(),
-                if (holder.row.hasFocus() || selected) TvStyle.accent else Color.TRANSPARENT, context.dp(1))
+            holder.row.isSelected = selected
+            holder.row.background = StateListDrawable().apply {
+                val radius = context.dp(12).toFloat()
+                addState(intArrayOf(android.R.attr.state_pressed), TvStyle.rounded(TvStyle.raised, radius, TvStyle.accent, context.dp(1)))
+                addState(intArrayOf(), TvStyle.rounded(if (selected) 0xFF26364A.toInt() else 0xFF171C24.toInt(), radius,
+                    if (holder.row.hasFocus() || selected) TvStyle.accent else Color.TRANSPARENT, context.dp(1)))
+            }
         }
         private fun restyleVisible() {
             for (i in 0 until list.childCount) (list.getChildViewHolder(list.getChildAt(i)) as? Holder)?.let(::styleRow)

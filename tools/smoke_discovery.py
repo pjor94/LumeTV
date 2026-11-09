@@ -179,6 +179,15 @@ def main():
                 break
             time.sleep(.5)
         passed("OK avvia la diretta sintetica nel player esistente", played)
+        key(21)
+        passed("Elenco durante la diretta apre sul canale in visione", "In visione" in focused().get("content-desc", ""))
+        capture("live-channels.png")
+        frames_with_panel = adb("logcat", "-d", "-s", "LumePlayer:I").count(b"first_frame")
+        key(20)
+        passed("Sfogliare l’elenco lascia la diretta in riproduzione", "La7" in focused().get("content-desc", "") and
+               adb("logcat", "-d", "-s", "LumePlayer:I").count(b"first_frame") == frames_with_panel)
+        key(22)
+        passed("Freccia destra chiude l’elenco senza aprire il catalogo", "Canali" not in texts())
         key(4)
         passed("Ritorno dalla diretta conserva la selezione", focused().get("content-desc", "") == before)
         key(*([20] * 35))
@@ -189,10 +198,14 @@ def main():
         click("Tra poco")
         saved = focused().get("content-desc", "")
         adb("shell", "settings", "put", "system", "font_scale", "1.3")
+        time.sleep(1)
         large = nodes()
         passed("Caratteri ingranditi conservano ricerca fascia e selezione", focused(large).get("content-desc", "") == saved)
         capture("focus-large-text.png")
         stop(); launch()
+        passed("Riapertura conserva il programma selezionato", focused().get("content-desc", "") == saved)
+        key(8)  # The saved reminder belongs to Rai 1, which can now be off-screen.
+        time.sleep(1.2)
         passed("Riapertura conserva la fascia e il promemoria", "✓ Avviso attivo" in texts())
         # Make the stored reminder due without altering the emulator's system clock.
         stop()
