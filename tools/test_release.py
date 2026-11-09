@@ -181,6 +181,21 @@ class ReleaseTest(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, stdout='', stderr='')
         return calls, patch.object(release, 'run', side_effect=command)
 
+    def test_local_preparation_includes_new_sources_without_committing(self):
+        self.prepared()
+        head = self.git('rev-parse', 'HEAD')
+        source = self.root / 'app/src/main/MobileScreen.kt'
+        source.write_text('New mobile source fixture')
+        with self.assertRaisesRegex(ValueError, 'Untracked source'):
+            release.prepare(self.root, self.output)
+        release.prepare(self.root, self.output, include_untracked=True)
+        with zipfile.ZipFile(self.output / 'LumeTV-0.2.1-source.zip') as archive:
+            self.assertEqual(b'New mobile source fixture', archive.read('LumeTV-0.2.1/app/src/main/MobileScreen.kt'))
+        self.assertEqual(head, self.git('rev-parse', 'HEAD'))
+        self.assertEqual('', self.git('diff', '--cached', '--name-only'))
+        with self.assertRaisesRegex(ValueError, 'Commit source'):
+            release.metadata(self.root, 'v0.2.1')
+
     def test_new_release_uploads_all_assets_before_publishing(self):
         self.prepared()
         calls, fake = self.fake_github()

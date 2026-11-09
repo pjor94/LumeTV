@@ -6,31 +6,32 @@
 </p>
 
 <h1 align="center">La TV, fatta semplice.</h1>
-<p align="center">Le dirette italiane su Android TV, con un’interfaccia essenziale e un solo telecomando.</p>
+<p align="center">Le dirette italiane su Android TV e smartphone Android, con un’interfaccia dedicata a ogni dispositivo.</p>
 <p align="center">
   <a href="https://github.com/pjor94/LumeTV/releases">Tutte le release</a> ·
-  <a href="docs/GUIDA-UTENTE.md">Guida utente</a> ·
+  <a href="docs/GUIDA-ANDROID-TV.md">Guida Android TV</a> ·
+  <a href="docs/GUIDA-SMARTPHONE-ANDROID.md">Guida smartphone Android</a> ·
   <a href="#compilazione">Compila dai sorgenti</a> ·
   <a href="CHANGELOG.md">Novità</a> ·
   <a href="CONTRIBUTING.md">Contribuisci</a>
 </p>
 
 > [!TIP]
-> ### [Scarica l’APK di Lume TV](https://github.com/pjor94/LumeTV/releases/download/v0.5.3/LumeTV-0.5.3.apk)
+> ### [Scarica Lume TV 0.6.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.0/LumeTV-0.6.0.apk)
 >
-> APK firmata pronta da installare su **Android TV e Google TV con Android 6.0 o successivo**.
+> Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.5.3) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.6.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
-Lume TV è un’app per Android TV e Google TV dedicata alla televisione italiana in diretta. Il catalogo ha una schermata propria; quando scegli un canale, il video occupa tutto lo schermo. L’interfaccia è nativa, scritta in Kotlin, e la riproduzione usa AndroidX Media3.
+Lume TV è un’app per **smartphone Android, Android TV e Google TV** dedicata alla televisione italiana in diretta. Un’unica APK riconosce il dispositivo e apre l’interfaccia per comandi touch o telecomando. Il catalogo ha una schermata propria; quando scegli un canale, il video occupa tutto lo schermo. L’interfaccia è nativa, scritta in Kotlin, e la riproduzione usa AndroidX Media3.
 
 ## Grazie a WorldLiveTV
 
 **Questo progetto esiste grazie al lavoro di [WorldLiveTV](https://github.com/WorldLiveTV/WorldLiveTV.github.io) e di WLTV Group.** Il catalogo delle sorgenti e le integrazioni delle emittenti derivano dal loro add-on per Kodi, `plugin.video.wltvhelper`.
 
-Lume TV ne adatta la logica di risoluzione in Kotlin e propone un’interfaccia dedicata ad Android TV. Il merito della raccolta e della manutenzione delle sorgenti resta al progetto originale e ai suoi collaboratori.
+Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedicate ad Android TV e smartphone Android. Il merito della raccolta e della manutenzione delle sorgenti resta al progetto originale e ai suoi collaboratori.
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
@@ -38,28 +39,51 @@ Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later*
 
 - Canali Rai, Rai/TGR e Mediaset presenti nella lista WLTV, insieme alle altre sorgenti supportate.
 - Riproduzione a tutto schermo di flussi HLS e DASH, con supporto Widevine quando richiesto dall’emittente.
-- Navigazione con telecomando, selezione numerica e cambio canale con CH+/CH−.
-- Elenco canali semitrasparente sulla sinistra della diretta, con loghi, programma in onda e filtro preferiti, senza interrompere la visione.
-- Preferiti e apertura dell’ultimo canale guardato.
-- Cambio canale con CH+/CH− su tutti i canali o solo sui preferiti, configurabile in **Opzioni**.
-- Guida TV a griglia con programmazione delle prossime ore, dettagli e filtro preferiti, conservata sul dispositivo.
-- Cosa guardare: vista Focus con dettagli affiancati, programmi Ora/Tra poco/Stasera, ricerca, filtro preferiti e avvisi locali per i programmi futuri mentre l’app è aperta.
-- Pannello della diretta con descrizione, orari, avanzamento, minuti rimanenti e programma successivo, quando presenti nella guida.
+- Su TV: navigazione con telecomando, selezione numerica e cambio canale con CH+/CH−.
+- Su smartphone Android: navigazione touch con **Canali / Preferiti / Guida / Scopri**, ricerca e pulsanti per preferiti, pausa/ripresa, cambio canale e schermo intero.
+- Elenco canali durante la diretta, con loghi, programma in onda e filtro preferiti, senza interrompere la visione: laterale sulla TV e touch sul telefono.
+- Preferiti e memorizzazione dell’ultimo canale guardato. Sulla TV, l’ultimo canale viene riaperto all’avvio; sul telefono si apre il catalogo.
+- Cambio canale su tutti i canali o solo sui preferiti, configurabile in **Opzioni**, con CH+/CH− sulla TV e pulsanti precedente/successivo sul telefono.
+- Guida TV a griglia sulla TV e per canale sullo smartphone, con dettagli dei programmi e palinsesto conservato sul dispositivo.
+- Cosa guardare: programmi **Ora / Tra poco / Stasera**, ricerca, filtro preferiti e avvisi locali per i programmi futuri mentre l’app è aperta. Sulla TV, la vista Focus affianca dettagli ed elenco.
+- Informazioni della diretta con titolo, orari, avanzamento e descrizione quando disponibili; sulla TV anche minuti rimanenti e programma successivo.
 - Recupero automatico delle interruzioni temporanee, con attesa del ritorno della rete.
 - Catalogo aggiornato automaticamente, con una copia locale disponibile al primo avvio.
 - Loghi dei canali nel catalogo, nella guida e nel pannello della diretta, scaricati dalle sorgenti originali e conservati sul dispositivo.
-- Controllo automatico delle nuove versioni su GitHub e aggiornamento guidato dal telecomando, da **Opzioni → Aggiornamenti**.
+- Controllo automatico delle nuove versioni su GitHub e aggiornamento dall’app, da **Opzioni → Aggiornamenti**.
 - Collegamento locale facoltativo con AURA: preferiti, guida e apertura dei canali dal launcher, revocabile in **Opzioni → Collegamento con AURA**. [Contratto e configurazione delle firme](docs/integration-aura.md).
 
 Le integrazioni attuali comprendono Rai, Mediaset, Sky, La7, WBD/Discovery e URL diretti. La disponibilità dei singoli canali dipende dalle emittenti, dalla rete utilizzata e dagli eventuali eventi in corso.
 
-## La nuova Guida TV
+<a id="smartphone-android--in-sviluppo"></a>
 
-La griglia mostra circa due ore e mezza alla volta, scorrendo fino alla fine del palinsesto disponibile. ↑/↓ cambia canale mantenendo l’orario, ←/→ passa tra i programmi; **Adesso** e **Stasera** raggiungono le rispettive fasce. OK sul programma in onda apre la diretta; sui programmi futuri mostra orari, descrizione quando disponibile e un’azione esplicita per guardare il canale ora.
+## Android TV e smartphone Android
+
+Il progetto supporta entrambe le interfacce nella stessa APK, da **Android 6.0 in poi**. Le guide sono separate per dispositivo:
+
+| Dispositivo | Interfaccia automatica | Guida |
+| --- | --- | --- |
+| Smartphone Android | Comandi touch e navigazione inferiore | [Guida smartphone Android](docs/GUIDA-SMARTPHONE-ANDROID.md) |
+| Android TV e Google TV | Telecomando e navigazione con le frecce | [Guida Android TV e Google TV](docs/GUIDA-ANDROID-TV.md) |
+| Tablet e altri dispositivi | UI TV; puoi selezionare Smartphone per usare i comandi touch | [Scelta dell’interfaccia](docs/GUIDA-UTENTE.md#quale-interfaccia-si-apre) |
+
+**Opzioni → Interfaccia → Automatica / Smartphone / TV** permette di cambiare modalità. La scelta rimane salvata e conserva catalogo, guida, preferiti e impostazioni sullo stesso dispositivo. Ogni telefono e ogni TV mantiene i propri dati locali.
+
+Durante la diretta sullo smartphone, un tocco sul video mostra i controlli. Il passaggio tra verticale e schermo intero conserva il player e l’eventuale pausa. I collegamenti al canale e all’ultima diretta restano disponibili in entrambe le interfacce.
+
+[Indice delle guide e disponibilità delle versioni](docs/GUIDA-UTENTE.md).
+
+<a id="la-nuova-guida-tv"></a>
+
+## Guida TV e palinsesto
+
+Sulla TV, la griglia mostra circa due ore e mezza alla volta, scorrendo fino alla fine del palinsesto disponibile. ↑/↓ cambia canale mantenendo l’orario, ←/→ passa tra i programmi; **Adesso** e **Stasera** raggiungono le rispettive fasce. OK sul programma in onda apre la diretta; sui programmi futuri mostra orari, descrizione quando disponibile e un’azione esplicita per guardare il canale ora.
 
 Nella Guida, CH+/CH− scorre i canali per pagina e i numeri raggiungono il canale senza avviare la riproduzione. OK prolungato gestisce i preferiti. Tornando dalla diretta si ritrovano canale e fascia oraria selezionati. I canali privi di palinsesto restano accessibili; disponibilità e copertura dipendono dalla sorgente.
 
-![Guida programmi](docs/screenshots/guide.png)
+Sullo smartphone, **Guida** mostra un canale alla volta: tocca il suo nome seguito da **Cambia**, scegli **Da adesso** o **Stasera** e apri un programma per leggerne i dettagli. **Scopri** permette di cercare tra i programmi dei diversi canali.
+
+![Guida programmi su Android TV](docs/screenshots/guide.png)
 
 <details>
   <summary>Altre schermate: dettagli, informazioni e canali durante la diretta</summary>
@@ -78,19 +102,21 @@ Nella Guida, CH+/CH− scorre i canali per pagina e i numeri raggiungono il cana
 
 </details>
 
-Per iniziare, consulta la **[guida utente illustrata](docs/GUIDA-UTENTE.md)**: installazione, telecomando, preferiti, palinsesto e aggiornamenti.
+Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornamenti, consulta la **[guida Android TV](docs/GUIDA-ANDROID-TV.md)** o la **[guida smartphone Android](docs/GUIDA-SMARTPHONE-ANDROID.md)**.
 
 ## Distribuzione e installazione
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Richiede **Android TV o Google TV con Android 6.0 o successivo**. L’app è stata provata anche su Sony Bravia KD-55X81J con Android 12; codec e DRM possono comportarsi diversamente su altri dispositivi.
+Lume TV **0.6.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-1. Scarica `LumeTV-<versione>.apk` dagli allegati della [release desiderata](https://github.com/pjor94/LumeTV/releases), oppure compila un’APK di sviluppo seguendo [Compilazione](#compilazione).
-2. Copiala sulla TV e aprila con un gestore file.
+La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
+
+1. Scarica un’APK adatta al tuo dispositivo dagli allegati della [release desiderata](https://github.com/pjor94/LumeTV/releases), oppure compila un’APK di sviluppo seguendo [Compilazione](#compilazione).
+2. Apri l’APK sulla TV o sul telefono con un gestore file.
 3. Se Android lo richiede, autorizza l’installazione per il gestore file utilizzato.
 
-Puoi installarla anche con ADB, dopo aver collegato e autorizzato la TV:
+Puoi installarla anche con ADB, dopo aver collegato e autorizzato il dispositivo:
 
 ```sh
 adb install -r LumeTV-VERSIONE.apk
@@ -100,15 +126,17 @@ Sostituisci `VERSIONE` con la versione scaricata. Gli aggiornamenti delle releas
 
 ### Aggiornamenti dall’app
 
-Le versioni che includono l’aggiornatore controllano le release pubbliche di `pjor94/LumeTV` all’avvio e ogni sei ore mentre l’app è in uso. Un pulsante nel catalogo segnala una nuova versione compatibile; **Opzioni → Aggiornamenti** permette anche il controllo manuale. Il controllo non apre finestre durante la diretta. Non viene eseguito a TV spenta o con l’app chiusa.
+Le versioni che includono l’aggiornatore controllano le release pubbliche di `pjor94/LumeTV` all’avvio e ogni sei ore mentre l’app è in uso. Un pulsante nel catalogo segnala una nuova versione compatibile; **Opzioni → Aggiornamenti** permette anche il controllo manuale. Il controllo non apre finestre durante la diretta. Non viene eseguito a dispositivo spento o con l’app chiusa.
 
-Scegli **Scarica e aggiorna** per scaricare l’APK, verificarne dimensione, SHA-256, package, versione e certificato di firma e aprire il programma di installazione Android. Se richiesto, consenti a **Lume TV** di installare app, poi conferma l’aggiornamento con il telecomando. La sostituzione dell’app può chiudere Lume: riaprila dal launcher. Preferiti e impostazioni vengono conservati negli aggiornamenti con la stessa firma. Puoi annullare un download o rinviare l’installazione; il controllo e il download non richiedono un account GitHub.
+Scegli **Scarica e aggiorna** per scaricare l’APK, verificarne dimensione, SHA-256, package, versione e certificato di firma e aprire il programma di installazione Android. Se richiesto, consenti a **Lume TV** di installare app, poi conferma l’aggiornamento sul dispositivo. La sostituzione dell’app può chiudere Lume: riaprila dal launcher. Preferiti e impostazioni vengono conservati negli aggiornamenti con la stessa firma. Puoi annullare un download o rinviare l’installazione; il controllo e il download non richiedono un account GitHub.
 
-Nella stessa schermata puoi disattivare i controlli automatici. Vengono proposte soltanto release pubblicate con `versionCode` maggiore e compatibili con Android sulla TV. Le vecchie release prive di `update.json` non vengono proposte. Il controllo considera fino a 100 release e verifica i metadati delle 20 più recenti ammesse agli aggiornamenti.
+Nella stessa schermata puoi disattivare i controlli automatici. Vengono proposte soltanto release pubblicate con `versionCode` maggiore e compatibili con Android sul dispositivo. Le vecchie release prive di `update.json` non vengono proposte. Il controllo considera fino a 100 release e verifica i metadati delle 20 più recenti ammesse agli aggiornamenti.
 
 La prima APK contenente l’aggiornatore va installata con la procedura manuale indicata sopra. Le build debug o con firma personalizzata non possono installare gli aggiornamenti ufficiali sopra la propria firma.
 
-## Telecomando
+<a id="telecomando"></a>
+
+## Telecomando su Android TV
 
 | Tasto | Azione |
 | --- | --- |
@@ -157,7 +185,13 @@ Servono JDK 17 e Android SDK 36. Configura l’SDK in Android Studio oppure nel 
 ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-L’APK di sviluppo si trova in `app/build/outputs/apk/debug/`. Per contribuire, eseguire i test di rete o rigenerare le risorse grafiche, consulta [CONTRIBUTING.md](CONTRIBUTING.md).
+L’APK di sviluppo con entrambe le interfacce si trova in `app/build/outputs/apk/debug/app-debug.apk`. Per installarla su un telefono o una TV collegati e autorizzati con ADB:
+
+```sh
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Per contribuire, eseguire i test di rete o rigenerare le risorse grafiche, consulta [CONTRIBUTING.md](CONTRIBUTING.md).
 
 La compilazione e l’installazione locali restano disponibili. La configurazione della firma e la pubblicazione automatica dell’APK e dei sorgenti tramite tag sono descritte in [docs/RELEASE.md](docs/RELEASE.md).
 

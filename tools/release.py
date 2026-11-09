@@ -121,10 +121,10 @@ def verify_apk_notices(root, apk):
                 raise ValueError(f'APK legal notice differs from corresponding source: {name}')
 
 
-def prepare(root, output_dir):
+def prepare(root, output_dir, *, include_untracked=False):
     version = project_version(root)
     verify_apk_notices(root, output_dir / f'LumeTV-{version}.apk')
-    build_archive(root, output_dir)
+    build_archive(root, output_dir, include_untracked=include_untracked)
     (output_dir / 'update.json').write_text(json.dumps(update_manifest(root, output_dir), indent=2) + '\n')
     paths = assets(output_dir, version)
     checksums = ''.join(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in paths)
@@ -166,7 +166,10 @@ def main():
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'dist')
     parser.add_argument('--sdk', type=Path, default=Path(os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT') or '/nonexistent'))
     parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', ''))
+    parser.add_argument('--include-untracked', action='store_true', help='Include new project sources/docs in a local prepare before committing')
     args = parser.parse_args()
+    if args.include_untracked and args.command != 'prepare':
+        parser.error('--include-untracked is only supported by prepare')
     try:
         if args.command == 'metadata':
             values = metadata(ROOT, args.tag)
@@ -178,7 +181,7 @@ def main():
             check_signing(os.environ)
             print('Signing secrets configured')
         elif args.command == 'sign': sign(ROOT, args.output_dir, args.sdk)
-        elif args.command == 'prepare': prepare(ROOT, args.output_dir)
+        elif args.command == 'prepare': prepare(ROOT, args.output_dir, include_untracked=args.include_untracked)
         elif args.command == 'publish': publish(ROOT, args.output_dir, args.tag, args.repository)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f'Release failed: {error}\n')

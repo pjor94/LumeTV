@@ -40,13 +40,13 @@ Per abilitare il collegamento con AURA nelle release, imposta anche la variabile
 ## Preparare e avviare una versione
 
 1. Imposta `versionName` in `app/build.gradle.kts` e incrementa `versionCode` per ogni nuova versione da installare come aggiornamento.
-2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.5.3` è già presente.
+2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.6.0` è già presente.
 3. Esegui le verifiche indicate in [CONTRIBUTING.md](../CONTRIBUTING.md). Aggiungi a Git tutti i nuovi sorgenti e documenti, poi committa e pubblica le modifiche.
 4. Crea e pubblica un tag esattamente uguale a `v<versionName>`. Con la versione attuale:
 
 ```sh
-git tag -a v0.5.3 -m 'Lume TV 0.5.3'
-git push origin v0.5.3
+git tag -a v0.6.0 -m 'Lume TV 0.6.0'
+git push origin v0.6.0
 ```
 
 Il push avvia la pipeline. In alternativa, dopo che il workflow è presente sul ramo predefinito, apri **Actions → Release → Run workflow** e inserisci il nome di un tag esistente. Il checkout usa quel tag; non viene pubblicato lo stato corrente di un altro ramo. Per pubblicare le modifiche nuove, il tag deve includerle.
@@ -66,7 +66,7 @@ Prima della pubblicazione la pipeline:
 
 Il job di compilazione ha permessi di sola lettura. Solo il job di pubblicazione riceve `contents: write`; crea prima una bozza, carica tutti gli allegati e infine la rende pubblica:
 
-- `LumeTV-<versione>.apk`: APK firmata, installabile su Android TV e Google TV.
+- `LumeTV-<versione>.apk`: un’unica APK firmata, installabile su smartphone Android, Android TV e Google TV, con l’interfaccia selezionata in base al dispositivo.
 - `LumeTV-<versione>-source.zip`: sorgenti dell’app e delle dipendenze verificate, con licenze e manifest dei checksum.
 - `SIGNING-CERTIFICATE.txt`: impronta SHA-256 del certificato pubblico di firma.
 - `update.json`: metadati per l’aggiornatore integrato, con schema, application ID, versionName/versionCode, minSdk, indicatore pre-release, nome, dimensione e SHA-256 dell’APK.
@@ -97,5 +97,20 @@ python3 tools/package_source.py
 L’archivio viene scritto in `dist/`. Contiene i sorgenti delle dipendenze in `third_party/sources/` e `SOURCE-MANIFEST.sha256` per verificare i file estratti. Revisioni, versioni e checksum sono in `third_party/sources.lock.json`; i dettagli sono in [third_party/README.md](../third_party/README.md).
 
 Per preparare un’esportazione locale prima del commit, aggiungi `--include-untracked`: vengono inclusi i nuovi sorgenti e documenti ammessi, i file ignorati restano esclusi e le cancellazioni del workspace sono rispettate. L’esportazione non contiene cronologia Git, chiavi o APK.
+
+## Preparare gli allegati prima del commit
+
+Puoi preparare anche gli allegati completi senza modificare l’indice Git, creare commit o tag, fare push o pubblicare una release. Imposta versione e changelog, completa i controlli e raccogli le dipendenze come sopra. Con le quattro variabili di firma disponibili nell’ambiente e `ANDROID_HOME` impostata sull’SDK:
+
+```sh
+./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:writeReleaseDependencies --no-daemon
+python3 tools/dependency_sources.py fetch --report app/build/reports/release-dependencies.json
+python3 tools/release.py sign --sdk "$ANDROID_HOME" --output-dir dist/v0.6.0
+python3 tools/release.py prepare --include-untracked --output-dir dist/v0.6.0
+```
+
+La cartella contiene APK firmata, sorgenti corrispondenti, certificato pubblico, `update.json`, checksum e note estratte dal changelog. `--include-untracked` è ammesso solo per `prepare`: include esplicitamente i nuovi sorgenti e documenti, lasciando esclusi file ignorati, chiavi, build e appunti locali.
+
+Questi sono artefatti di preparazione dal workspace. Dopo il commit, il tag deve identificare gli stessi sorgenti e GitHub Actions deve ricompilare e verificare la release da quel tag. I controlli di pubblicazione restano invariati: tag corrispondente, checkout pulito e nessun sorgente non incluso in Git.
 
 La compilazione locale `:app:assembleRelease` continua a produrre un’APK non firmata. Puoi firmarla con una tua chiave o compilare `:app:assembleDebug` per una build di sviluppo installabile; passando a un certificato diverso, Android può richiedere la disinstallazione della versione precedente. Chi ridistribuisce una propria APK deve fornire i sorgenti corrispondenti, comprese le dipendenze richieste dalle licenze. Non è promessa una riproducibilità bit per bit dell’APK.

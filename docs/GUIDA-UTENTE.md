@@ -1,205 +1,24 @@
-# Guida utente · Lume TV 0.5
+# Guide utente · Lume TV
 
-La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google TV: scegli un canale, guarda a tutto schermo e scopri cosa c’è nelle prossime ore con lo stesso telecomando.
+Lume TV supporta **smartphone Android**, **Android TV** e **Google TV**, con un’interfaccia dedicata ai comandi touch o al telecomando nella stessa APK. Richiede Android 6.0 o successivo.
 
-Cosa guardare e la nuova navigazione Canali / Cosa guardare / Guida TV sono disponibili dalla versione 0.5.0.
-Il pulsante Esci e la conferma con Indietro dalla Home sono disponibili dalla versione 0.5.1.
+Scegli la guida per il tuo dispositivo:
 
-[Scarica l’ultima versione](https://github.com/pjor94/LumeTV/releases/latest) · [Torna al progetto](../README.md) · [Novità della versione](../CHANGELOG.md)
-
-## In questa guida
-
-- [Installazione e primo avvio](#installazione-e-primo-avvio)
-- [Scegliere un canale](#scegliere-un-canale)
-- [Cosa guardare](#cosa-guardare)
-- [Informazioni durante la visione](#informazioni-durante-la-visione)
-- [Elenco canali durante la diretta](#elenco-canali-durante-la-diretta)
-- [Consultare la Guida TV](#consultare-la-guida-tv)
-- [Preferiti e cambio canale](#preferiti-e-cambio-canale)
-- [Aggiornare Lume TV](#aggiornare-lume-tv)
-- [Uscire dall’app](#uscire-dallapp)
-- [Telecomando: riferimento rapido](#telecomando-riferimento-rapido)
-- [Se qualcosa non funziona](#se-qualcosa-non-funziona)
-
-## Installazione e primo avvio
-
-Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
-
-1. Apri le [release ufficiali](https://github.com/pjor94/LumeTV/releases/latest) e scarica l’allegato **LumeTV-0.5.3.apk**.
-2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
-3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
-4. Scegli un canale con le frecce e premi **OK**.
-
-Al primo avvio trovi già una lista di canali. Catalogo, guida e loghi si aggiornano quando la rete è disponibile. Lume non richiede la creazione di un account.
-
-Se l’app è già installata da una release ufficiale, segui [Aggiornare Lume TV](#aggiornare-lume-tv): gli aggiornamenti conservano preferiti e impostazioni.
-
-## Scegliere un canale
-
-![Catalogo dei canali](screenshots/catalog.png)
-
-Nel catalogo trovi numero, nome e logo dei canali. Le sezioni in alto sono **Canali**, **Cosa guardare** e **Guida TV**. All’interno di Canali, i filtri **Tutti**, **Rai**, **Mediaset** e **Preferiti** permettono di restringere l’elenco.
-
-- Usa le **frecce** per spostare la selezione: la scheda evidenziata è quella che aprirai.
-- Premi **OK** per guardare il canale a tutto schermo.
-- Digita un **numero** per raggiungere direttamente il canale corrispondente.
-- Premi **Indietro** durante la visione per tornare al catalogo; dalla Home di Canali, Indietro chiede conferma per chiudere l’app.
-
-L’app ricorda l’ultimo canale riprodotto e lo riapre al successivo avvio, se ancora disponibile.
-
-## Cosa guardare
-
-Apri **Cosa guardare** dalla navigazione in alto. La vista Focus mostra i dettagli del programma selezionato sulla sinistra e l’elenco dei programmi sulla destra. La selezione da sola non avvia la diretta.
-
-![Vista Focus con palinsesto di esempio](screenshots/discovery.png)
-
-- **Ora** mostra il programma in onda di ogni canale. I preferiti compaiono per primi; i programmi vicini alla fine sono segnalati e seguono gli altri dello stesso gruppo.
-- **Tra poco** mostra il prossimo programma di ogni canale che inizia entro 90 minuti, in ordine di inizio.
-- **Stasera** mostra fino a due programmi per canale che occupano parte della fascia 20:30–24:00 di oggi, secondo il fuso della TV.
-- **Solo preferiti** restringe i risultati. **Cerca** cerca parole nei titoli, nelle descrizioni e nei nomi dei canali della fascia selezionata; accenti e maiuscole non cambiano i risultati.
-
-Usa **↑/↓** per scegliere il programma, **←** per raggiungere le azioni sulla sinistra e **→** per tornare all’elenco. **OK** guarda un programma in onda o attiva/disattiva il promemoria per uno futuro. **INFO** apre la descrizione completa; **OK prolungato** e la stella a sinistra gestiscono il canale preferito. **CH+/CH−** scorre per pagina. I numeri selezionano un canale nei risultati senza avviare la diretta. Nella ricerca, i numeri vengono scritti nel testo.
-
-**Avvisami** salva il promemoria sulla TV. Lume mostra un avviso circa due minuti prima mentre l’app è aperta; puoi scegliere **Guarda ora** o **Più tardi**. La diretta non cambia automaticamente. Gli avvisi non vengono mostrati fuori dall’app né riproposti dopo un lungo standby. Per annullare un promemoria, scegli di nuovo **Avviso attivo** sul programma.
-
-Fascia, ricerca, filtro e programma selezionato vengono conservati. Dopo la riproduzione, Indietro torna alla stessa consultazione. I risultati dipendono dai palinsesti disponibili; **Apri i canali** permette di raggiungere anche i canali privi di guida.
-
-## Informazioni durante la visione
-
-![Informazioni del programma in onda](screenshots/live-info.png)
-
-Premi **OK** oppure **INFO** mentre guardi un canale. Il pannello mostra, quando il palinsesto li fornisce:
-
-- Titolo del programma attuale e orari di inizio e fine.
-- Avanzamento e minuti rimanenti.
-- Descrizione del programma.
-- Titolo e orario del programma successivo.
-
-Le descrizioni occupano fino a tre righe alla volta. Se il testo continua, compare **↑↓ Leggi la descrizione completa**: usa le frecce **su e giù** per scorrerlo. Il video continua a essere riprodotto.
-
-Aprendo il pannello con OK o INFO, hai **15 secondi** per leggere una descrizione; ogni scorrimento rinnova questo tempo. Al cambio canale, o quando manca una descrizione, il pannello si richiude dopo **sei secondi**. Le informazioni si aggiornano al cambio di programma.
-
-Se hai messo la riproduzione in pausa con il tasto Play/Pausa, **OK** la riprende e mostra le informazioni.
-
-## Elenco canali durante la diretta
-
-![Elenco canali sulla sinistra del video](screenshots/live-channels.png)
-
-Premi **←** durante la visione. Si apre un elenco laterale e il focus parte dal canale attivo, indicato da un punto azzurro.
-
-1. Usa **↑/↓** per scorrere i canali: il video resta sul canale che stai guardando.
-2. Premi **OK** per guardare il canale evidenziato e richiudere l’elenco.
-3. Per richiuderlo senza cambiare canale, premi **→** da una riga oppure **Indietro**.
-
-Premendo ancora **←** da una riga raggiungi i filtri **Tutti** e **Preferiti**. Questo filtro riguarda solo l’elenco; la modalità di cambio canale con CH+/CH− si sceglie nelle Opzioni.
-
-## Consultare la Guida TV
-
-![Programmazione delle prossime ore](screenshots/guide.png)
-
-Apri **Guida TV** dalle sezioni in alto. La griglia affianca i canali e i programmi lungo una scala oraria comune: la larghezza di ogni programma rappresenta la sua durata. In alto trovi il titolo completo e gli orari dell’elemento selezionato.
-
-| Comando | Nella Guida TV |
-| --- | --- |
-| ↑/↓ | Cambia canale mantenendo come riferimento l’orario che stai consultando |
-| ←/→ | Passa tra i programmi e scorre la fascia oraria quando necessario |
-| Adesso | Torna alla programmazione attuale |
-| Stasera | Raggiunge la fascia delle 21:00, o quella attuale se è già più tardi |
-| Frecce orarie nei controlli | Sposta la fascia mostrata di un’ora |
-| CH+/CH− | Scorre i canali per pagina |
-| Numeri | Seleziona un canale nella griglia |
-| Tutti / Preferiti | Filtra i canali della guida |
-
-La griglia mostra circa **due ore e mezza** alla volta e permette di consultare le ore successive fino alla fine dei dati disponibili.
-
-**Per guardare:** premi **OK** sul programma in onda. Anche le righe senza palinsesto consentono di aprire il canale.
-
-**Per informarti su un programma futuro:** selezionalo e premi **OK**. La scheda riporta titolo, orari e descrizione, quando disponibile. **INFO** apre i dettagli anche per il programma in onda.
-
-![Scheda di un programma](screenshots/guide-details.png)
-
-Nella scheda, **Guarda [canale] ora** apre la diretta attuale del canale. Un programma futuro non può essere riprodotto in anticipo. **Torna alla guida** o **Indietro** chiude la scheda e ripristina la selezione.
-
-La selezione di un programma futuro, oppure del canale tramite i numeri, non avvia automaticamente il video. Tornando dalla diretta alla Guida ritrovi il canale e la fascia oraria che stavi consultando.
-
-Se mancano informazioni, compare **Programmazione non disponibile**. Il canale resta accessibile. Palinsesti, descrizioni e copertura dipendono dalla sorgente e possono cambiare.
-
-## Preferiti e cambio canale
-
-Per aggiungere o rimuovere un preferito, **tieni premuto OK** su una scheda del catalogo o su un programma nella Guida TV. Trovi i canali salvati nella sezione **Preferiti** e nei filtri della Guida e dell’elenco laterale.
-
-Per usare CH+/CH− solo sui tuoi preferiti:
-
-1. Apri **Opzioni** dal catalogo.
-2. Scegli **CH+/CH−**.
-3. Seleziona **Solo preferiti**. Per tornare al comportamento iniziale, scegli **Tutti i canali**.
-
-La scelta resta salvata sulla TV. I numeri e il catalogo continuano ad accedere a tutti i canali. Nella Guida TV, CH+/CH− scorre sempre per pagina.
-
-## Aggiornare Lume TV
-
-1. Dal catalogo apri **Opzioni → Aggiornamenti → Controlla ora**.
-2. Se è disponibile una nuova versione, scegli **Scarica e aggiorna**.
-3. Attendi la verifica del download. Se Android lo richiede, consenti a **Lume TV** di installare applicazioni.
-4. Conferma l’aggiornamento nel programma di installazione Android e riapri Lume TV.
-
-Gli aggiornamenti ufficiali conservano preferiti e impostazioni. Puoi annullare il download o rinviare l’installazione.
-
-Il controllo automatico avviene all’avvio e ogni sei ore mentre usi l’app. Puoi disattivarlo nella schermata Aggiornamenti. Se manca l’aggiornatore in una vecchia versione, installa manualmente l’APK dell’ultima release.
-
-Catalogo e palinsesti hanno aggiornamenti separati: il **catalogo ogni 24 ore**, la **guida ogni sei ore**. **↻** nel catalogo richiede un aggiornamento di entrambi.
-
-## Uscire dall’app
-
-Scegli **Esci** nella navigazione in alto, subito dopo **Opzioni**. Il pulsante è disponibile in **Canali**, **Cosa guardare** e **Guida TV**. Puoi aprire la stessa conferma premendo **Indietro** dalla Home di Canali, anche quando hai già guardato una diretta.
-
-Alla domanda **Uscire da Lume TV?**, il pulsante **Annulla** è selezionato all’apertura. Scegli **Esci** per chiudere l’app; **Annulla** o **Indietro** chiude soltanto la conferma e ti lascia sulla schermata. Preferiti, impostazioni e ultimo canale guardato vengono conservati.
-
-Durante la diretta, Indietro torna prima al catalogo o alla consultazione da cui hai aperto il canale. Da Guida TV e Cosa guardare, Indietro chiude prima eventuali dettagli o ricerca aperti, poi torna a **Canali → Tutti**; un’altra pressione apre la conferma di uscita.
-
-## Telecomando: riferimento rapido
-
-| Dove sei | Tasto | Azione |
+| Dispositivo | Guida | Cosa trovi |
 | --- | --- | --- |
-| Catalogo | Frecce, OK | Scegli e apri un canale |
-| Catalogo o Guida | OK prolungato | Aggiungi o rimuovi un preferito |
-| Diretta | OK / INFO | Mostra le informazioni del programma |
-| Informazioni con testo lungo | ↑/↓ | Scorri la descrizione |
-| Diretta | ← | Apri l’elenco canali |
-| Elenco canali | ↑/↓, OK | Scegli un canale e conferma il cambio |
-| Elenco canali | → dalla riga / Indietro | Chiudi l’elenco |
-| Diretta | CH+/CH− | Cambia canale secondo la modalità scelta |
-| Diretta o catalogo | Numeri | Apri un canale per numero |
-| Guida | Numeri | Seleziona la riga senza avviare la diretta |
-| Guida | CH+/CH− | Scorri per pagina |
-| Cosa guardare | ↑/↓, ←/→ | Seleziona un programma e raggiungi le azioni |
-| Cosa guardare | OK / INFO | Guarda o imposta un avviso / leggi i dettagli |
-| Diretta | Indietro | Torna al catalogo |
-| Home di Canali | Indietro | Chiedi conferma per chiudere l’app |
-| Guida TV / Cosa guardare | Indietro | Chiudi dettagli o ricerca aperti, poi torna a Canali |
-| Conferma di uscita | Indietro | Annulla e continua a usare Lume TV |
-| App | GUIDE / MENU | Apri Guida / catalogo, se la TV inoltra il tasto all’app |
+| Android TV e Google TV | [Guida per Android TV e Google TV](GUIDA-ANDROID-TV.md) | Installazione, telecomando, guida a griglia, elenco laterale durante la diretta e uscita dall’app |
+| Smartphone Android | [Guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md) | Installazione, navigazione touch, preferiti, guida per canale, comandi del video e schermo intero |
 
-Alcuni telecomandi riservano GUIDE, MENU o INFO alle funzioni della TV. Puoi sempre aprire la Guida dalla navigazione del catalogo e mostrare le info della diretta con OK.
+## Quale interfaccia si apre
 
-## Se qualcosa non funziona
+In **Opzioni → Interfaccia** puoi scegliere **Automatica**, **Smartphone** o **TV**. In automatico, i telefoni Android usano la UI touch; Android TV, Google TV, tablet e altri dispositivi usano la UI TV. Su un tablet puoi scegliere **Smartphone** per usare i comandi touch.
 
-**La guida o una descrizione manca.** Il canale potrebbe non avere dati disponibili. Premi ↻ per richiedere un aggiornamento. Se il servizio è in attesa o non risponde, l’app conserva quanto ha già scaricato e riprova in seguito.
+La scelta rimane salvata. Cambiare interfaccia conserva catalogo, guida e preferiti sullo stesso dispositivo; ogni dispositivo mantiene i propri dati locali.
 
-**Un canale si interrompe.** Lume prova a recuperare le interruzioni temporanee. In assenza di rete, attende il ritorno della connessione. Se compare un errore, usa **Riprova** o **Scegli un canale**. La disponibilità può dipendere dall’emittente, dall’evento e dal territorio.
+## Versioni e download
 
-**CH+/CH− non passa a tutti i canali.** Controlla **Opzioni → CH+/CH−**: potrebbe essere attiva la modalità Solo preferiti.
+Queste guide descrivono **Lume TV 0.6.0**, che comprende entrambe le interfacce. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.0/LumeTV-0.6.0.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
 
-**Android non accetta un aggiornamento.** Le release ufficiali usano la stessa firma. Una build di sviluppo o firmata con un’altra chiave può richiedere la disinstallazione prima di installare quella ufficiale; la disinstallazione cancella preferiti e impostazioni locali.
+Il supporto smartphone è stato introdotto nella versione 0.6.0. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 
-**Vuoi segnalare un problema.** Apri una [segnalazione su GitHub](https://github.com/pjor94/LumeTV/issues) indicando canale, modello della TV, versione Android e versione Lume TV, visibile in **Opzioni → Informazioni**. Non pubblicare credenziali o token.
-
-## Dati e collegamento con AURA
-
-Catalogo, guida, preferiti e impostazioni sono conservati sul dispositivo. Lume non contiene telemetria e contatta i servizi necessari per catalogo, palinsesti, immagini, riproduzione e aggiornamenti. Consulta anche la [privacy nel README](../README.md#privacy).
-
-Il collegamento con AURA è facoltativo. Si abilita o si revoca in **Opzioni → Collegamento con AURA** e consente ad AURA sulla stessa TV di leggere i metadati e aprire i canali. I dati condivisi sono comuni al dispositivo.
-
----
-
-Schermate acquisite dall’interfaccia nativa su emulatore Android TV. Programmi, orari e immagini possono variare. Lume TV è un progetto indipendente basato sul lavoro di WorldLiveTV / WLTV Group; non è un’app ufficiale delle emittenti.
+[Torna al README](../README.md) · [Distribuzione e installazione](../README.md#distribuzione-e-installazione) · [Novità](../CHANGELOG.md)

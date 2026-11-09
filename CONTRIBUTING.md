@@ -1,6 +1,6 @@
 # Contribuire
 
-Segnalazioni e contributi sono benvenuti. Per un problema di riproduzione, indica il canale, il modello della TV, la versione Android e la versione di Lume TV. Evita di pubblicare URL di sessione o token nei log allegati.
+Segnalazioni e contributi sono benvenuti. Per un problema di riproduzione, indica il canale, il modello del dispositivo, l’interfaccia usata (TV o smartphone), la versione Android e la versione di Lume TV. Evita di pubblicare URL di sessione o token nei log allegati.
 
 ## Ambiente di sviluppo
 
@@ -43,6 +43,10 @@ Per Cosa guardare usa `python3 tools/smoke_discovery.py --adb /percorso/adb --se
 Per verificare aggiornamento dei programmi nel catalogo, stati accessibili, pressione di OK, animazioni disabilitate e testo ingrandito usa `python3 tools/smoke_ui.py --adb /percorso/adb --serial emulator-5560`. Richiede ImageMagick per confrontare il colore del pulsante durante la pressione. Non avvia dirette e ripristina dati e impostazioni al termine; report e schermate sono in `analysis/ui-smoke/`. Il test della Guida controlla anche la navigazione tra le righe dei comandi e il riutilizzo delle celle durante gli spostamenti.
 
 Per l’uscita dall’app usa `python3 tools/smoke_exit.py --adb /percorso/adb --serial emulator-5560 --video /percorso/video-sintetico.mp4`. Verifica pulsante Esci, Back dalla Home, conferma, annullamento e ritorno dalla diretta sintetica. Usa soltanto un emulatore temporaneo con APK debug già installata; il test ripristina cache e preferenze al termine e salva i risultati in `analysis/exit-smoke/`.
+
+Per l’interfaccia smartphone usa `python3 tools/smoke_mobile.py --adb /percorso/adb --serial emulator-5564 --video /percorso/video-sintetico.mp4`, con APK debug installata su un emulatore telefono temporaneo. Verifica riconoscimento automatico, navigazione touch, ricerca, preferiti, guida, avvisi, pausa, rotazione senza ricreare il player, elenco canali durante la diretta, collegamenti a caldo e scelta manuale dell’interfaccia. Ripristina cache, preferenze, rotazione e testo al termine; report e schermate sono in `analysis/mobile-smoke/`.
+
+`InterfacePolicyTest` verifica la precedenza dei dispositivi TV, la selezione smartphone, il comportamento di tablet/box e l’override manuale. Il launcher pubblico resta `MainActivity`; inoltra gli stessi collegamenti a `TvActivity` o `MobileActivity`. Le Activity delle due UI non sono esportate.
 
 ## Catalogo e risorse
 

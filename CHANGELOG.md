@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0 · Smartphone Android e Android TV — 2026-11-09
+
+- Una sola APK con UI smartphone e TV: riconoscimento automatico del dispositivo e scelta persistente Automatica / Smartphone / TV nelle Opzioni. Tablet e altri dispositivi mantengono la UI TV in automatico.
+- UI smartphone con navigazione inferiore, ricerca touch, preferiti espliciti, guida per canale e programmi Ora / Tra poco / Stasera con dettagli e avvisi locali.
+- Comandi touch durante la diretta: pausa/ripresa, cambio canale, preferiti, elenco canali e schermo intero. La rotazione conserva il player e lo stato di pausa.
+- Catalogo, guida, loghi, preferiti, resolver, riproduzione DRM, recupero della connessione e aggiornamenti condivisi tra le due interfacce. Collegamenti esistenti conservati.
+- Test della selezione dell’interfaccia e collaudo smartphone con palinsesto e video sintetici locali.
+- README aggiornato per Android TV e smartphone Android; guide illustrate separate per telecomando e comandi touch, con un indice comune.
+- Preparazione locale degli allegati di rilascio con inclusione esplicita dei nuovi sorgenti, senza commit, tag o pubblicazione. La pubblicazione resta vincolata a un tag corrispondente e a un checkout pulito.
+
+Verifiche: 129 test JVM e 29 test Python superati; tre controlli facoltativi esclusi dalla suite ordinaria. Build Debug/Release, Android Lint e verifica dei 58 archivi sorgente delle dipendenze completati.
+
+Collaudo funzionale del codice su emulatori Android: 30 controlli smartphone e 85 di non regressione TV, con palinsesto e video sintetici locali. Verificati selezione automatica dell’interfaccia, scelta manuale persistente, preferiti, pausa, rotazione, guida, promemoria e testo al 130%. Smartphone e TV fisici, dirette DRM su smartphone e sintesi vocale TalkBack non sono stati verificati in questo collaudo.
+
+Verificata anche l’APK Release firmata: 16 controlli di aggiornamento dalla 0.5.3, senza disinstallazione, su emulatori Android TV 14 e smartphone Android 15. Confermati firma compatibile, apertura automatica dell’interfaccia corretta, conservazione dei preferiti e assenza di crash Java durante la prova.
+
+Per aggiornare dalla versione 0.5.3: **Opzioni → Aggiornamenti → Controlla ora**, dopo la pubblicazione della release. Gli aggiornamenti con la stessa firma conservano preferiti e impostazioni; l’interfaccia viene scelta automaticamente in base al dispositivo.
+
 ## 0.5.3 · Telecomando e leggibilità — 2026-11-09
 
 - Il catalogo aggiorna il programma in onda ogni 30 secondi, conservando focus e posizione senza ricaricare le schede.

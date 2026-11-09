@@ -23,6 +23,7 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
     private var session: MediaSession? = null
     private var view: PlayerView? = null
     var onBuffering: () -> Unit = {}
+    var onReady: () -> Unit = {}
     var onPlayingChanged: (Boolean) -> Unit = {}
     var onError: (PlaybackFailure) -> Unit = {}
     val isPlaying get() = player?.isPlaying == true
@@ -33,6 +34,7 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
         override fun onPlaybackStateChanged(playbackState: Int) {
             debug("state=$playbackState")
             if (playbackState == Player.STATE_BUFFERING) onBuffering()
+            if (playbackState == Player.STATE_READY) onReady()
             if (playbackState == Player.STATE_ENDED) onError(PlaybackFailure("La diretta si è interrotta. Riprova o scegli un altro canale.", true))
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) = onPlayingChanged(isPlaying)
@@ -52,6 +54,7 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
         view.keepScreenOn = true
         view.setKeepContentOnPlayerReset(false)
         if (player == null) {
+            debug("player_created")
             player = ExoPlayer.Builder(context)
                 .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(8_000, 25_000, 1_000, 2_000)
                     .setTargetBufferBytes(24 * 1024 * 1024).setPrioritizeTimeOverSizeThresholds(false).build())
@@ -65,7 +68,7 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
         view.player = player
     }
 
-    fun play(stream: ResolvedStream) {
+    fun play(stream: ResolvedStream, playWhenReady: Boolean = true) {
         val player = player ?: return
         val httpFactory = OkHttpDataSource.Factory(http.client)
             .setUserAgent(HttpClient.USER_AGENT).setDefaultRequestProperties(stream.headers)
@@ -85,7 +88,7 @@ class TvPlayer(private val context: Context, private val http: HttpClient) {
         player.clearMediaItems()
         player.setMediaSource(factory.createMediaSource(item))
         player.prepare()
-        player.playWhenReady = true
+        player.playWhenReady = playWhenReady
     }
 
     fun togglePause(): Boolean {
