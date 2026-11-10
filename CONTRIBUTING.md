@@ -20,6 +20,8 @@ python3 -m unittest discover -s tools -p 'test_*.py'
 
 I test ordinari non contattano le emittenti. I file in `test-fixtures/` sono campioni fissi; il catalogo in `app/src/main/assets/` viene aggiornato separatamente.
 
+`UpdateInstallerTest` usa Robolectric e il parser APK di Android su API 27, 28, 29 e 35 per verificare gli aggiornamenti con la stessa firma e il rifiuto di una firma diversa. I piccoli campioni firmati sono in `test-fixtures/updates/`, insieme al manifest e alle istruzioni per rigenerarli. Alla prima esecuzione Robolectric scarica da Maven i framework Android necessari.
+
 Per verificare i resolver con le emittenti:
 
 ```sh

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1 · Aggiornamenti su Android 9 e 10 — 2026-11-10
+
+- Corretto il falso errore di firma durante gli aggiornamenti in-app su Android 9 e 10, inclusi i box Android TV: la lettura dei certificati dell’APK richiede entrambi i flag del PackageManager.
+- Aggiunti otto test di regressione con il parser APK Android su API 27, 28, 29 e 35 tramite Robolectric: accettazione della stessa firma e rifiuto di un certificato diverso.
+
+Verifiche: 137 test JVM e 29 test Python superati; tre controlli di rete facoltativi esclusi dalla suite ordinaria. Build Debug/Release, Android Lint e verifica dei sorgenti delle dipendenze completati. Il test con il codice precedente riproduce il falso errore sulle API 28 e 29.
+
+**Android 9 e 10:** installa manualmente l’APK ufficiale 0.6.1 sopra la versione esistente, senza disinstallare l’app. Preferiti e impostazioni vengono conservati. Questa prima installazione manuale è necessaria perché il controllo difettoso è nella vecchia versione; gli aggiornamenti successivi potranno usare il controllo corretto.
+
 ## 0.6.0 · Smartphone Android e Android TV — 2026-11-09
 
 - Una sola APK con UI smartphone e TV: riconoscimento automatico del dispositivo e scelta persistente Automatica / Smartphone / TV nelle Opzioni. Tablet e altri dispositivi mantengono la UI TV in automatico.

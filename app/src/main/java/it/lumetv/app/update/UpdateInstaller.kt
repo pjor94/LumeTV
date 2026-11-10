@@ -32,7 +32,11 @@ internal object UpdateInstaller {
         coroutineContext.ensureActive()
         if (digest.digest().joinToString("") { "%02x".format(it) } != info.sha256) UpdatePolicy.invalid()
         val pm = context.packageManager
-        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        // Android 9 and 10 collect archive certificates only when GET_SIGNATURES is set,
+        // even when the caller requests SigningInfo via GET_SIGNING_CERTIFICATES.
+        val flags = if (Build.VERSION.SDK_INT >= 28) {
+            PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
+        } else PackageManager.GET_SIGNATURES
         val installed = pm.getPackageInfo(context.packageName, flags)
         val archive = pm.getPackageArchiveInfo(file.absolutePath, flags) ?: UpdatePolicy.invalid()
         fun code(packageInfo: PackageInfo) = if (Build.VERSION.SDK_INT >= 28) packageInfo.longVersionCode else packageInfo.versionCode.toLong()
