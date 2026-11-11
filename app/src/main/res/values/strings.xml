@@ -50,6 +50,10 @@
     <string name="guide_hint_future">↑↓ Canali  ←→ Programmi  OK Dettagli</string>
     <string name="live_description_scroll">↑↓  Leggi la descrizione completa</string>
     <string name="update_auto_check">Controlla automaticamente gli aggiornamenti</string>
+    <string name="update_available_title">Nuova versione disponibile</string>
+    <string name="update_available_message">È disponibile Lume TV %1$s.\nVersione installata: %2$s.\n\nL’aggiornamento conserva preferiti e impostazioni.</string>
+    <string name="update_open">Aggiorna</string>
+    <string name="update_later">Più tardi</string>
     <plurals name="live_channel_count">
         <item quantity="one">%d canale</item>
         <item quantity="other">%d canali</item>

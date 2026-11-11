@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.2 · Avvisi per le nuove versioni — 2026-11-11
+
+- Popup automatico per le nuove versioni compatibili, condiviso tra TV e smartphone: compare nel catalogo e attende il ritorno dalla diretta. **Aggiorna** apre la schermata esistente; **Più tardi** o Indietro rinviano l’avviso al prossimo avvio.
+- Rinvio conservato durante standby, ricreazione della schermata e cambio di interfaccia; focus iniziale su **Più tardi** e ripristino della selezione alla chiusura.
+- Controlli delle nuove versioni ogni 30 minuti durante l’uso, con attesa separata di un’ora dopo gli errori e rispetto delle pause richieste da GitHub, anche dopo la riapertura dell’app.
+
+Verifiche: 145 test JVM e 29 test Python superati; tre controlli di rete facoltativi esclusi. Build Debug/Release e Android Lint completati senza errori.
+
+Collaudo su emulatori Android TV 14 e smartphone Android 15: 48 controlli del popup e 54 di non regressione su uscita e UI mobile, con metadati di aggiornamento fittizi, video sintetico locale e testo al 130%. Nessuna APK scaricata dal collaudo dei popup; dispositivi fisici non provati.
+
+Per aggiornare dalla 0.6.1: **Opzioni → Aggiornamenti → Controlla ora**. Preferiti e impostazioni vengono conservati negli aggiornamenti con la stessa firma. Su Android 9 e 10, le versioni fino alla 0.6.0 richiedono invece l’installazione manuale dell’APK ufficiale 0.6.2 sopra quella esistente, senza disinstallare l’app.
+
 ## 0.6.1 · Aggiornamenti su Android 9 e 10 — 2026-11-10
 
 - Corretto il falso errore di firma durante gli aggiornamenti in-app su Android 9 e 10, inclusi i box Android TV: la lettura dei certificati dell’APK richiede entrambi i flag del PackageManager.

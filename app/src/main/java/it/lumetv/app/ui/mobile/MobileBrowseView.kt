@@ -202,6 +202,7 @@ class MobileBrowseView(
         updateNotice.visibility = if (version == null) GONE else VISIBLE
     }
     fun refreshLogos() { adapter.refresh() }
+    val isSearching get() = search.hasFocus()
     fun tick() { renderRows() }
     fun closeSearch(): Boolean {
         if (!search.hasFocus() && search.text.isNullOrEmpty()) return false

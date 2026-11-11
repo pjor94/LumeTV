@@ -152,7 +152,9 @@ Per aggiornare l’applicazione:
 3. Attendi il download e la verifica. Se richiesto, consenti a **Lume TV** di installare applicazioni.
 4. Conferma nel programma di installazione Android e riapri Lume TV.
 
-Puoi disattivare i controlli automatici nella stessa schermata. Gli aggiornamenti con la stessa firma conservano preferiti e impostazioni. Per la disponibilità delle APK con supporto smartphone, consulta [Versioni e download](GUIDA-UTENTE.md#versioni-e-download).
+Il controllo automatico avviene all’avvio, se sono trascorsi almeno 30 minuti dall’ultimo controllo riuscito, e ogni 30 minuti mentre usi l’app. Se trova una nuova versione compatibile, mostra un popup nel catalogo: **Aggiorna** apre la schermata Aggiornamenti; **Più tardi** o Indietro rinviano l’avviso al prossimo avvio. Durante una diretta il popup attende il ritorno al catalogo. Il pulsante di aggiornamento nel catalogo resta disponibile anche dopo il rinvio.
+
+Puoi disattivare i controlli automatici nella stessa schermata. In caso di errore l’app attende un’ora, o più a lungo se GitHub richiede una pausa. Gli aggiornamenti con la stessa firma conservano preferiti e impostazioni. Per la disponibilità delle APK con supporto smartphone, consulta [Versioni e download](GUIDA-UTENTE.md#versioni-e-download).
 
 ## Tornare indietro e uscire
 

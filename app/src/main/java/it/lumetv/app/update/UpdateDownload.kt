@@ -9,9 +9,21 @@ import java.io.InputStream
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
-internal class GithubUpdateClient : UpdateFeed {
-    private val http = HttpClient(okhttp3.OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES).followSslRedirects(false).build())
+internal class GithubUpdateClient(
+    client: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES).followSslRedirects(false).build(),
+    private val now: () -> Long = System::currentTimeMillis,
+) : UpdateFeed {
+    private val http = HttpClient(client.newBuilder().addInterceptor { chain ->
+        val response = chain.proceed(chain.request())
+        if (response.code == 403 || response.code == 429) {
+            val retryAt = UpdatePolicy.retryAt(now(), response.header("Retry-After"),
+                response.header("X-RateLimit-Reset"), response.header("X-RateLimit-Remaining"))
+            response.close()
+            throw UpdateRateLimitException(retryAt)
+        }
+        response
+    }.build())
 
     private fun request(url: String) = http.request(url, mapOf("User-Agent" to "LumeTV/${BuildConfig.VERSION_NAME}",
         "Accept" to "application/vnd.github+json"))

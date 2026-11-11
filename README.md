@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.6.1 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.1/LumeTV-0.6.1.apk)
+> ### [Scarica Lume TV 0.6.2 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.2/LumeTV-0.6.2.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.6.1) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.6.2) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -108,9 +108,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.6.1** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.6.2** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.6.1 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.6.2 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 
@@ -128,7 +128,7 @@ Sostituisci `VERSIONE` con la versione scaricata. Gli aggiornamenti delle releas
 
 ### Aggiornamenti dall’app
 
-Le versioni che includono l’aggiornatore controllano le release pubbliche di `pjor94/LumeTV` all’avvio e ogni sei ore mentre l’app è in uso. Un pulsante nel catalogo segnala una nuova versione compatibile; **Opzioni → Aggiornamenti** permette anche il controllo manuale. Il controllo non apre finestre durante la diretta. Non viene eseguito a dispositivo spento o con l’app chiusa.
+Le versioni che includono l’aggiornatore controllano le release pubbliche di `pjor94/LumeTV` all’avvio, se sono trascorsi almeno 30 minuti dall’ultimo controllo riuscito, e ogni 30 minuti mentre l’app è in uso. Quando è disponibile una nuova versione compatibile, un popup nel catalogo propone **Aggiorna** o **Più tardi**. Durante una diretta il popup attende il ritorno al catalogo. **Più tardi** o Indietro lo rinviano al prossimo avvio dell’app; il pulsante nel catalogo e **Opzioni → Aggiornamenti** restano disponibili. Il controllo non viene eseguito a dispositivo spento o con l’app chiusa. In caso di errore attende un’ora, o più a lungo se GitHub richiede una pausa.
 
 Scegli **Scarica e aggiorna** per scaricare l’APK, verificarne dimensione, SHA-256, package, versione e certificato di firma e aprire il programma di installazione Android. Se richiesto, consenti a **Lume TV** di installare app, poi conferma l’aggiornamento sul dispositivo. La sostituzione dell’app può chiudere Lume: riaprila dal launcher. Preferiti e impostazioni vengono conservati negli aggiornamenti con la stessa firma. Puoi annullare un download o rinviare l’installazione; il controllo e il download non richiedono un account GitHub.
 

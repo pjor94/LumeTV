@@ -98,6 +98,7 @@ class TvActivity : ComponentActivity() {
     private var playbackGeneration = 0L
     private var activePlaybackChannelId: String? = null
     private var integrationDialog: android.app.AlertDialog? = null
+    private val catalogDialogs = mutableSetOf<android.app.AlertDialog>()
     private var resolveJob: Job? = null
     private var guideJob: Job? = null
     private var catalogJob: Job? = null
@@ -141,12 +142,13 @@ class TvActivity : ComponentActivity() {
             if (showingCatalog && currentFilter == "Guida TV") { guideView.tick(); updateGuideStatus() }
             if (showingCatalog && currentFilter == "Cosa guardare") { discoveryView.tick(); updateGuideStatus() }
             checkProgrammeReminders()
+            updates.maybePrompt()
             handler.postDelayed(this, 30_000)
         }
     }
     private val catalogTick = object : Runnable {
         override fun run() {
-            if (catalogLoaded) { refreshCatalog(false); refreshGuide(); updates.checkAutomatically() }
+            if (catalogLoaded) { refreshCatalog(false); refreshGuide() }
             handler.postDelayed(this, 15 * 60_000L)
         }
     }
@@ -183,7 +185,16 @@ class TvActivity : ComponentActivity() {
                 }
             }
         }
-        updates = UpdateController(this) { version ->
+        updates = UpdateController(this, savedInstanceState, {
+            catalogLoaded && showingCatalog && digits.isEmpty() && reminderDialog?.isShowing != true &&
+                exitDialog?.isShowing != true && integrationDialog?.isShowing != true &&
+                catalogDialogs.none { it.isShowing } && !guideView.hasDetails && !discoveryView.hasDetails &&
+                !(currentFilter == "Cosa guardare" && discoveryView.isEditing)
+        }, { previous ->
+            if (previous != null && previous !== root && previous !== grid && previous.isAttachedToWindow && previous.isShown)
+                previous.requestFocusFromTouch()
+            else { root.requestFocusFromTouch(); focusFirstChannel() }
+        }) { version ->
             updateNotice.contentDescription = "Aggiorna Lume TV alla versione $version"
             updateNotice.visibility = if (version != null) View.VISIBLE else View.GONE
         }
@@ -215,9 +226,9 @@ class TvActivity : ComponentActivity() {
         lifecycleScope.launch {
             logos.local()
             channels = repository.local()
-            catalogLoaded = true
             programmes = guide.local()
             if (isFinishing || isDestroyed) return@launch
+            catalogLoaded = true
             updateCatalog()
             if (launchQueue.pending != null) {
                 consumeLaunchRequest()
@@ -230,6 +241,7 @@ class TvActivity : ComponentActivity() {
             }
             refreshCatalog(false)
             refreshGuide()
+            root.post { updates.maybePrompt() }
         }
     }
 
@@ -260,6 +272,16 @@ class TvActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        root.post { updates.maybePrompt() }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ::updates.isInitialized) root.post { updates.maybePrompt() }
+    }
+
     private fun releasePlayback() {
         playerReady = false
         recovery.stop()
@@ -275,6 +297,7 @@ class TvActivity : ComponentActivity() {
         outState.putString("channel_filter", lastChannelFilter)
         outState.putBoolean("catalog", showingCatalog)
         outState.putBoolean("explicit_consumed", explicitRequestSeen && launchQueue.pending == null)
+        updates.saveState(outState)
         guideView.saveState(outState)
         discoveryView.saveState(outState)
         super.onSaveInstanceState(outState)
@@ -297,6 +320,7 @@ class TvActivity : ComponentActivity() {
             showingCatalog = true
             consumeLaunchRequest()
         }
+        updates.onNewIntent(intent)
     }
 
     private fun consumeLaunchRequest(): Boolean {
@@ -347,6 +371,7 @@ class TvActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        catalogDialogs.toList().forEach { it.dismiss() }
         integrationDialog?.dismiss()
         reminderDialog?.dismiss()
         exitDialog?.dismiss()
@@ -516,40 +541,45 @@ class TvActivity : ComponentActivity() {
 
     private fun showOptions() {
         val mode = if (repository.zapFavoritesOnly) "solo preferiti" else "tutti i canali"
-        android.app.AlertDialog.Builder(this).setTitle("Opzioni")
+        trackDialog(android.app.AlertDialog.Builder(this).setTitle("Opzioni")
             .setItems(arrayOf("Interfaccia: ${InterfacePreferences.selected(this).label}", "CH+/CH−: $mode", "Collegamento con AURA", "Aggiornamenti", "Informazioni", "Licenze e avvisi")) { _, index ->
                 when (index) {
-                    0 -> InterfacePreferences.choose(this) {
+                    0 -> trackDialog(InterfacePreferences.choose(this) {
                         releasePlayback()
                         val destination = if (!showingCatalog && current != null) "channel/${current!!.id}" else when (currentFilter) {
                             "Guida TV" -> "guide"; "Cosa guardare" -> "discover"; "Preferiti" -> "favorites"; else -> "catalog"
                         }
-                        startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW)
-                            .setData(android.net.Uri.parse("lumetv://$destination")))
+                        startActivity(updates.carrySession(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW)
+                            .setData(android.net.Uri.parse("lumetv://$destination"))))
                         finish()
-                    }
+                    })
                     1 -> showZappingOptions(); 2 -> showIntegrationOptions(); 3 -> updates.show(); 4 -> showAbout(); 5 -> showLicenses()
                 }
-            }.setNegativeButton("Chiudi", null).show()
+            }.setNegativeButton("Chiudi", null).show())
+    }
+
+    private fun trackDialog(dialog: android.app.AlertDialog) {
+        catalogDialogs += dialog
+        dialog.setOnDismissListener { catalogDialogs -= dialog; root.post { updates.maybePrompt() } }
     }
 
     private fun showZappingOptions() {
-        android.app.AlertDialog.Builder(this).setTitle("Cambio canale con CH+/CH−")
+        trackDialog(android.app.AlertDialog.Builder(this).setTitle("Cambio canale con CH+/CH−")
             .setSingleChoiceItems(arrayOf("Tutti i canali", "Solo preferiti"), if (repository.zapFavoritesOnly) 1 else 0) { dialog, selected ->
                 repository.zapFavoritesOnly = selected == 1
                 status.text = if (selected == 1) "CH+/CH− scorre i preferiti · OK prolungato per aggiungere un canale"
                     else "CH+/CH− scorre tutti i canali"
                 dialog.dismiss()
-            }.setNegativeButton("Annulla", null).show()
+            }.setNegativeButton("Annulla", null).show())
     }
 
     private fun showAbout() {
         val updated = if (repository.lastUpdated > 0) SimpleDateFormat("d MMM, HH:mm", Locale.ITALY).format(Date(repository.lastUpdated)) else "lista iniziale inclusa"
         val guideUpdated = if (guide.lastUpdated > 0) SimpleDateFormat("d MMM, HH:mm", Locale.ITALY).format(Date(guide.lastUpdated)) else "in attesa del primo aggiornamento"
-        android.app.AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
+        trackDialog(android.app.AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
             .setMessage("La TV, fatta semplice.\n\nCatalogo automatico ogni 24 ore: $updated.\nGuida automatica ogni 6 ore: $guideUpdated.\n↻ aggiorna canali e guida.\n\nIntegrazioni adattate da WorldLiveTV, WLTV Group; modifiche Lume TV del 27 ottobre 2026. Software libero, GPL-3.0-or-later: puoi ridistribuirlo e modificarlo secondo la licenza. Nessuna garanzia, nei limiti di legge.\n\nLe trasmissioni sono fornite dalle rispettive emittenti. Sorgenti e segnalazioni: github.com/pjor94/LumeTV.")
             .setPositiveButton("Chiudi", null)
-            .setNeutralButton("Licenze e avvisi") { _, _ -> showLicenses() }.show()
+            .setNeutralButton("Licenze e avvisi") { _, _ -> showLicenses() }.show())
     }
 
     private fun showLicenses() {
@@ -566,15 +596,15 @@ class TvActivity : ComponentActivity() {
             "OpenJDK · Assembly Exception" to "licenses/OPENJDK-ASSEMBLY_EXCEPTION.txt",
         )
         val titles = documents.keys.toTypedArray()
-        android.app.AlertDialog.Builder(this).setTitle("Licenze e avvisi")
+        trackDialog(android.app.AlertDialog.Builder(this).setTitle("Licenze e avvisi")
             .setItems(titles) { _, index ->
                 val text = TvStyle.text(this, assets.open(documents.getValue(titles[index])).bufferedReader().use { it.readText() }, 13f).apply {
                     setPadding(dp(24), dp(16), dp(24), dp(16))
                 }
                 val scroll = android.widget.ScrollView(this).apply { addView(text); isFocusable = true }
-                android.app.AlertDialog.Builder(this).setTitle(titles[index]).setView(scroll)
-                    .setPositiveButton("Chiudi", null).show()
-            }.setPositiveButton("Chiudi", null).show()
+                trackDialog(android.app.AlertDialog.Builder(this).setTitle(titles[index]).setView(scroll)
+                    .setPositiveButton("Chiudi", null).show())
+            }.setPositiveButton("Chiudi", null).show())
     }
 
     private fun updateCatalog() {
@@ -687,6 +717,7 @@ class TvActivity : ComponentActivity() {
         banner.visibility = View.GONE; loading.visibility = View.GONE; errorBox.visibility = View.GONE
         video.visibility = View.INVISIBLE; catalog.visibility = View.VISIBLE
         updateCatalog(); focusFirstChannel()
+        root.post { updates.maybePrompt() }
     }
 
     private fun showError(message: String) {
@@ -762,7 +793,7 @@ class TvActivity : ComponentActivity() {
     }
 
     private fun checkProgrammeReminders() {
-        if (!catalogLoaded || reminderDialog?.isShowing == true || exitDialog?.isShowing == true ||
+        if (!catalogLoaded || !hasWindowFocus() || reminderDialog?.isShowing == true || exitDialog?.isShowing == true ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
         val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
         val channel = channels.firstOrNull { it.id == due.channelId } ?: return

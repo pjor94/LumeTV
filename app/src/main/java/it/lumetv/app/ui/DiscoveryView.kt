@@ -91,6 +91,7 @@ class DiscoveryView(
     private var restoringDialog = false
     private val queryChanged = Runnable { controller.search(searchInput.text.toString()); render(false) }
     val isEditing get() = searchInput.hasFocus()
+    val hasDetails get() = dialog?.isShowing == true
 
     init {
         orientation = VERTICAL

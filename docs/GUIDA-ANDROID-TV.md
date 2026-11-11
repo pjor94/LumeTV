@@ -158,7 +158,9 @@ La scelta resta salvata sulla TV. I numeri e il catalogo continuano ad accedere 
 
 Gli aggiornamenti ufficiali conservano preferiti e impostazioni. Puoi annullare il download o rinviare l’installazione.
 
-Il controllo automatico avviene all’avvio e ogni sei ore mentre usi l’app. Puoi disattivarlo nella schermata Aggiornamenti. Se manca l’aggiornatore in una vecchia versione, installa manualmente l’APK dell’ultima release.
+Il controllo automatico avviene all’avvio, se sono trascorsi almeno 30 minuti dall’ultimo controllo riuscito, e ogni 30 minuti mentre usi l’app. Se trova una nuova versione compatibile, mostra un popup nel catalogo: **Aggiorna** apre la schermata Aggiornamenti; **Più tardi** o Indietro rinviano l’avviso al prossimo avvio. Il focus iniziale è su **Più tardi**. Durante una diretta il popup attende il ritorno al catalogo. Il pulsante di aggiornamento nel catalogo resta disponibile anche dopo il rinvio.
+
+Puoi disattivare i controlli automatici nella schermata Aggiornamenti. In caso di errore l’app attende un’ora, o più a lungo se GitHub richiede una pausa. Se manca l’aggiornatore in una vecchia versione, installa manualmente l’APK dell’ultima release.
 
 Catalogo e palinsesti hanno aggiornamenti separati: il **catalogo ogni 24 ore**, la **guida ogni sei ore**. **↻** nel catalogo richiede un aggiornamento di entrambi.
 

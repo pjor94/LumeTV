@@ -92,18 +92,20 @@ class MobileActivity : ComponentActivity() {
     private var channelsDialog: Dialog? = null
     private var refreshPicker: (() -> Unit)? = null
     private var reminderDialog: AlertDialog? = null
+    private val catalogDialogs = mutableSetOf<AlertDialog>()
 
     private val tick = object : Runnable {
         override fun run() {
             if (showingCatalog) browse.tick() else updateLiveInfo()
             refreshPicker?.invoke()
             checkReminders()
+            updates.maybePrompt()
             handler.postDelayed(this, 30_000)
         }
     }
     private val syncTick = object : Runnable {
         override fun run() {
-            if (catalogLoaded) { refreshCatalog(); refreshGuide(); updates.checkAutomatically() }
+            if (catalogLoaded) { refreshCatalog(); refreshGuide() }
             handler.postDelayed(this, 15 * 60_000L)
         }
     }
@@ -144,7 +146,11 @@ class MobileActivity : ComponentActivity() {
             insets
         }
         setContentView(root)
-        updates = UpdateController(this, browse::showUpdate)
+        updates = UpdateController(this, savedInstanceState, {
+            catalogLoaded && showingCatalog && programmeDialog?.isShowing != true &&
+                channelsDialog?.isShowing != true && reminderDialog?.isShowing != true &&
+                catalogDialogs.none { it.isShowing } && !browse.isSearching
+        }, notice = browse::showUpdate)
         applySystemBars()
         player.onBuffering = {
             if (!showingCatalog && !failed && !userPaused) {
@@ -201,6 +207,7 @@ class MobileActivity : ComponentActivity() {
                 else if (current == null) showCatalog()
             }
             refreshCatalog(); refreshGuide()
+            root.post { updates.maybePrompt() }
         }
     }
 
@@ -228,6 +235,21 @@ class MobileActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onResume() {
+        super.onResume()
+        root.post { updates.maybePrompt() }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ::updates.isInitialized) root.post { updates.maybePrompt() }
+    }
+
+    override fun onDestroy() {
+        catalogDialogs.toList().forEach { it.dismiss() }
+        super.onDestroy()
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         playback.updateConfiguration()
@@ -244,6 +266,7 @@ class MobileActivity : ComponentActivity() {
         outState.putBoolean("mobile_paused", userPaused)
         outState.putInt("mobile_orientation", requestedOrientation)
         outState.putBoolean("mobile_explicit_consumed", explicitRequestSeen && launchQueue.pending == null)
+        updates.saveState(outState)
         browse.saveState(outState)
         super.onSaveInstanceState(outState)
     }
@@ -258,6 +281,7 @@ class MobileActivity : ComponentActivity() {
             launchQueue.replace(LaunchRequest.parse(intent.dataString))
             consumeLaunchRequest()
         }
+        updates.onNewIntent(intent)
     }
 
     private fun consumeLaunchRequest(): Boolean {
@@ -346,6 +370,7 @@ class MobileActivity : ComponentActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         if (section != null) browse.navigate(section)
         renderData(); applySystemBars()
+        root.post { updates.maybePrompt() }
     }
 
     private fun showRecovery(text: String) {
@@ -526,7 +551,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun checkReminders() {
-        if (!catalogLoaded || reminderDialog?.isShowing == true || programmeDialog?.isShowing == true ||
+        if (!catalogLoaded || !hasWindowFocus() || reminderDialog?.isShowing == true || programmeDialog?.isShowing == true ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
         val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
         val channel = channels.firstOrNull { it.id == due.channelId } ?: return
@@ -541,22 +566,27 @@ class MobileActivity : ComponentActivity() {
 
     private fun showOptions() {
         val zap = if (repository.zapFavoritesOnly) "solo preferiti" else "tutti i canali"
-        AlertDialog.Builder(this).setTitle("Opzioni")
+        trackDialog(AlertDialog.Builder(this).setTitle("Opzioni")
             .setItems(arrayOf("Interfaccia: ${InterfacePreferences.selected(this).label}", "Cambio canale: $zap", "Aggiornamenti", "Collegamento con AURA", "Informazioni", "Licenze e avvisi")) { _, index ->
                 when (index) {
-                    0 -> InterfacePreferences.choose(this, ::changeInterface)
-                    1 -> AlertDialog.Builder(this).setTitle("Cambio canale")
+                    0 -> trackDialog(InterfacePreferences.choose(this, ::changeInterface))
+                    1 -> trackDialog(AlertDialog.Builder(this).setTitle("Cambio canale")
                         .setSingleChoiceItems(arrayOf("Tutti i canali", "Solo preferiti"), if (repository.zapFavoritesOnly) 1 else 0) { dialog, choice ->
                             repository.zapFavoritesOnly = choice == 1; dialog.dismiss()
-                        }.setNegativeButton("Annulla", null).show()
+                        }.setNegativeButton("Annulla", null).show())
                     2 -> updates.show()
                     3 -> showIntegrationOptions()
-                    4 -> AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
+                    4 -> trackDialog(AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
                         .setMessage("La TV, fatta semplice.\n\nCanali, guida e preferiti sul tuo dispositivo.\n\nIntegrazioni adattate da WorldLiveTV e WLTV Group. Software libero, GPL-3.0-or-later. Nessuna garanzia, nei limiti di legge.\n\nSorgenti e segnalazioni: github.com/pjor94/LumeTV.")
-                        .setPositiveButton("Chiudi", null).setNeutralButton("Licenze") { _, _ -> showLicenses() }.show()
+                        .setPositiveButton("Chiudi", null).setNeutralButton("Licenze") { _, _ -> showLicenses() }.show())
                     5 -> showLicenses()
                 }
-            }.setNegativeButton("Chiudi", null).show()
+            }.setNegativeButton("Chiudi", null).show())
+    }
+
+    private fun trackDialog(dialog: AlertDialog) {
+        catalogDialogs += dialog
+        dialog.setOnDismissListener { catalogDialogs -= dialog; root.post { updates.maybePrompt() } }
     }
 
     private fun changeInterface() {
@@ -565,18 +595,18 @@ class MobileActivity : ComponentActivity() {
             MobileSection.GUIDE -> "guide"; MobileSection.DISCOVER -> "discover"
         }
         releasePlayback()
-        startActivity(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(Uri.parse("lumetv://$destination")))
+        startActivity(updates.carrySession(Intent(this, MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(Uri.parse("lumetv://$destination"))))
         finish()
     }
 
     private fun showIntegrationOptions() {
         val enabled = IntegrationStore.allowed(this)
-        AlertDialog.Builder(this).setTitle("Collegamento con AURA")
+        trackDialog(AlertDialog.Builder(this).setTitle("Collegamento con AURA")
             .setMessage("Condividi con AURA i canali, i preferiti, la guida e l’ultimo canale guardato su questo dispositivo. Puoi revocare il collegamento dalle Opzioni.")
             .setPositiveButton(if (enabled) "Revoca collegamento" else "Consenti collegamento") { _, _ ->
                 IntegrationStore.setAllowed(this, !enabled)
                 message(if (enabled) "Collegamento con AURA revocato" else "Collegamento con AURA attivo")
-            }.setNegativeButton("Chiudi", null).show()
+            }.setNegativeButton("Chiudi", null).show())
     }
 
     private fun showLicenses() {
@@ -586,12 +616,12 @@ class MobileActivity : ComponentActivity() {
             "Mozilla Public License 2.0" to "licenses/MPL-2.0.txt", "XZ · Pubblico dominio" to "licenses/XZ-PUBLIC-DOMAIN.txt",
             "Avvisi delle dipendenze" to "DEPENDENCY_NOTICES.txt", "OpenJDK · Informazioni aggiuntive" to "licenses/DESUGAR-ADDITIONAL_LICENSE_INFO.txt",
             "OpenJDK · Assembly Exception" to "licenses/OPENJDK-ASSEMBLY_EXCEPTION.txt")
-        AlertDialog.Builder(this).setTitle("Licenze e avvisi").setItems(documents.keys.toTypedArray()) { _, index ->
+        trackDialog(AlertDialog.Builder(this).setTitle("Licenze e avvisi").setItems(documents.keys.toTypedArray()) { _, index ->
             val text = TvStyle.text(this, assets.open(documents.values.elementAt(index)).bufferedReader().use { it.readText() }, 14f)
                 .apply { setPadding(dp(20), dp(12), dp(20), dp(12)) }
-            AlertDialog.Builder(this).setTitle(documents.keys.elementAt(index)).setView(ScrollView(this).apply { addView(text) })
-                .setPositiveButton("Chiudi", null).show()
-        }.setNegativeButton("Chiudi", null).show()
+            trackDialog(AlertDialog.Builder(this).setTitle(documents.keys.elementAt(index)).setView(ScrollView(this).apply { addView(text) })
+                .setPositiveButton("Chiudi", null).show())
+        }.setNegativeButton("Chiudi", null).show())
     }
 
     private fun handleMediaKey(event: KeyEvent): Boolean {

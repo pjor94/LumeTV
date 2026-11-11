@@ -3,15 +3,18 @@ package it.lumetv.app.update
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 internal class UpdateException(message: String) : IOException(message)
+internal class UpdateRateLimitException(val retryAt: Long) : IOException("GitHub richiede una pausa. Riprova più tardi.")
 
 /** Only release assets in the project's repository can become download URLs. */
 internal object UpdatePolicy {
     const val REPOSITORY = "pjor94/LumeTV"
     const val FEED_URL = "https://api.github.com/repos/$REPOSITORY/releases?per_page=100"
     const val MAX_APK_SIZE = 128 * 1024 * 1024L
-    const val CHECK_INTERVAL = 6 * 60 * 60 * 1000L
+    const val CHECK_INTERVAL = 30 * 60 * 1000L
     const val RETRY_INTERVAL = 60 * 60 * 1000L
     private val version = Regex("(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?")
 
@@ -21,6 +24,15 @@ internal object UpdatePolicy {
         return "https://github.com/$REPOSITORY/releases/download/v$version/$name"
     }
     fun recent(saved: Long, now: Long, interval: Long) = saved > 0 && now >= saved && now - saved < interval
+    fun retryAt(now: Long, retryAfter: String?, reset: String?, remaining: String?): Long {
+        val delay = retryAfter?.toLongOrNull()?.takeIf { it >= 0 && it <= (Long.MAX_VALUE - now) / 1000 }
+            ?.let { now + it * 1000 }
+        val date = runCatching {
+            retryAfter?.let { ZonedDateTime.parse(it, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() }
+        }.getOrNull()
+        val limit = if (remaining == "0") reset?.toLongOrNull()?.takeIf { it in 1..Long.MAX_VALUE / 1000 }?.times(1000) else null
+        return maxOf(now + RETRY_INTERVAL, delay ?: 0, date ?: 0, limit ?: 0)
+    }
     fun invalid(): Nothing = throw UpdateException("I dati dell’aggiornamento non sono validi. Riprova più tardi.")
 }
 

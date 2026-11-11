@@ -53,9 +53,9 @@ object InterfacePreferences {
             (shortSide / context.resources.displayMetrics.density).toInt())
     }
 
-    fun choose(activity: Activity, changed: () -> Unit) {
+    fun choose(activity: Activity, changed: () -> Unit): AlertDialog {
         val previous = selected(activity)
-        AlertDialog.Builder(activity).setTitle("Interfaccia")
+        return AlertDialog.Builder(activity).setTitle("Interfaccia")
             .setSingleChoiceItems(InterfaceMode.entries.map { it.label }.toTypedArray(), previous.ordinal) { dialog, index ->
                 val next = InterfaceMode.entries[index]
                 dialog.dismiss()

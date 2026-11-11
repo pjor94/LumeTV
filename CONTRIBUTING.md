@@ -48,6 +48,8 @@ Per l’uscita dall’app usa `python3 tools/smoke_exit.py --adb /percorso/adb -
 
 Per l’interfaccia smartphone usa `python3 tools/smoke_mobile.py --adb /percorso/adb --serial emulator-5564 --video /percorso/video-sintetico.mp4`, con APK debug installata su un emulatore telefono temporaneo. Verifica riconoscimento automatico, navigazione touch, ricerca, preferiti, guida, avvisi, pausa, rotazione senza ricreare il player, elenco canali durante la diretta, collegamenti a caldo e scelta manuale dell’interfaccia. Ripristina cache, preferenze, rotazione e testo al termine; report e schermate sono in `analysis/mobile-smoke/`.
 
+Per i popup degli aggiornamenti usa `python3 tools/smoke_updates.py --adb /percorso/adb --serial emulator-5560 --mode tv --video /percorso/video-sintetico.mp4 --output analysis/update-popup-tv`, con APK debug installata su un emulatore temporaneo. Su un emulatore telefono usa `--mode phone` e un percorso di output distinto. Il test usa metadati di aggiornamento fittizi salvati nella cache, verifica rinvio, riavvio, standby, cambio di interfaccia, diretta e finestre sovrapposte, e acquisisce il popup con testo normale e al 130%. Non scarica APK e ripristina dati e impostazioni al termine. I test JVM coprono anche l’intervallo di 30 minuti, l’attesa dopo gli errori e le pause di GitHub.
+
 `InterfacePolicyTest` verifica la precedenza dei dispositivi TV, la selezione smartphone, il comportamento di tablet/box e l’override manuale. Il launcher pubblico resta `MainActivity`; inoltra gli stessi collegamenti a `TvActivity` o `MobileActivity`. Le Activity delle due UI non sono esportate.
 
 ## Catalogo e risorse

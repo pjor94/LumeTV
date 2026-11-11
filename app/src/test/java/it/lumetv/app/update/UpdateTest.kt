@@ -11,6 +11,9 @@ import org.junit.Test
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 
 class UpdateTest {
     private val bytes = "APK fixture".toByteArray()
@@ -27,6 +30,8 @@ class UpdateTest {
     private class Store : UpdateStore {
         override var lastSuccess = 0L
         override var lastAttempt = 0L
+        override var retryAfter = 0L
+        override var rateLimitUntil = 0L
         override var cached: String? = null
     }
     private inner class Feed(var releases: List<UpdateInfo> = listOf(update)) : UpdateFeed {
@@ -84,6 +89,7 @@ class UpdateTest {
     }
 
     @Test fun `checks persist candidates throttle successful calls and allow manual refresh`() = runTest {
+        assertEquals(30 * 60_000L, UpdatePolicy.CHECK_INTERVAL)
         var time = 100_000L
         val store = Store()
         val feed = Feed()
@@ -92,9 +98,11 @@ class UpdateTest {
         assertEquals(2, feed.requests.size)
         assertEquals(update, UpdateRepository(feed, store, 5, 36).available(true))
         time += UpdatePolicy.CHECK_INTERVAL - 1
+        assertEquals(1L, repository.nextCheckDelay())
         repository.refresh(true)
         assertEquals(2, feed.requests.size)
         time++
+        assertEquals(0L, repository.nextCheckDelay())
         repository.refresh(true)
         repository.refresh(true, force = true)
         assertEquals(6, feed.requests.size)
@@ -113,11 +121,87 @@ class UpdateTest {
         val requests = feed.requests.size
         repository.refresh(true)
         assertEquals(requests, feed.requests.size)
-        time += UpdatePolicy.RETRY_INTERVAL
+        time += UpdatePolicy.CHECK_INTERVAL
+        assertEquals(UpdatePolicy.RETRY_INTERVAL - UpdatePolicy.CHECK_INTERVAL, repository.nextCheckDelay())
+        UpdateRepository(feed, store, 5, 36) { time }.refresh(true)
+        assertEquals(requests, feed.requests.size)
+        time += UpdatePolicy.RETRY_INTERVAL - UpdatePolicy.CHECK_INTERVAL
         feed.fail = false; feed.invalidManifest = true
         try { repository.refresh(true); fail() } catch (_: Exception) { }
         assertEquals(update, repository.available(true))
         assertEquals(100_000L, store.lastSuccess)
+    }
+
+    @Test fun `manual retry can recover from an ordinary network error`() = runTest {
+        val feed = Feed().apply { fail = true }
+        val repository = UpdateRepository(feed, Store(), 5, 36) { 100_000L }
+        try { repository.refresh(true); fail() } catch (_: IOException) { }
+        feed.fail = false
+        assertEquals(update, repository.refresh(true, force = true))
+        assertEquals(UpdatePolicy.CHECK_INTERVAL, repository.nextCheckDelay())
+    }
+
+    @Test fun `error backoff starts when a slow failed request finishes`() = runTest {
+        var time = 100_000L
+        val feed = object : UpdateFeed {
+            override suspend fun text(url: String, limit: Int): String {
+                time += 30_000L
+                throw IOException("offline")
+            }
+        }
+        val repository = UpdateRepository(feed, Store(), 5, 36) { time }
+        try { repository.refresh(true); fail() } catch (_: IOException) { }
+        assertEquals(UpdatePolicy.RETRY_INTERVAL, repository.nextCheckDelay())
+    }
+
+    @Test fun `server pause survives restart and manual checks cannot bypass it`() = runTest {
+        var time = 100_000L
+        var requests = 0
+        val retryAt = time + 2 * UpdatePolicy.RETRY_INTERVAL
+        val feed = object : UpdateFeed {
+            override suspend fun text(url: String, limit: Int): String {
+                requests++
+                throw UpdateRateLimitException(retryAt)
+            }
+        }
+        val store = Store().apply { cached = update.json() }
+        val repository = UpdateRepository(feed, store, 5, 36) { time }
+        try { repository.refresh(true); fail() } catch (_: UpdateRateLimitException) { }
+        time += UpdatePolicy.RETRY_INTERVAL
+        val restarted = UpdateRepository(feed, store, 5, 36) { time }
+        assertEquals(update, restarted.refresh(true))
+        assertEquals(UpdatePolicy.RETRY_INTERVAL, restarted.nextCheckDelay())
+        try { restarted.refresh(true, force = true); fail() } catch (_: UpdateRateLimitException) { }
+        assertEquals(1, requests)
+        time = retryAt
+        val recovered = UpdateRepository(Feed(), store, 5, 36) { time }
+        assertEquals(update, recovered.refresh(true))
+        assertEquals(0L, store.rateLimitUntil)
+        assertEquals(0L, store.retryAfter)
+    }
+
+    @Test fun `GitHub pauses use retry after seconds dates and primary reset headers`() {
+        val time = 1_800_000_000_000L
+        assertEquals(time + 7_200_000, UpdatePolicy.retryAt(time, "7200", null, null))
+        val date = java.time.Instant.ofEpochMilli(time + 10_800_000).atZone(java.time.ZoneOffset.UTC)
+            .format(java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME)
+        assertEquals(time + 10_800_000, UpdatePolicy.retryAt(time, date, null, null))
+        assertEquals(time + 14_400_000, UpdatePolicy.retryAt(time, "7200", ((time + 14_400_000) / 1000).toString(), "0"))
+        assertEquals(time + UpdatePolicy.RETRY_INTERVAL, UpdatePolicy.retryAt(time, "invalid", "invalid", "0"))
+    }
+
+    @Test fun `HTTP client preserves GitHub retry headers when the request fails`() = runTest {
+        val server = MockWebServer()
+        server.start()
+        try {
+            for (status in listOf(403, 429)) {
+                server.enqueue(MockResponse().setResponseCode(status).setHeader("Retry-After", "7200"))
+                val client = GithubUpdateClient(OkHttpClient()) { 100_000L }
+                try { client.text(server.url("/releases").toString(), 1024); fail() }
+                catch (limited: UpdateRateLimitException) { assertEquals(7_300_000L, limited.retryAt) }
+            }
+            assertEquals(2, server.requestCount)
+        } finally { server.shutdown() }
     }
 
     @Test fun `highest compatible code wins even when feed order is different`() = runTest {

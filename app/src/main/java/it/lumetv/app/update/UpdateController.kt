@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.widget.CheckBox
@@ -16,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
 import it.lumetv.app.BuildConfig
 import it.lumetv.app.R
 import it.lumetv.app.data.SourceException
@@ -23,15 +25,35 @@ import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /** Foreground checks only. Automatic discovery never opens a dialog over live TV. */
-internal class UpdateController(private val activity: ComponentActivity, private val notice: (String?) -> Unit) {
+internal class UpdateController(
+    private val activity: ComponentActivity,
+    savedInstanceState: Bundle?,
+    private val canPrompt: () -> Boolean,
+    private val restoreFocus: (View?) -> Unit = { previous ->
+        if (previous?.isAttachedToWindow == true && previous.isShown) previous.requestFocusFromTouch()
+    },
+    private val notice: (String?) -> Unit,
+) {
+    companion object {
+        const val LAUNCH_KEY = "update_prompt_launch"
+        private const val SESSION_KEY = "update_prompt_versions"
+    }
+    private val launchId = activity.intent.getStringExtra(LAUNCH_KEY)
+        ?: savedInstanceState?.getString(LAUNCH_KEY) ?: UUID.randomUUID().toString()
+    private val promptSession = UpdatePromptSession(savedInstanceState?.getString(LAUNCH_KEY) ?: launchId,
+        savedInstanceState?.getIntArray(SESSION_KEY) ?: intArrayOf()).apply {
+        enter(launchId, activity.intent.getIntArrayExtra(SESSION_KEY) ?: intArrayOf())
+    }
     private val prefs = activity.getSharedPreferences("app_updates", Context.MODE_PRIVATE)
     private val store = object : UpdateStore {
         override var lastSuccess: Long
@@ -40,6 +62,12 @@ internal class UpdateController(private val activity: ComponentActivity, private
         override var lastAttempt: Long
             get() = prefs.getLong("last_attempt", 0)
             set(value) { prefs.edit { putLong("last_attempt", value) } }
+        override var retryAfter: Long
+            get() = prefs.getLong("retry_after", 0)
+            set(value) { prefs.edit { putLong("retry_after", value) } }
+        override var rateLimitUntil: Long
+            get() = prefs.getLong("rate_limit_until", 0)
+            set(value) { prefs.edit { putLong("rate_limit_until", value) } }
         override var cached: String?
             get() = prefs.getString("candidate", null)
             set(value) { prefs.edit { putString("candidate", value) } }
@@ -52,6 +80,8 @@ internal class UpdateController(private val activity: ComponentActivity, private
         get() = prefs.getBoolean("automatic", true)
         set(value) { prefs.edit { putBoolean("automatic", value) } }
     private var job: Job? = null
+    private var automaticJob: Job? = null
+    private var started = false
     private var busy = false
     private var generation = 0
     private var ready: UpdateInfo? = runCatching {
@@ -61,6 +91,7 @@ internal class UpdateController(private val activity: ComponentActivity, private
     private var message: String? = null
     private var percent: Int? = null
     private var dialog: AlertDialog? = null
+    private var promptDialog: AlertDialog? = null
     private var permissionDialog: AlertDialog? = null
     private var summary: TextView? = null
     private var progress: ProgressBar? = null
@@ -76,19 +107,74 @@ internal class UpdateController(private val activity: ComponentActivity, private
         show()
     }
 
-    fun onStart() { render(); checkAutomatically() }
+    fun onStart() { started = true; render(); checkAutomatically() }
     fun onStop() {
+        started = false
+        automaticJob?.cancel()
         generation++
         job?.cancel()
         if (busy) message = "Operazione interrotta. Puoi riprovare da questa schermata."
         busy = false; percent = null
         dialog?.dismiss()
         permissionDialog?.dismiss()
+        promptDialog?.dismiss()
     }
-    fun checkAutomatically() { if (automatic && !busy) check(false) }
+    fun checkAutomatically() {
+        if (!started || !automatic) return
+        if (!busy && repository.nextCheckDelay() == 0L) check(false) else scheduleAutomaticCheck()
+        maybePrompt()
+    }
+
+    private fun scheduleAutomaticCheck() {
+        automaticJob?.cancel()
+        if (!started || !automatic) return
+        automaticJob = activity.lifecycleScope.launch {
+            delay(maxOf(1000L, repository.nextCheckDelay(), if (busy) 60_000L else 0L))
+            checkAutomatically()
+        }
+    }
+
+    fun saveState(state: Bundle) {
+        state.putString(LAUNCH_KEY, promptSession.launchId)
+        state.putIntArray(SESSION_KEY, promptSession.snapshot())
+    }
+    fun carrySession(intent: Intent): Intent = intent.putExtra(LAUNCH_KEY, promptSession.launchId)
+        .putExtra(SESSION_KEY, promptSession.snapshot())
+    fun onNewIntent(intent: Intent) {
+        promptDialog?.dismiss()
+        promptSession.enter(intent.getStringExtra(LAUNCH_KEY) ?: return, intent.getIntArrayExtra(SESSION_KEY) ?: intArrayOf())
+        if (dialog?.isShowing == true) available?.let { promptSession.acknowledge(it.versionCode) }
+        checkAutomatically()
+    }
+
+    fun maybePrompt() {
+        if (!started || !automatic || busy || activity.isFinishing || activity.isDestroyed ||
+            !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || !activity.hasWindowFocus() ||
+            dialog?.isShowing == true || permissionDialog?.isShowing == true || promptDialog?.isShowing == true || !canPrompt()) return
+        val info = available ?: return
+        if (!promptSession.shouldOffer(info.versionCode)) return
+        val previousFocus = activity.currentFocus
+        val window = AlertDialog.Builder(activity).setTitle(R.string.update_available_title)
+            .setMessage(activity.getString(R.string.update_available_message, info.versionName, BuildConfig.VERSION_NAME))
+            .setPositiveButton(R.string.update_open) { _, _ -> show() }
+            .setNegativeButton(R.string.update_later, null).create()
+        promptDialog = window
+        window.setOnDismissListener {
+            if (promptDialog === window) promptDialog = null
+            activity.window.decorView.post {
+                if (started && canPrompt() && dialog?.isShowing != true && permissionDialog?.isShowing != true &&
+                    promptDialog?.isShowing != true && !activity.isFinishing && !activity.isDestroyed) restoreFocus(previousFocus)
+            }
+        }
+        window.show()
+        promptSession.acknowledge(info.versionCode)
+        window.getButton(AlertDialog.BUTTON_NEGATIVE).apply { isFocusableInTouchMode = true; requestFocus() }
+    }
 
     fun show() {
         if (activity.isFinishing || activity.isDestroyed) return
+        available?.let { promptSession.acknowledge(it.versionCode) }
+        promptDialog?.dismiss()
         dialog?.dismiss()
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -102,7 +188,10 @@ internal class UpdateController(private val activity: ComponentActivity, private
         autoToggle = CheckBox(activity).apply {
             setText(R.string.update_auto_check)
             isChecked = automatic; minHeight = activity.dp(48)
-            setOnCheckedChangeListener { _, checked -> automatic = checked; if (checked) checkAutomatically() }
+            setOnCheckedChangeListener { _, checked ->
+                automatic = checked
+                if (checked) checkAutomatically() else automaticJob?.cancel()
+            }
         }
         content.addView(autoToggle)
         val window = AlertDialog.Builder(activity).setTitle("Aggiornamenti").setView(content)
@@ -126,6 +215,7 @@ internal class UpdateController(private val activity: ComponentActivity, private
         generation++; job?.cancel()
         if (busy) message = "Operazione annullata."
         busy = false; percent = null; render()
+        scheduleAutomaticCheck()
     }
 
     private fun check(force: Boolean) {
@@ -144,7 +234,7 @@ internal class UpdateController(private val activity: ComponentActivity, private
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
               catch (error: Exception) { if (token == generation) message = errorMessage(error) }
-            finally { if (token == generation) { busy = false; render() } }
+            finally { if (token == generation) { busy = false; render(); scheduleAutomaticCheck(); maybePrompt() } }
         }
     }
 
@@ -164,7 +254,7 @@ internal class UpdateController(private val activity: ComponentActivity, private
                 requestInstall()
             } catch (cancelled: CancellationException) { throw cancelled }
               catch (error: Exception) { apk.delete(); ready = null; message = errorMessage(error) }
-            finally { if (token == generation) { busy = false; percent = null; render() } }
+            finally { if (token == generation) { busy = false; percent = null; render(); scheduleAutomaticCheck() } }
         }
     }
 
@@ -200,15 +290,16 @@ internal class UpdateController(private val activity: ComponentActivity, private
             try { UpdateInstaller.verify(activity, apk, info); ensureActive(); busy = false; requestInstall() }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { apk.delete(); ready = null; message = errorMessage(error); show() }
-            finally { if (token == generation) { busy = false; render() } }
+            finally { if (token == generation) { busy = false; render(); scheduleAutomaticCheck() } }
         }
     }
 
     private fun render() {
         val info = available
+        if (dialog?.isShowing == true) info?.let { promptSession.acknowledge(it.versionCode) }
         notice(info?.versionName)
         val checked = if (store.lastSuccess > 0) "Ultimo controllo: " + SimpleDateFormat("d MMM, HH:mm", Locale.ITALY).format(Date(store.lastSuccess))
-            else "Controllo all’avvio e ogni sei ore mentre usi Lume TV."
+            else "Controllo all’avvio e ogni 30 minuti mentre usi Lume TV."
         summary?.text = message ?: if (info != null) {
             "Disponibile Lume TV ${info.versionName}.\n" +
                 "L’aggiornamento conserva preferiti e impostazioni.\n$checked"
@@ -227,6 +318,7 @@ internal class UpdateController(private val activity: ComponentActivity, private
     }
 
     private fun errorMessage(error: Exception): String = when {
+        error is UpdateRateLimitException -> error.message.orEmpty()
         error is UpdateException -> error.message.orEmpty()
         error is SourceException && error.status in setOf(403, 429) -> "GitHub richiede una pausa. Riprova più tardi."
         else -> "Non riesco a verificare o scaricare l’aggiornamento. Controlla la connessione e riprova."

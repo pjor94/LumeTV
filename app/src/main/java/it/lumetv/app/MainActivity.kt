@@ -3,6 +3,8 @@ package it.lumetv.app
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import it.lumetv.app.update.UpdateController
+import java.util.UUID
 
 /** Stable launcher/deep-link entry point. Each interface owns its navigation and window. */
 class MainActivity : Activity() {
@@ -23,6 +25,7 @@ class MainActivity : Activity() {
             action = source.action
             data = source.data
             source.extras?.let { putExtras(it) }
+            putExtra(UpdateController.LAUNCH_KEY, source.getStringExtra(UpdateController.LAUNCH_KEY) ?: UUID.randomUUID().toString())
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         })
         finish()

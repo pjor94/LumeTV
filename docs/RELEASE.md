@@ -40,13 +40,13 @@ Per abilitare il collegamento con AURA nelle release, imposta anche la variabile
 ## Preparare e avviare una versione
 
 1. Imposta `versionName` in `app/build.gradle.kts` e incrementa `versionCode` per ogni nuova versione da installare come aggiornamento.
-2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.6.1` è già presente.
+2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.6.2` è già presente.
 3. Esegui le verifiche indicate in [CONTRIBUTING.md](../CONTRIBUTING.md). Aggiungi a Git tutti i nuovi sorgenti e documenti, poi committa e pubblica le modifiche.
 4. Crea e pubblica un tag esattamente uguale a `v<versionName>`. Con la versione attuale:
 
 ```sh
-git tag -a v0.6.1 -m 'Lume TV 0.6.1'
-git push origin v0.6.1
+git tag -a v0.6.2 -m 'Lume TV 0.6.2'
+git push origin v0.6.2
 ```
 
 Il push avvia la pipeline. In alternativa, dopo che il workflow è presente sul ramo predefinito, apri **Actions → Release → Run workflow** e inserisci il nome di un tag esistente. Il checkout usa quel tag; non viene pubblicato lo stato corrente di un altro ramo. Per pubblicare le modifiche nuove, il tag deve includerle.
@@ -78,7 +78,7 @@ L’app interroga l’elenco delle release pubblicate, esclude bozze e versioni 
 
 Su Android 9 e 10, le versioni fino alla 0.6.0 possono mostrare un falso errore di firma perché non richiedono tutti i flag necessari per leggere i certificati dell’APK. Per questi dispositivi, la prima release contenente la correzione va installata manualmente sopra quella esistente, usando l’APK ufficiale firmata con la stessa chiave. Non occorre disinstallare l’app; preferiti e impostazioni vengono conservati. Dopo questo passaggio gli aggiornamenti dall’app possono usare il controllo corretto.
 
-Non sostituire gli allegati di una release già pubblicata per aggiungere il supporto agli aggiornamenti: pubblica una nuova versione completa. Le vecchie release senza `update.json` vengono ignorate dall’aggiornatore. La prima versione che lo contiene richiede un’installazione manuale; il controllo avviene poi all’avvio e ogni sei ore durante l’uso. Questa implementazione apre l’installer di sistema e richiede la conferma dell’utente, senza installazioni silenziose o controlli in standby.
+Non sostituire gli allegati di una release già pubblicata per aggiungere il supporto agli aggiornamenti: pubblica una nuova versione completa. Le vecchie release senza `update.json` vengono ignorate dall’aggiornatore. La prima versione che lo contiene richiede un’installazione manuale; il controllo avviene poi all’avvio, se sono trascorsi almeno 30 minuti dall’ultimo controllo riuscito, e ogni 30 minuti durante l’uso. Il popup di disponibilità viene mostrato soltanto nel catalogo, una volta per versione a ogni avvio; il rinvio sopravvive a standby, ricreazione della schermata e cambio di interfaccia. Gli errori impongono un’attesa di un’ora; le pause indicate da GitHub vengono conservate e rispettate anche dai controlli manuali. Questa implementazione apre l’installer di sistema e richiede la conferma dell’utente, senza installazioni silenziose o controlli in standby.
 
 ## CI ordinaria e catalogo
 
@@ -107,8 +107,8 @@ Puoi preparare anche gli allegati completi senza modificare l’indice Git, crea
 ```sh
 ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:writeReleaseDependencies --no-daemon
 python3 tools/dependency_sources.py fetch --report app/build/reports/release-dependencies.json
-python3 tools/release.py sign --sdk "$ANDROID_HOME" --output-dir dist/v0.6.1
-python3 tools/release.py prepare --include-untracked --output-dir dist/v0.6.1
+python3 tools/release.py sign --sdk "$ANDROID_HOME" --output-dir dist/v0.6.2
+python3 tools/release.py prepare --include-untracked --output-dir dist/v0.6.2
 ```
 
 La cartella contiene APK firmata, sorgenti corrispondenti, certificato pubblico, `update.json`, checksum e note estratte dal changelog. `--include-untracked` è ammesso solo per `prepare`: include esplicitamente i nuovi sorgenti e documenti, lasciando esclusi file ignorati, chiavi, build e appunti locali.

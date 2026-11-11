@@ -68,6 +68,7 @@ class GuideView(
     private var rendering = false
     private var focusGeneration = 0
     private var dialog: Dialog? = null
+    val hasDetails get() = dialog?.isShowing == true
     private var suppressDialogFocus = false
     private var statusMessage = ""
     private val timeline = GuideTimelineView(context, logos, navigation,

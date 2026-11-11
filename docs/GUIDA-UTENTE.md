@@ -17,7 +17,7 @@ La scelta rimane salvata. Cambiare interfaccia conserva catalogo, guida e prefer
 
 ## Versioni e download
 
-Queste guide descrivono **Lume TV 0.6.0**, che comprende entrambe le interfacce. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.0/LumeTV-0.6.0.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
+Queste guide descrivono **Lume TV 0.6.2**, che comprende entrambe le interfacce e gli avvisi per le nuove versioni. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.2/LumeTV-0.6.2.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
 
 Il supporto smartphone è stato introdotto nella versione 0.6.0. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 
