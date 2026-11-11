@@ -99,15 +99,19 @@ def main():
             time.sleep(.25)
         return False
 
-    def frame_count():
-        return adb("logcat", "-d", "-s", "LumePlayer:I").count(b"first_frame")
+    def frame_marker():
+        # Logcat is a ring buffer: an old event can disappear while a new one arrives.
+        # Compare the latest timestamped event rather than the number retained.
+        frames = [line for line in adb("logcat", "-d", "-s", "LumePlayer:I").splitlines() if b"first_frame" in line]
+        return frames[-1] if frames else b""
 
     def player_count():
         return adb("logcat", "-d", "-s", "LumePlayer:I").count(b"player_created")
 
     def wait_frame(before):
         for _ in range(25):
-            if frame_count() > before:
+            marker = frame_marker()
+            if marker and marker != before:
                 return True
             time.sleep(1)
         return False
@@ -119,7 +123,7 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(QuietHandler, directory=str(args.video.resolve().parent)))
     Thread(target=server.serve_forever, daemon=True).start()
     url = "http://10.0.2.2:" + str(server.server_port) + "/" + args.video.name
-    paths = ["files/channels.m3u", "files/guide.json", "shared_prefs/guide.xml", "shared_prefs/lume.xml",
+    paths = ["files/channels.m3u", "files/radios.json", "files/guide.json", "shared_prefs/guide.xml", "shared_prefs/lume.xml",
              "shared_prefs/app_updates.xml", "shared_prefs/discovery.xml", "shared_prefs/interface.xml"]
     stop()
     adb("shell", "run-as", PACKAGE, "mkdir", "-p", "files", "shared_prefs")
@@ -153,7 +157,7 @@ def main():
         write("files/channels.m3u", ("\n".join(playlist) + "\n").encode())
         write("files/guide.json", json.dumps(guide).encode())
         write("shared_prefs/guide.xml", f'<map><long name="updated" value="{now}"/><int name="policy_version" value="1"/><int name="logo_metadata_version" value="1"/></map>'.encode())
-        write("shared_prefs/lume.xml", f'<map><long name="catalog_updated" value="{now}"/></map>'.encode())
+        write("shared_prefs/lume.xml", f'<map><long name="catalog_updated" value="{now}"/><long name="radios_updated" value="{now}"/></map>'.encode())
         write("shared_prefs/app_updates.xml", b'<map><boolean name="automatic" value="false"/></map>')
         write("shared_prefs/discovery.xml", b'<map/>')
         write("shared_prefs/interface.xml", b'<map/>')
@@ -163,8 +167,8 @@ def main():
         adb("shell", "wm", "user-rotation", "lock", "0")
         initial = nodes()
         passed("Smartphone riconosciuto automaticamente", foreground(".MobileActivity"))
-        passed("Quattro destinazioni touch disponibili", all(any(n.get("content-desc") == label and n.get("clickable") == "true" for n in initial)
-               for label in ["Canali", "Preferiti", "Guida", "Scopri"]))
+        passed("Cinque destinazioni touch disponibili", all(any(n.get("content-desc") == label and n.get("clickable") == "true" for n in initial)
+               for label in ["Canali", "Radio", "Preferiti", "Guida", "Scopri"]))
         passed("Catalogo con programma in onda", any("Notizie in diretta" in n.get("content-desc", "") for n in initial))
         capture("01-catalog.png")
         click("Preferiti", description=True)
@@ -198,7 +202,7 @@ def main():
         click("Tra poco")
         passed("Scopri usa la selezione programmi condivisa", any("Il prossimo programma" in n.get("content-desc", "") for n in nodes()))
         capture("05-discovery.png")
-        before_live = frame_count()
+        before_live = frame_marker()
         launch("channel/" + first_id)
         passed("Deep link apre la diretta sintetica", wait_frame(before_live))
         # The controllers auto-hide during viewing. A tap on the letterbox reveals them.
@@ -233,12 +237,12 @@ def main():
         click("Riprendi la diretta", description=True)
         # Open through the normal player controls, without leaving playback.
         click("Canali")
-        before_picker = frame_count()
+        before_picker = frame_marker()
         picker = nodes()
         passed("Elenco canali touch durante la diretta", any(n.get("content-desc") == "Chiudi elenco canali" for n in picker))
         capture("08-live-channels.png")
         click("Chiudi elenco canali", description=True)
-        passed("Elenco canali non riavvia la diretta", frame_count() == before_picker)
+        passed("Elenco canali non riavvia la diretta", frame_marker() == before_picker)
         launch("channel/" + second_id)
         passed("Deep link a caldo cambia canale", wait_frame(before_picker))
         launch("favorites")
@@ -246,14 +250,14 @@ def main():
         passed("Deep link torna ai preferiti", any(n.get("content-desc") == "Preferiti" and n.get("selected") == "true" for n in favorite_nodes))
         passed("Indietro non richiede un telecomando", foreground(".MobileActivity"))
         click("Opzioni", description=True)
-        click("Interfaccia: Automatica")
+        click("Interfaccia")
         click("TV")
         passed("Scelta manuale attiva la UI TV", foreground(".TvActivity"))
         capture("09-tv-override.png")
         stop(); launch()
         passed("Scelta manuale conservata al riavvio", foreground(".TvActivity"))
         click("Opzioni")
-        click("Interfaccia: TV")
+        click("Interfaccia")
         click("Automatica")
         passed("Ritorno automatico alla UI smartphone", foreground(".MobileActivity"))
         click("Preferiti", description=True)

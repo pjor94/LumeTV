@@ -156,6 +156,17 @@ class ReleaseTest(unittest.TestCase):
                 checksum, name = line.split('  ', 1)
                 self.assertEqual(checksum, hashlib.sha256(archive.read('LumeTV-0.2.1/' + name)).hexdigest())
 
+    def test_new_java_tools_are_included_in_local_corresponding_source(self):
+        source = self.root / 'tools/android/MediaButtonProbe.java'
+        source.parent.mkdir(parents=True)
+        source.write_text('public final class MediaButtonProbe {}')
+        with self.assertRaisesRegex(ValueError, 'Untracked source'):
+            build_archive(self.root, self.output)
+        output = build_archive(self.root, self.output, include_untracked=True)
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(source.read_bytes(), archive.read('LumeTV-0.2.1/tools/android/MediaButtonProbe.java'))
+        self.assertEqual('', self.git('diff', '--cached', '--name-only'))
+
     def prepared(self):
         self.output.mkdir()
         with zipfile.ZipFile(self.output / 'LumeTV-0.2.1.apk', 'w') as apk:

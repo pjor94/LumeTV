@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.6.2 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.2/LumeTV-0.6.2.apk)
+> ### [Scarica Lume TV 0.7.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.7.0/LumeTV-0.7.0.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.6.2) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.7.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -35,12 +35,24 @@ Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedica
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Cosa offre
+## Novità della 0.7.0
+
+Lume TV include le radio italiane WorldRadio di WLTV, con ricerca per nome/città, preferiti e recenti separati dai canali TV.
+
+Sullo smartphone, le radio continuano a suonare a schermo spento e durante l’uso di altre app, con controlli nella notifica, sulla schermata di blocco e dalle cuffie. Il mini player mantiene la riproduzione durante la navigazione nel catalogo. Le dirette TV offrono Picture in Picture sui dispositivi compatibili e un pulsante **Solo audio**; **Opzioni → Qualità e consumo dati** permette di scegliere il risparmio dati quando l’emittente offre più qualità.
+
+Su Android TV, una schermata radio dedicata offre i comandi per telecomando. Tornando al catalogo o aprendo la guida, la diretta prosegue in un’anteprima interna; **Apri la diretta** ritorna al player e **Interrompi** chiude la riproduzione. Uscendo dall’app o passando ad altre app sulla TV, la riproduzione termina.
+
+**Opzioni** è una pagina dedicata su entrambi i dispositivi. Sulla TV mantiene il menu superiore delle altre pagine, con navigazione da telecomando e anteprima della diretta; sul telefono mantiene il mini player. È corretto anche l’arresto involontario della riproduzione cambiando canale dalla lista sulla Bravia.
+
+Il progetto continua a usare un solo player. Timer di spegnimento e integrazioni per l’auto sono esclusi da questa versione. I consumi e l’audio offload vanno verificati su hardware fisico; la modalità solo audio non riduce necessariamente il traffico se la sorgente unisce audio e video nello stesso flusso.
+
+## Funzioni
 
 - Canali Rai, Rai/TGR e Mediaset presenti nella lista WLTV, insieme alle altre sorgenti supportate.
 - Riproduzione a tutto schermo di flussi HLS e DASH, con supporto Widevine quando richiesto dall’emittente.
 - Su TV: navigazione con telecomando, selezione numerica e cambio canale con CH+/CH−.
-- Su smartphone Android: navigazione touch con **Canali / Preferiti / Guida / Scopri**, ricerca e pulsanti per preferiti, pausa/ripresa, cambio canale e schermo intero.
+- Su smartphone Android: navigazione touch con **Canali / Radio / Preferiti / Guida / Scopri**, ricerca e pulsanti per preferiti, pausa/ripresa, cambio canale e schermo intero.
 - Elenco canali durante la diretta, con loghi, programma in onda e filtro preferiti, senza interrompere la visione: laterale sulla TV e touch sul telefono.
 - Preferiti e memorizzazione dell’ultimo canale guardato. Sulla TV, l’ultimo canale viene riaperto all’avvio; sul telefono si apre il catalogo.
 - Cambio canale su tutti i canali o solo sui preferiti, configurabile in **Opzioni**, con CH+/CH− sulla TV e pulsanti precedente/successivo sul telefono.
@@ -108,9 +120,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.6.2** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.7.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.6.2 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.7.0 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 
@@ -165,7 +177,7 @@ Durante la diretta, OK o INFO mostra gli orari del programma, l’avanzamento, i
 
 Premi **←** per aprire l’elenco laterale: il focus parte dal canale in visione, contrassegnato da un punto azzurro. **↑/↓** scorre i canali senza cambiare la diretta; **OK** conferma la scelta e chiude l’elenco. I loghi, il programma in onda e la barra di avanzamento aiutano a scegliere. Una seconda pressione di **←** porta ai filtri **Tutti** e **Preferiti** in cima all’elenco; il filtro non modifica la modalità CH+/CH− delle Opzioni. **→** da un canale o **Indietro** richiude il pannello senza interrompere il video. L’apertura è immediata e la navigazione rispetta le animazioni disabilitate nelle impostazioni della TV.
 
-Per le interruzioni recuperabili, Lume prova a riaprire la diretta fino a tre volte, dopo 2, 5 e 10 secondi, richiedendo nuovamente l’indirizzo del flusso. Se manca la connessione, attende che torni. I tentativi si annullano aprendo il catalogo, cambiando canale o mettendo l’app in standby. Gli errori DRM, i formati non supportati e le richieste di pausa del servizio restano gestiti con un messaggio e il pulsante **Riprova**.
+Per le interruzioni recuperabili, Lume prova a riaprire la diretta fino a tre volte, dopo 2, 5 e 10 secondi, richiedendo nuovamente l’indirizzo del flusso. Se manca la connessione, attende che torni. I tentativi si annullano cambiando emittente, mettendo in pausa o interrompendo la riproduzione; sulla TV si annullano anche uscendo dall’app o entrando in standby. Gli errori DRM, i formati non supportati e le richieste di pausa del servizio restano gestiti con un messaggio e il pulsante **Riprova**.
 
 ## Catalogo e guida
 

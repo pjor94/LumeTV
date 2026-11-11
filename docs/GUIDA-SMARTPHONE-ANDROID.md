@@ -2,7 +2,7 @@
 
 Lume TV permette di guardare le dirette italiane sul telefono, con comandi touch, preferiti e palinsesto. La stessa APK comprende anche l’interfaccia per telecomando: se usi una TV, consulta la [guida per Android TV e Google TV](GUIDA-ANDROID-TV.md).
 
-Questa guida descrive **Lume TV 0.6.0**, la prima versione con interfaccia smartphone. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
+Questa guida descrive **Lume TV 0.7.0**, con radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 
 [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
@@ -50,16 +50,17 @@ La scelta viene conservata. Su un tablet che si apre in modalità TV, scegli **S
 
 ## Navigare tra le sezioni
 
-La barra in basso contiene quattro sezioni:
+La barra in basso contiene cinque sezioni:
 
 | Sezione | Cosa puoi fare |
 | --- | --- |
 | **Canali** | Sfogliare il catalogo, cercare un canale e aprire la diretta |
+| **Radio** | Cercare una stazione per nome o città, ascoltarla e ritrovare preferite e recenti |
 | **Preferiti** | Ritrovare i canali che hai salvato con il cuore |
 | **Guida** | Consultare il palinsesto di un canale alla volta |
 | **Scopri** | Cercare tra i programmi in onda, in arrivo o della serata |
 
-In alto trovi il pulsante di aggiornamento, con la freccia circolare, e **Opzioni**. Le impostazioni comprendono interfaccia, cambio canale, aggiornamenti, collegamento con AURA, informazioni e licenze.
+In alto trovi il pulsante di aggiornamento, con la freccia circolare, e **Opzioni**. La pagina comprende interfaccia, cambio canale, qualità e consumo dati, aggiornamenti, collegamento con AURA, informazioni e licenze.
 
 ## Cercare e guardare un canale
 
@@ -163,12 +164,13 @@ Il pulsante o il gesto **Indietro** di Android segue la schermata aperta:
 | Dove sei | Cosa succede |
 | --- | --- |
 | Dettagli o elenco canali aperti | Chiude il pannello |
-| Diretta | Torna alla consultazione precedente |
+| Opzioni | Torna al catalogo precedente |
+| Diretta | Torna alla consultazione precedente con il mini player |
 | Ricerca | Chiude prima la tastiera o la ricerca |
-| Preferiti, Guida o Scopri | Torna a Canali |
+| Radio, Preferiti, Guida o Scopri | Torna a Canali |
 | Home di Canali | Chiude la schermata dell’app senza conferma |
 
-Se lasci l’app e la sua schermata non è più visibile, la riproduzione si interrompe. Preferiti e impostazioni rimangono salvati.
+Le radio e la TV in modalità **Solo audio** continuano anche lasciando l’app o bloccando lo schermo. La TV video può proseguire in **Picture in Picture**, quando disponibile e consentito; senza PiP la riproduzione video si interrompe uscendo. Per terminare l’ascolto usa **Interrompi** nel player, nel mini player o nei controlli di sistema. Preferiti e impostazioni rimangono salvati.
 
 ## Se qualcosa non funziona
 
@@ -193,3 +195,20 @@ Il collegamento con AURA è facoltativo e riguarda i metadati sullo stesso dispo
 ---
 
 Lume TV è un progetto indipendente basato sul lavoro di WorldLiveTV / WLTV Group; non è un’app ufficiale delle emittenti. Le prove della UI smartphone sono state eseguite su emulatore, con palinsesto e video locali.
+
+
+## Radio e multitasking
+
+Queste funzioni sono disponibili dalla versione 0.7.0.
+
+**Radio** apre il catalogo italiano WLTV. Cerca il nome di una stazione o di una città, oppure usa **Tutte / Preferite / Recenti**. Il cuore salva la stazione; i recenti comprendono le emittenti avviate correttamente. Il cambio precedente/successivo rimane tra le radio; durante la TV rimane tra i canali TV.
+
+La schermata di ascolto mostra stazione, stato e titolo del brano quando fornito dal flusso. Puoi usare pausa/ripresa, precedente/successivo, preferito e **Interrompi**. Tornando al catalogo, il mini player continua a riprodurre e permette di riaprire il player o interrompere. Le radio continuano anche passando ad altre app e bloccando lo schermo; i controlli di sistema e delle cuffie agiscono sulla stessa riproduzione. Chiamate, altre app audio e scollegamento delle cuffie vengono gestiti dal sistema audio Android.
+
+Durante una diretta TV, il pulsante **Picture in Picture** apre la finestra video sui dispositivi compatibili con Android 8 o successivo. Durante la riproduzione il passaggio alla Home può aprirla automaticamente, se consentito dalle impostazioni Android. Chiudendo il PiP la TV si interrompe. Il pulsante **Solo audio** mantiene invece il suono a schermo spento; **Torna al video** ripristina l’immagine. Un flusso che unisce audio e video può continuare a richiedere il traffico di entrambe le tracce anche in modalità solo audio.
+
+**Opzioni → Qualità e consumo dati → Automatica / Risparmio dati** modifica la selezione delle qualità disponibili. Le radio con un solo bitrate mantengono quello dell’emittente. L’audio offload viene abilitato quando il dispositivo e il formato lo consentono; i consumi reali richiedono una prova sul telefono fisico.
+
+**Opzioni** apre una pagina dedicata con le preferenze di riproduzione e le voci dell’app. Sotto ogni voce compare il valore attuale. La freccia in alto e Indietro di Android riportano al catalogo conservando sezione, ricerca e posizione. Durante l’ascolto o la visione, il mini player resta disponibile nella pagina: puoi mettere in pausa, interrompere o riaprire il player.
+
+Non sono previsti timer di spegnimento né integrazioni per l’auto in questa versione.

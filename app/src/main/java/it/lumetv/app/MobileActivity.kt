@@ -1,5 +1,13 @@
 package it.lumetv.app
 
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.app.PendingIntent
+import android.graphics.Rect
+import android.graphics.drawable.Icon
+import android.os.Build
+import android.util.Rational
+import android.content.pm.PackageManager
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.Intent
@@ -32,9 +40,11 @@ import it.lumetv.app.data.*
 import it.lumetv.app.integration.IntegrationStore
 import it.lumetv.app.integration.LaunchQueue
 import it.lumetv.app.integration.LaunchRequest
-import it.lumetv.app.playback.NetworkMonitor
-import it.lumetv.app.playback.PlaybackFailure
-import it.lumetv.app.playback.PlaybackRecovery
+import it.lumetv.app.playback.PlaybackSnapshot
+import it.lumetv.app.playback.PlaybackService
+import it.lumetv.app.ui.mobile.MobileMiniPlayer
+import it.lumetv.app.ui.mobile.MobileOption
+import it.lumetv.app.ui.mobile.MobileOptionsView
 import it.lumetv.app.playback.TvPlayer
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
@@ -48,7 +58,6 @@ import it.lumetv.app.update.UpdateController
 import it.lumetv.core.Channel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -63,27 +72,25 @@ class MobileActivity : ComponentActivity() {
     private lateinit var repository: ChannelRepository
     private lateinit var guide: GuideRepository
     private lateinit var logos: ChannelLogoRepository
-    private lateinit var resolver: StreamResolver
     private lateinit var player: TvPlayer
-    private lateinit var recovery: PlaybackRecovery
-    private lateinit var network: NetworkMonitor
     private lateinit var reminders: ProgrammeReminders
     private lateinit var updates: UpdateController
     private lateinit var root: FrameLayout
     private lateinit var browse: MobileBrowseView
+    private lateinit var miniPlayer: MobileMiniPlayer
+    private lateinit var options: MobileOptionsView
     private lateinit var playback: MobilePlaybackView
     private var channels = emptyList<Channel>()
     private var programmes = emptyMap<String, List<Programme>>()
     private var current: Channel? = null
     private var showingCatalog = true
+    private var showingOptions = false
     private var userPaused = false
     private var failed = false
     private var catalogLoaded = false
     private var playerReady = false
+    private var activeSessionSeen = false
     private var explicitRequestSeen = false
-    private var playbackGeneration = 0L
-    private var activePlaybackChannelId: String? = null
-    private var resolveJob: Job? = null
     private var catalogJob: Job? = null
     private var guideJob: Job? = null
     private var guideLoading = false
@@ -117,14 +124,10 @@ class MobileActivity : ComponentActivity() {
         reminders = ProgrammeReminders(this)
         logos = ChannelLogoRepository(this, http, lifecycleScope)
         guide = GuideRepository(this, http, logos::updateSources)
-        resolver = StreamResolver(http)
         player = TvPlayer(this, http)
-        network = NetworkMonitor(this) { online -> recovery.onNetworkChanged(online) }
-        recovery = PlaybackRecovery(lifecycleScope, { network.isOnline }, { openCurrentChannel() },
-            onWaiting = { showRecovery("Connessione assente · Riprendo quando torna la rete…") },
-            onScheduled = { attempt, maximum -> showRecovery("Riconnetto la diretta… Tentativo $attempt di $maximum") },
-            onExhausted = ::showError)
         showingCatalog = savedInstanceState?.getBoolean("mobile_catalog", true) ?: true
+        showingOptions = savedInstanceState?.getBoolean("mobile_options", false) ?: false
+        if (showingOptions) showingCatalog = true
         userPaused = savedInstanceState?.getBoolean("mobile_paused", false) ?: false
         if (!showingCatalog) requestedOrientation = savedInstanceState?.getInt("mobile_orientation", ActivityInfo.SCREEN_ORIENTATION_FULL_USER)
             ?: ActivityInfo.SCREEN_ORIENTATION_FULL_USER
@@ -134,52 +137,56 @@ class MobileActivity : ComponentActivity() {
         browse = MobileBrowseView(this, logos, repository::isFavorite, ::chooseItem, ::toggleFavorite,
             { refreshCatalog(true); refreshGuide(true) }, ::showOptions, { updates.show() })
         browse.restoreState(savedInstanceState)
-        playback = MobilePlaybackView(this, { showCatalog() }, ::togglePause, { zap(-1) }, { zap(1) },
+        playback = MobilePlaybackView(this, logos, { showCatalog() }, ::togglePause, { zap(-1) }, { zap(1) },
             ::showChannels, ::toggleFullscreen, { current?.let(::toggleFavorite) }, ::showCurrentProgramme,
-            { current?.let { selectChannel(it) } }).apply { visibility = View.GONE }
+            { current?.let { selectChannel(it) } }, ::toggleAudioOnly, ::enterPip, ::stopPlayback).apply { visibility = View.GONE }
+        miniPlayer = MobileMiniPlayer(this, ::openPlayback, ::togglePause, ::stopPlayback)
+        browse.setMiniPlayer(miniPlayer)
+        options = MobileOptionsView(this, ::closeOptions, ::chooseOption).apply {
+            visibility = if (showingOptions) View.VISIBLE else View.GONE
+        }
+        options.restoreState(savedInstanceState)
+        playback.pipButton.visibility = if (supportsPip()) View.VISIBLE else View.GONE
         root.addView(browse, FrameLayout.LayoutParams(-1, -1))
         root.addView(playback, FrameLayout.LayoutParams(-1, -1))
+        root.addView(options, FrameLayout.LayoutParams(-1, -1))
+        if (showingOptions) { browse.visibility = View.GONE; options.setMiniPlayer(miniPlayer) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val keyboard = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(safe.left, safe.top, safe.right, max(safe.bottom, if (showingCatalog) keyboard.bottom else 0))
+            if (Build.VERSION.SDK_INT >= 26 && isInPictureInPictureMode) view.setPadding(0, 0, 0, 0)
+            else view.setPadding(safe.left, safe.top, safe.right, max(safe.bottom, if (showingCatalog) keyboard.bottom else 0))
             insets
         }
         setContentView(root)
         updates = UpdateController(this, savedInstanceState, {
-            catalogLoaded && showingCatalog && programmeDialog?.isShowing != true &&
+            catalogLoaded && showingCatalog && !showingOptions && programmeDialog?.isShowing != true &&
                 channelsDialog?.isShowing != true && reminderDialog?.isShowing != true &&
                 catalogDialogs.none { it.isShowing } && !browse.isSearching
-        }, notice = browse::showUpdate)
+        }, notice = { version -> browse.showUpdate(version); if (showingOptions) renderOptions() })
+        renderOptions()
         applySystemBars()
-        player.onBuffering = {
-            if (!showingCatalog && !failed && !userPaused) {
-                playback.showLoading("Carico la diretta…"); recovery.onBuffering()
+        player.onChanged = ::renderPlayback
+        player.onConnected = {
+            playerReady = true
+            if (catalogLoaded && !consumeLaunchRequest()) {
+                if (player.snapshot.channel != null) {
+                    if (intent.getBooleanExtra("open_player", false)) { intent.removeExtra("open_player"); openPlayback() }
+                    else renderPlayback(player.snapshot)
+                } else if (!showingCatalog && current != null) selectChannel(current!!, restorePause = true)
             }
         }
-        player.onReady = { if (!showingCatalog && !failed && userPaused) playback.ready(false) }
-        player.onPlayingChanged = { playing ->
-            if (!showingCatalog && !failed && playing) {
-                playback.ready(true)
-                current?.takeIf { it.id == activePlaybackChannelId }?.let(repository::recordPlayback)
-                recovery.onPlaying()
-            } else {
-                recovery.onNotPlaying()
-                if (!showingCatalog) playback.setPlaying(false)
-            }
-        }
-        player.onError = { error ->
-            if (!showingCatalog) {
-                if (userPaused) showError(error.message) else recovery.onFailure(error)
-            }
-        }
-        if (savedInstanceState?.getBoolean("mobile_explicit_consumed") != true && intent.action == Intent.ACTION_VIEW) {
+        // Keep the consumed marker across repeated recreation, so an old catalog link
+        // cannot replace the restored options page or another navigation destination.
+        explicitRequestSeen = savedInstanceState?.getBoolean("mobile_explicit_consumed") == true
+        if (!explicitRequestSeen && intent.action == Intent.ACTION_VIEW) {
             explicitRequestSeen = true
             launchQueue.replace(LaunchRequest.parse(intent.dataString))
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
+                    showingOptions -> closeOptions()
                     !showingCatalog -> showCatalog()
                     browse.closeSearch() -> Unit
                     browse.section != MobileSection.CHANNELS -> browse.navigate(MobileSection.CHANNELS)
@@ -199,12 +206,15 @@ class MobileActivity : ComponentActivity() {
             if (isFinishing || isDestroyed) return@launch
             catalogLoaded = true
             val previous = savedInstanceState?.getString("mobile_channel") ?: repository.lastChannelId
-            current = channels.firstOrNull { it.id == previous }
+            current = player.snapshot.channel ?: channels.firstOrNull { it.id == previous }
             renderData()
             if (!consumeLaunchRequest()) {
-                if (!showingCatalog && current != null && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+                if (player.snapshot.channel != null) {
+                    if (intent.getBooleanExtra("open_player", false)) { intent.removeExtra("open_player"); openPlayback() }
+                    else if (!showingCatalog) openPlayback() else renderPlayback(player.snapshot)
+                } else if (!showingCatalog && current != null && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
                     selectChannel(current!!, restorePause = true)
-                else if (current == null) showCatalog()
+                else if (current == null && !showingOptions) showCatalog()
             }
             refreshCatalog(); refreshGuide()
             root.post { updates.maybePrompt() }
@@ -215,11 +225,7 @@ class MobileActivity : ComponentActivity() {
         super.onStart()
         updates.onStart()
         player.attach(playback.video)
-        playerReady = true
-        network.start()
         handler.post(tick); handler.post(syncTick)
-        if (!consumeLaunchRequest() && catalogLoaded && !showingCatalog && current != null)
-            selectChannel(current!!, restorePause = true)
     }
 
     override fun onStop() {
@@ -227,16 +233,16 @@ class MobileActivity : ComponentActivity() {
         programmeDialog?.dismiss(); programmeDialog = null
         channelsDialog?.dismiss(); channelsDialog = null; refreshPicker = null
         reminderDialog?.dismiss(); reminderDialog = null
-        network.stop()
         catalogJob?.cancel(); guideJob?.cancel()
         handler.removeCallbacksAndMessages(null)
-        releasePlayback()
+        releasePlayback(stop = !player.snapshot.backgroundAllowed)
         playback.stopTimers()
         super.onStop()
     }
 
     override fun onResume() {
         super.onResume()
+        if (showingOptions) renderOptions()
         root.post { updates.maybePrompt() }
     }
 
@@ -263,11 +269,13 @@ class MobileActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("mobile_channel", current?.id)
         outState.putBoolean("mobile_catalog", showingCatalog)
+        outState.putBoolean("mobile_options", showingOptions)
         outState.putBoolean("mobile_paused", userPaused)
         outState.putInt("mobile_orientation", requestedOrientation)
         outState.putBoolean("mobile_explicit_consumed", explicitRequestSeen && launchQueue.pending == null)
         updates.saveState(outState)
         browse.saveState(outState)
+        options.saveState(outState)
         super.onSaveInstanceState(outState)
     }
 
@@ -276,10 +284,15 @@ class MobileActivity : ComponentActivity() {
         setIntent(intent)
         if (intent.action == Intent.ACTION_VIEW) {
             explicitRequestSeen = true
-            showCatalog()
+            // A channel link replaces playback directly, preserving fullscreen orientation.
+            programmeDialog?.dismiss(); channelsDialog?.dismiss()
+            activeSessionSeen = false
             player.stop()
             launchQueue.replace(LaunchRequest.parse(intent.dataString))
             consumeLaunchRequest()
+        }
+        if (intent.getBooleanExtra("open_player", false) && player.isConnected) {
+            intent.removeExtra("open_player"); openPlayback()
         }
         updates.onNewIntent(intent)
     }
@@ -295,7 +308,7 @@ class MobileActivity : ComponentActivity() {
             LaunchRequest.Favorites -> showCatalog(MobileSection.FAVORITES)
             LaunchRequest.Guide -> showCatalog(MobileSection.GUIDE)
             LaunchRequest.Discover -> showCatalog(MobileSection.DISCOVER)
-            LaunchRequest.Integration -> { showCatalog(MobileSection.CHANNELS); showIntegrationOptions() }
+            LaunchRequest.Integration -> { showCatalog(MobileSection.CHANNELS); showOptions(); showIntegrationOptions() }
             LaunchRequest.Invalid -> { showCatalog(MobileSection.CHANNELS); message("Collegamento non valido") }
         }
         return true
@@ -307,87 +320,137 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun selectChannel(channel: Channel, restorePause: Boolean = false) {
+        dismissOptions()
         programmeDialog?.dismiss(); channelsDialog?.dismiss()
         browse.hideKeyboard()
-        recovery.start()
+        val same = player.snapshot.channel?.id == channel.id && player.snapshot.error == null
         current = channel; showingCatalog = false; failed = false
-        if (!restorePause) userPaused = false
+        playback.restoreVideo()
         browse.visibility = View.GONE; playback.visibility = View.VISIBLE
-        updateLiveInfo()
-        applySystemBars()
-        openCurrentChannel()
+        if (!same) {
+            playback.showLoading("Apro ${channel.name}…")
+            player.select(channel, mobile = true, play = !restorePause || !userPaused)
+        } else {
+            if (!restorePause && !player.snapshot.wantsToPlay) player.resumeToLive()
+            renderPlayback(player.snapshot)
+        }
+        updateLiveInfo(); applySystemBars(); updatePip()
     }
 
-    private fun openCurrentChannel() {
-        val channel = current ?: return
-        resolveJob?.cancel()
-        val generation = ++playbackGeneration
-        activePlaybackChannelId = null
-        player.stop()
-        playback.showLoading("Apro ${channel.name}…")
-        if (!userPaused) recovery.onBuffering()
-        resolveJob = lifecycleScope.launch {
-            try {
-                val stream = resolver.resolve(channel)
-                ensureActive()
-                if (generation != playbackGeneration || current?.id != channel.id || showingCatalog ||
-                    !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return@launch
-                activePlaybackChannelId = channel.id
-                player.play(stream, playWhenReady = !userPaused)
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (error: Exception) {
-                if (generation == playbackGeneration) {
-                    if (userPaused) showError(PlaybackFailure.fromSource(error).message)
-                    else recovery.onFailure(PlaybackFailure.fromSource(error))
-                }
-            }
+    private fun openPlayback() {
+        dismissOptions()
+        val state = player.snapshot
+        if (state.channel == null) { current?.let { selectChannel(it) }; return }
+        current = state.channel
+        showingCatalog = false
+        playback.restoreVideo()
+        browse.visibility = View.GONE; playback.visibility = View.VISIBLE
+        updateLiveInfo(); renderPlayback(state); applySystemBars(); updatePip()
+    }
+
+    private fun renderPlayback(state: PlaybackSnapshot) {
+        if (!::miniPlayer.isInitialized) return
+        if (state.channel == null) {
+            miniPlayer.visibility = View.GONE
+            if (activeSessionSeen) { activeSessionSeen = false; if (!showingOptions) showCatalog() }
+            if (state.error != null && !showingCatalog) playback.showError(state.error)
+            applySystemBars()
+            updatePip()
+            return
         }
+        activeSessionSeen = true
+        current = state.channel
+        userPaused = !state.wantsToPlay
+        failed = state.error != null
+        updateLiveInfo()
+        if (state.error != null) playback.showError(state.error)
+        else if (state.buffering) playback.showLoading(state.message.ifBlank { "Carico la diretta…" })
+        else playback.ready(state.playing)
+        playback.renderState(state, repository.isFavorite(state.channel))
+        if (showingCatalog) miniPlayer.bind(state, playback.video)
+        else miniPlayer.visibility = View.GONE
+        renderData(); applySystemBars(); updatePip()
     }
 
     private fun togglePause() {
-        if (showingCatalog || current == null || failed) return
-        if (player.isPlaying) {
-            userPaused = true
-            recovery.stop()
-            player.pauseForCatalog()
-            playback.ready(false)
-        } else {
-            userPaused = false
-            recovery.start()
-            if (!player.resumeToLive()) openCurrentChannel()
-            else if (player.isPlaying) { playback.ready(true); recovery.onPlaying() }
-            else { playback.showLoading("Riprendo la diretta…"); recovery.onBuffering() }
-        }
+        if (player.snapshot.channel == null) return
+        if (player.snapshot.error != null) current?.let { selectChannel(it) }
+        else player.togglePause()
     }
 
     private fun showCatalog(section: MobileSection? = null) {
+        dismissOptions()
         programmeDialog?.dismiss(); channelsDialog?.dismiss()
-        recovery.stop(); resolveJob?.cancel()
-        playbackGeneration++; activePlaybackChannelId = null
-        player.pauseForCatalog()
         showingCatalog = true
         playback.stopTimers(); playback.visibility = View.GONE; browse.visibility = View.VISIBLE
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         if (section != null) browse.navigate(section)
-        renderData(); applySystemBars()
+        miniPlayer.bind(player.snapshot, playback.video)
+        renderData(); applySystemBars(); updatePip()
         root.post { updates.maybePrompt() }
     }
 
-    private fun showRecovery(text: String) {
-        resolveJob?.cancel(); player.stop(); playback.showLoading(text)
+    private fun stopPlayback() {
+        val keepOptions = showingOptions
+        player.stop()
+        if (!keepOptions) showCatalog()
     }
 
-    private fun showError(text: String) {
-        recovery.stop(); resolveJob?.cancel(); player.stop()
-        failed = true
-        playback.showError(text)
-    }
-
-    private fun releasePlayback() {
+    private fun releasePlayback(stop: Boolean = true) {
         playerReady = false
-        recovery.stop(); resolveJob?.cancel()
-        playbackGeneration++; activePlaybackChannelId = null
-        player.release()
+        activeSessionSeen = false
+        player.release(stop)
+    }
+
+    private fun toggleAudioOnly() {
+        if (current?.isRadio == true) return
+        player.setAudioOnly(!player.snapshot.audioOnly)
+        updatePip()
+    }
+
+    private fun supportsPip() = Build.VERSION.SDK_INT >= 26 && packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+
+    private fun pipEligible(): Boolean = supportsPip() && !showingCatalog && player.snapshot.channel != null &&
+        !player.snapshot.audioOnly && !failed && player.snapshot.wantsToPlay
+
+    private fun updatePip() {
+        if (Build.VERSION.SDK_INT < 26 || !supportsPip()) return
+        val eligible = pipEligible()
+        val params = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
+        val rect = Rect()
+        if (playback.video.getGlobalVisibleRect(rect) && !rect.isEmpty) params.setSourceRectHint(rect)
+        fun action(drawable: Int, label: String, command: String, request: Int): RemoteAction = RemoteAction(
+            Icon.createWithResource(this, drawable), label, label,
+            PendingIntent.getService(this, request, Intent(this, PlaybackService::class.java).setAction(command),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        params.setActions(listOf(
+            action(R.drawable.ic_mobile_previous, "Precedente", PlaybackService.PREVIOUS, 1),
+            action(if (player.snapshot.wantsToPlay) R.drawable.ic_mobile_pause else R.drawable.ic_mobile_play,
+                if (player.snapshot.wantsToPlay) "Pausa" else "Riprendi", PlaybackService.TOGGLE, 2),
+            action(R.drawable.ic_mobile_next, "Successivo", PlaybackService.NEXT, 3)))
+        if (Build.VERSION.SDK_INT >= 31) params.setAutoEnterEnabled(eligible).setSeamlessResizeEnabled(true)
+        setPictureInPictureParams(params.build())
+    }
+
+    private fun enterPip() {
+        if (!pipEligible() || Build.VERSION.SDK_INT < 26) return
+        updatePip()
+        try {
+            if (!enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build()))
+                message("Picture in Picture non disponibile. Controlla le impostazioni dell’app.")
+        } catch (_: IllegalStateException) { message("Picture in Picture non disponibile su questo dispositivo.") }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < 31 && pipEligible()) enterPip()
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        playback.setInPip(isInPictureInPictureMode)
+        applySystemBars()
+        if (!isInPictureInPictureMode) renderPlayback(player.snapshot)
     }
 
     private fun zap(direction: Int) {
@@ -402,10 +465,12 @@ class MobileActivity : ComponentActivity() {
     private fun toggleFavorite(channel: Channel) {
         repository.toggleFavorite(channel)
         renderData(); updateLiveInfo(); refreshPicker?.invoke()
+        val state = player.snapshot
+        state.channel?.let { playback.renderState(state, repository.isFavorite(it)) }
     }
 
     private fun renderData() {
-        browse.submit(channels, programmes, current?.id, catalogLoaded)
+        browse.submit(channels, programmes, current?.id, catalogLoaded, repository.recentIds)
         updateGuideStatus()
     }
 
@@ -459,7 +524,8 @@ class MobileActivity : ComponentActivity() {
         if (!showingCatalog && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
             controller.hide(WindowInsetsCompat.Type.systemBars())
         else controller.show(WindowInsetsCompat.Type.systemBars())
-        if (showingCatalog) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if ((showingCatalog && player.snapshot.channel == null) || player.snapshot.audioOnly || !player.snapshot.wantsToPlay)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         ViewCompat.requestApplyInsets(root)
     }
@@ -484,7 +550,7 @@ class MobileActivity : ComponentActivity() {
         panel.addView(empty, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
         panel.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
         fun render() {
-            rows.items = channels.filter { !favoritesOnly || repository.isFavorite(it) }.map {
+            rows.items = channels.filter { it.isRadio == (current?.isRadio == true) && (!favoritesOnly || repository.isFavorite(it)) }.map {
                 MobileBrowseItem(it, ProgrammeWindow.at(programmes[it.epgId].orEmpty(), System.currentTimeMillis()).current, channelRow = true)
             }
             rows.notifyDataSetChanged()
@@ -565,33 +631,74 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun showOptions() {
-        val zap = if (repository.zapFavoritesOnly) "solo preferiti" else "tutti i canali"
-        trackDialog(AlertDialog.Builder(this).setTitle("Opzioni")
-            .setItems(arrayOf("Interfaccia: ${InterfacePreferences.selected(this).label}", "Cambio canale: $zap", "Aggiornamenti", "Collegamento con AURA", "Informazioni", "Licenze e avvisi")) { _, index ->
-                when (index) {
-                    0 -> trackDialog(InterfacePreferences.choose(this, ::changeInterface))
-                    1 -> trackDialog(AlertDialog.Builder(this).setTitle("Cambio canale")
-                        .setSingleChoiceItems(arrayOf("Tutti i canali", "Solo preferiti"), if (repository.zapFavoritesOnly) 1 else 0) { dialog, choice ->
-                            repository.zapFavoritesOnly = choice == 1; dialog.dismiss()
-                        }.setNegativeButton("Annulla", null).show())
-                    2 -> updates.show()
-                    3 -> showIntegrationOptions()
-                    4 -> trackDialog(AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
-                        .setMessage("La TV, fatta semplice.\n\nCanali, guida e preferiti sul tuo dispositivo.\n\nIntegrazioni adattate da WorldLiveTV e WLTV Group. Software libero, GPL-3.0-or-later. Nessuna garanzia, nei limiti di legge.\n\nSorgenti e segnalazioni: github.com/pjor94/LumeTV.")
-                        .setPositiveButton("Chiudi", null).setNeutralButton("Licenze") { _, _ -> showLicenses() }.show())
-                    5 -> showLicenses()
-                }
-            }.setNegativeButton("Chiudi", null).show())
+        browse.hideKeyboard()
+        showingOptions = true
+        options.resetScroll()
+        renderOptions()
+        options.setMiniPlayer(miniPlayer)
+        miniPlayer.bind(player.snapshot, playback.video)
+        browse.visibility = View.GONE
+        options.visibility = View.VISIBLE
+        applySystemBars(); updatePip()
+    }
+
+    private fun closeOptions() {
+        dismissOptions()
+        browse.visibility = View.VISIBLE
+        miniPlayer.bind(player.snapshot, playback.video)
+        applySystemBars(); updatePip()
+        root.post { updates.maybePrompt() }
+    }
+
+    private fun dismissOptions() {
+        if (!showingOptions) return
+        showingOptions = false
+        options.visibility = View.GONE
+        browse.setMiniPlayer(miniPlayer)
+    }
+
+    private fun renderOptions() {
+        options.bind(InterfacePreferences.selected(this).label, repository.zapFavoritesOnly,
+            getSharedPreferences("lume", MODE_PRIVATE).getBoolean("data_saver", false),
+            IntegrationStore.allowed(this), BuildConfig.VERSION_NAME, updates.available?.versionName)
+    }
+
+    private fun chooseOption(option: MobileOption) {
+        when (option) {
+            MobileOption.INTERFACE -> trackDialog(InterfacePreferences.choose(this, ::changeInterface))
+            MobileOption.ZAPPING -> trackDialog(AlertDialog.Builder(this).setTitle("Cambio canale")
+                .setSingleChoiceItems(arrayOf("Tutte le emittenti", "Solo preferiti"), if (repository.zapFavoritesOnly) 1 else 0) { dialog, choice ->
+                    repository.zapFavoritesOnly = choice == 1; dialog.dismiss()
+                }.setNegativeButton("Annulla", null).show())
+            MobileOption.QUALITY -> {
+                val prefs = getSharedPreferences("lume", MODE_PRIVATE)
+                trackDialog(AlertDialog.Builder(this).setTitle("Qualità e consumo dati")
+                    .setSingleChoiceItems(arrayOf("Automatica", "Risparmio dati"), if (prefs.getBoolean("data_saver", false)) 1 else 0) { dialog, choice ->
+                        prefs.edit().putBoolean("data_saver", choice == 1).apply()
+                        player.refreshPreferences(); dialog.dismiss()
+                    }.setNegativeButton("Chiudi", null).show())
+            }
+            MobileOption.UPDATES -> updates.show()
+            MobileOption.AURA -> showIntegrationOptions()
+            MobileOption.ABOUT -> trackDialog(AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
+                .setMessage("La TV, fatta semplice.\n\nTV, radio, guida e preferiti sul tuo dispositivo.\n\nIntegrazioni adattate da WorldLiveTV e WLTV Group. Software libero, GPL-3.0-or-later.\n\nSorgenti: github.com/pjor94/LumeTV.")
+                .setPositiveButton("Chiudi", null).setNeutralButton("Licenze") { _, _ -> showLicenses() }.show())
+            MobileOption.LICENSES -> showLicenses()
+        }
     }
 
     private fun trackDialog(dialog: AlertDialog) {
         catalogDialogs += dialog
-        dialog.setOnDismissListener { catalogDialogs -= dialog; root.post { updates.maybePrompt() } }
+        dialog.setOnDismissListener {
+            catalogDialogs -= dialog
+            if (showingOptions) renderOptions()
+            root.post { updates.maybePrompt() }
+        }
     }
 
     private fun changeInterface() {
         val destination = if (!showingCatalog && current != null) "channel/${current!!.id}" else when (browse.section) {
-            MobileSection.CHANNELS -> "catalog"; MobileSection.FAVORITES -> "favorites"
+            MobileSection.CHANNELS, MobileSection.RADIO -> "catalog"; MobileSection.FAVORITES -> "favorites"
             MobileSection.GUIDE -> "guide"; MobileSection.DISCOVER -> "discover"
         }
         releasePlayback()
@@ -625,9 +732,12 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun handleMediaKey(event: KeyEvent): Boolean {
-        if (!showingCatalog && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+        if (player.snapshot.channel != null && event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { togglePause(); return true }
+                KeyEvent.KEYCODE_MEDIA_PLAY -> { player.resumeToLive(); return true }
+                KeyEvent.KEYCODE_MEDIA_PAUSE -> { player.pauseForCatalog(); return true }
+                KeyEvent.KEYCODE_MEDIA_STOP -> { stopPlayback(); return true }
                 KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT -> { zap(1); return true }
                 KeyEvent.KEYCODE_CHANNEL_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { zap(-1); return true }
             }

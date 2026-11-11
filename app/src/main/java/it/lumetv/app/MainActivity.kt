@@ -26,7 +26,8 @@ class MainActivity : Activity() {
             data = source.data
             source.extras?.let { putExtras(it) }
             putExtra(UpdateController.LAUNCH_KEY, source.getStringExtra(UpdateController.LAUNCH_KEY) ?: UUID.randomUUID().toString())
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            // Routing stays inside the app; it must not trigger leave-to-PiP behavior.
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
         })
         finish()
     }

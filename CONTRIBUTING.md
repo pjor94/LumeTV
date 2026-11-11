@@ -62,7 +62,7 @@ RSI La1 e RSI La2 sono escluse sia dal generatore del catalogo sia dall’app, a
 
 ## Modifiche
 
-Mantieni utilizzabili tutte le schermate con il telecomando. La riproduzione deve restare a tutto schermo e usare un solo player. Per una nuova integrazione, aggiungi test sul formato delle risposte e descrivi la prova eseguita sul dispositivo.
+Mantieni utilizzabili tutte le schermate con il telecomando. La diretta principale resta a tutto schermo; il catalogo e la guida possono mostrarne l’anteprima. Tutte le schermate e i controlli di sistema devono usare l’unico player del servizio Media3. Per una nuova integrazione, aggiungi test sul formato delle risposte e descrivi la prova eseguita sul dispositivo.
 
 Gli adattamenti da altri progetti devono conservarne licenza e attribuzioni. I contributi a Lume TV vengono distribuiti con la licenza GPL-3.0-or-later del progetto.
 
@@ -73,3 +73,43 @@ Le release pubblicano l’APK firmata insieme ai sorgenti corrispondenti. Per co
 Mantieni sincronizzati `THIRD_PARTY_NOTICES.md` e la copia in `app/src/main/assets/`; registra una data rilevante negli adattamenti GPL e nel changelog. Le licenze integrali sono in `app/src/main/assets/licenses/` e gli avvisi upstream in `DEPENDENCY_NOTICES.txt` nella stessa cartella. Non sostituire la GPLv2 con Classpath Exception di desugar con la sola GPLv3 dell’app.
 
 Quando modifichi una dipendenza, genera `:app:writeReleaseDependencies` e riesamina licenza, avvisi e sorgenti prima di aggiornare `third_party/sources.lock.json`. Segui [third_party/README.md](third_party/README.md) per raccogliere i sorgenti e verificare il pacchetto completo. La verifica si interrompe se vengono omessi nuovi file non ancora aggiunti a Git.
+
+
+### Collaudo radio, background e Picture in Picture
+
+`tools/smoke_playback.py` usa due emulatori usa e getta, un video MP4 e un campione MP3 locali. Verifica catalogo radio, ricerca per città, preferiti, recenti, metadati ICY, ascolto a schermo spento oltre 30 secondi, controlli multimediali, PiP, modalità TV solo audio e arresto della riproduzione uscendo dalla UI TV. Ripristina cataloghi e preferenze alla fine e rifiuta dispositivi fisici. Il report e le schermate vengono salvati in `analysis/playback-smoke/`.
+
+```sh
+python3 tools/smoke_playback.py --adb /percorso/adb --phone emulator-5554 --tv emulator-5556 --video /percorso/video.mp4 --audio /percorso/audio.mp3
+```
+
+Il catalogo radio incluso si rigenera con `python3 tools/update_radio_catalog.py`. Il comando aggiorna anche la provenienza in `catalog/radio-source.json`; la cache scaricata sui dispositivi rimane separata dalla playlist TV. Il catalogo radio non viene esportato nel contratto AURA TV esistente.
+
+`tools/smoke_mobile_options.py` verifica la pagina Opzioni su un emulatore smartphone: ritorno alla ricerca precedente, aggiornamento e persistenza dei valori, consenso AURA, accesso ad aggiornamenti e licenze, ricreazione del processo, testo al 130%, rotazione e mini player radio/TV. Usa gli stessi campioni locali e ripristina i dati dell’emulatore alla fine.
+
+```sh
+python3 tools/smoke_mobile_options.py --adb /percorso/adb --serial emulator-5554 --video /percorso/video.mp4 --audio /percorso/audio.mp3
+```
+
+`tools/smoke_tv_options.py` verifica la pagina Opzioni su un emulatore Android TV: navigazione con il telecomando e il menu superiore condiviso, ripristino del focus e della selezione, scelte CH+/CH− e AURA, testo al 130%, ricreazione del processo, ritorno alla guida e anteprima TV/radio. Controlla anche che la radio si interrompa uscendo dall’app TV. Ripristina i dati dell’emulatore e rifiuta dispositivi fisici.
+
+```sh
+python3 tools/smoke_tv_options.py --adb /percorso/adb --serial emulator-5556 --video /percorso/video.mp4 --audio /percorso/audio.mp3
+```
+
+`tools/smoke_tv_channel_switch.py` verifica la sequenza diretta → Indietro → altro canale → OK, l’anteprima del nuovo canale, la riapertura dello stesso canale e l’arresto uscendo dalla UI TV. Usa un video locale, ripristina i dati e accetta soltanto emulatori usa e getta.
+
+```sh
+python3 tools/smoke_tv_channel_switch.py --adb /percorso/adb --serial emulator-5554 --video /percorso/video.mp4
+```
+
+Per riprodurre anche lo Stop sintetico osservato sulla Bravia, compila il probe con il JDK e gli Android SDK Build Tools del progetto:
+
+```sh
+mkdir -p analysis/media-button-probe
+javac --release 8 -classpath /percorso/sdk/platforms/android-36/android.jar -d analysis/media-button-probe tools/android/MediaButtonProbe.java
+/percorso/sdk/build-tools/36.0.0/d8 --lib /percorso/sdk/platforms/android-36/android.jar --min-api 23 --output analysis/media-button-probe analysis/media-button-probe/MediaButtonProbe.class
+python3 tools/smoke_tv_channel_switch.py --adb /percorso/adb --serial emulator-5554 --video /percorso/video.mp4 --media-button-dex analysis/media-button-probe/classes.dex --output analysis/tv-channel-switch-synthetic
+```
+
+Il probe viene eseguito come shell sull’emulatore e non entra nell’APK. Il test invia uno Stop senza timestamp e sorgente durante l’apertura lenta del secondo canale; verifica anche che Stop dopo l’apertura e Stop con un timestamp reale continuino a funzionare.

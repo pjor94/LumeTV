@@ -21,6 +21,12 @@ Gli adattamenti Kotlin si trovano principalmente in `RaiResolver.kt`, `MediasetR
 
 A WorldLiveTV, WLTV Group e ai collaboratori del progetto originale va il merito della raccolta e della manutenzione delle sorgenti. Lume TV è un progetto indipendente e non rappresenta un’app ufficiale WorldLiveTV.
 
+## Radio WorldRadio
+
+**Integrazione Android — 2026-11-11:** il catalogo radio italiano è fornito da WorldLiveTV / WLTV Group attraverso il modulo WorldRadio dell’add-on. Lume TV ne importa i dati con un’implementazione Kotlin indipendente e include una copia per il primo avvio in `app/src/main/assets/radios.json`. Origine, data e checksum sono registrati in `catalog/radio-source.json`; `tools/update_radio_catalog.py` rigenera la copia.
+
+Gran parte degli indirizzi del catalogo passa dal servizio Radio Garden, che reindirizza ai flussi delle emittenti. Lume TV contatta direttamente queste sorgenti dal dispositivo. Nomi, programmi, loghi e audio restano dei rispettivi titolari; la licenza del software non concede diritti sui contenuti.
+
 ## Guida programmi
 
 I palinsesti e parte dei loghi dei canali provengono dal servizio esterno [EPG-Guide](https://epg-guide.com/). Altri loghi provengono dagli indirizzi indicati nella playlist WLTV. Dati e immagini vengono scaricati direttamente dalle sorgenti e conservati nella cache del dispositivo; non sono inclusi nella distribuzione del codice. I marchi restano dei rispettivi titolari.

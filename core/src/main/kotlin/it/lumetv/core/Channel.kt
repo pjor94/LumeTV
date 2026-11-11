@@ -1,8 +1,9 @@
 package it.lumetv.core
 
-import java.net.URI
 import java.security.MessageDigest
 import java.net.URLDecoder
+
+enum class MediaKind { TV, RADIO }
 
 data class Channel(
     val id: String,
@@ -15,8 +16,10 @@ data class Channel(
     val broadcaster: String,
     val key: String,
     val headers: Map<String, String> = emptyMap(),
+    val kind: MediaKind = MediaKind.TV,
 ) {
-    val family: String get() = when (broadcaster) {
+    val isRadio: Boolean get() = kind == MediaKind.RADIO
+    val family: String get() = if (isRadio) "Radio" else when (broadcaster) {
         "rai", "rainewsrg" -> "Rai"
         "mediaset" -> "Mediaset"
         else -> "Altri canali"
@@ -89,12 +92,13 @@ data class ResolvedStream(
 
 object ChannelNavigation {
     fun next(channels: List<Channel>, currentId: String?, direction: Int, favoriteIds: Set<String>? = null): Channel? {
-        val available = if (favoriteIds == null) channels else channels.filter { it.id in favoriteIds }
+        val kind = channels.firstOrNull { it.id == currentId }?.kind
+        val available = channels.filter { (kind == null || it.kind == kind) && (favoriteIds == null || it.id in favoriteIds) }
         if (available.isEmpty()) return null
         val index = available.indexOfFirst { it.id == currentId }
         val next = if (index < 0) { if (direction < 0) available.lastIndex else 0 }
             else Math.floorMod(index + direction, available.size)
         return available[next]
     }
-    fun byNumber(channels: List<Channel>, number: Int) = channels.firstOrNull { it.number == number }
+    fun byNumber(channels: List<Channel>, number: Int) = channels.firstOrNull { !it.isRadio && it.number == number }
 }

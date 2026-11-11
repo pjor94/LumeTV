@@ -6,6 +6,7 @@ import it.lumetv.app.integration.IntegrationStore
 import it.lumetv.core.Channel
 import it.lumetv.core.ChannelNavigation
 import java.io.File
+import kotlinx.coroutines.CancellationException
 
 class ChannelRepository(context: Context, private val http: Transport) {
     private val app = context.applicationContext
@@ -27,15 +28,27 @@ class ChannelRepository(context: Context, private val http: Transport) {
         }
     }
     private val sync = CatalogSync(http, store, { app.assets.open("channels.m3u").bufferedReader().use { it.readText() } })
+    private val radios = RadioRepository(app, http)
     val lastUpdated: Long get() = store.lastSuccess
     private val favoriteIds get() = prefs.getStringSet("favorites", emptySet()).orEmpty().toSet()
+    val recentIds: List<String> get() = prefs.getString("recent_channels", "").orEmpty().split(',').filter { it.isNotEmpty() }
+    fun recent(channels: List<Channel>): List<Channel> = recentIds.mapNotNull { id -> channels.firstOrNull { it.id == id } }
     var lastChannelId: String?
         get() = prefs.getString("last_channel", null)
         private set(value) { prefs.edit().putString("last_channel", value).apply() }
 
     fun recordPlayback(channel: Channel) {
         synchronized(IntegrationStore.cacheLock) {
-            prefs.edit().putString("last_channel", channel.id).putLong("last_played_at", System.currentTimeMillis()).apply()
+            val now = System.currentTimeMillis()
+            val editor = prefs.edit()
+            if (!channel.isRadio) editor.putString("last_tv_channel", channel.id).putLong("last_tv_played_at", now)
+            else if (!prefs.contains("last_tv_channel")) {
+                // Preserve the pre-radio last TV entry when upgrading an existing installation.
+                prefs.getString("last_channel", null)?.let { editor.putString("last_tv_channel", it)
+                    .putLong("last_tv_played_at", prefs.getLong("last_played_at", 0)) }
+            }
+            editor.putString("last_channel", channel.id).putLong("last_played_at", now)
+                .putString("recent_channels", (listOf(channel.id) + recentIds.filterNot { it == channel.id }).take(40).joinToString(",")).apply()
         }
         IntegrationStore.changed(app)
     }
@@ -46,8 +59,21 @@ class ChannelRepository(context: Context, private val http: Transport) {
     fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int): Channel? =
         ChannelNavigation.next(channels, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
 
-    suspend fun local(): List<Channel> = sync.local().also { IntegrationStore.catalogChanged(app, it, lastUpdated) }
-    suspend fun refresh(force: Boolean = false): List<Channel>? = sync.refresh(force)?.also { IntegrationStore.catalogChanged(app, it, lastUpdated) }
+    suspend fun local(): List<Channel> = (sync.local() + radios.local()).also {
+        IntegrationStore.catalogChanged(app, it.filterNot(Channel::isRadio), lastUpdated)
+    }
+    suspend fun refresh(force: Boolean = false): List<Channel>? {
+        var failure: Exception? = null
+        suspend fun attempt(block: suspend () -> List<Channel>?): List<Channel>? = try { block() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { failure = error; null }
+        val tv = attempt { sync.refresh(force) }
+        val radio = attempt { radios.refresh(force) }
+        if (tv == null && radio == null) { failure?.let { throw it }; return null }
+        return ((tv ?: sync.local()) + (radio ?: radios.local())).also {
+            IntegrationStore.catalogChanged(app, it.filterNot(Channel::isRadio), lastUpdated)
+        }
+    }
 
     fun isFavorite(channel: Channel) = channel.id in favoriteIds
     fun toggleFavorite(channel: Channel): Boolean {

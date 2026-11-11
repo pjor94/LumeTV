@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.0 · Radio, riproduzione continua e nuove Opzioni — 2026-11-11
+
+- Catalogo italiano WorldRadio di WLTV, con copia locale, aggiornamento separato, ricerca per nome e città, preferiti e recenti distinti dalla TV.
+- Un solo player gestito da un servizio Media3 per entrambe le interfacce, con recupero della connessione e configurazione HTTP adatta anche a MP3/AAC continui.
+- Smartphone: radio a schermo spento, controlli multimediali di sistema e Bluetooth, metadati ICY/ID3 quando disponibili, mini player nel catalogo, Picture in Picture per le dirette TV e modalità TV solo audio.
+- Smartphone: scelta Automatica / Risparmio dati e audio offload sui dispositivi compatibili. I flussi a qualità singola mantengono il bitrate fornito dall’emittente.
+- Smartphone: Opzioni diventa una pagina dedicata con valori correnti, ritorno al catalogo precedente e mini player. Pagina e posizione di scorrimento vengono conservate alla ricreazione.
+- Android TV: pagina Opzioni con lo stesso menu superiore delle altre pagine, valori correnti, focus per telecomando, descrizione della voce selezionata e anteprima della riproduzione. Indietro torna al catalogo o alla guida precedente.
+- Android TV: schermata radio utilizzabile con telecomando e anteprima interna della diretta durante la consultazione di catalogo e guida. Uscendo dall’app, TV e radio si interrompono.
+- Android TV: corretto il ritorno alla lista senza anteprima aprendo un altro canale. Durante il cambio viene ignorato lo Stop sintetico senza timestamp ricevuto sulla Bravia; Stop del telecomando e Interrompi restano attivi.
+- Nessun timer di spegnimento e nessuna integrazione Android Auto / Android Automotive.
+
+Verifiche: 168 test JVM, di cui 165 superati e tre controlli di rete facoltativi esclusi; 30 test Python superati. Build Debug/Release e Android Lint completati senza errori.
+
+Collaudo su emulatori Android TV 14 e smartphone Android 15: radio e riproduzione continua, pagine Opzioni con testo al 130%, rotazione e ricreazione del processo. Il cambio canale è coperto da 31 verifiche, inclusa la riproduzione del comando Stop anomalo prima della correzione. Pagina Opzioni e correzione del cambio canale verificate anche su Sony Bravia con Android 12. Consumi e audio offload non sono stati misurati su uno smartphone fisico.
+
 ## 0.6.2 · Avvisi per le nuove versioni — 2026-11-11
 
 - Popup automatico per le nuove versioni compatibili, condiviso tra TV e smartphone: compare nel catalogo e attende il ritorno dalla diretta. **Aggiorna** apre la schermata esistente; **Più tardi** o Indietro rinviano l’avviso al prossimo avvio.

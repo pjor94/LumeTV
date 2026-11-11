@@ -145,7 +145,7 @@ class ChannelAdapter(
         val label = if (guideMode) {
             listOfNotNull(current?.let { "ORA  ${it.title}" }, next?.let { "${time(it.start)}  ${it.title}" })
                 .joinToString("\n").ifBlank { guidePlaceholder }
-        } else current?.title ?: "In diretta"
+        } else current?.title ?: if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "In diretta"
         if (holder.show.text.toString() != label) holder.show.text = label
         holder.card.contentDescription = listOfNotNull(
             channel.number.takeIf { it != 9999 }?.toString(), channel.name, holder.show.text.toString(),

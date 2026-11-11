@@ -11,6 +11,8 @@
     </style>
     <style name="Theme.Lume.Router" parent="Theme.Lume">
         <item name="android:windowNoDisplay">true</item>
+        <!-- Routing must not occlude the player and trigger automatic PiP before forwarding. -->
+        <item name="android:windowIsTranslucent">true</item>
     </style>
     <style name="Theme.Lume.Mobile" parent="Theme.Lume">
         <item name="android:windowFullscreen">false</item>

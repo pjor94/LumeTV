@@ -67,7 +67,8 @@ object IntegrationStore {
         }
         IntegrationContract.snapshot(BuildConfig.VERSION_NAME, true, catalog.orEmpty(),
             prefs.getStringSet("favorites", emptySet()).orEmpty().toSet(), guide.orEmpty(), catalogTime, guideTime,
-            prefs.getString("last_channel", null), prefs.getLong("last_played_at", 0).takeIf { it > 0 }, System.currentTimeMillis())
+            prefs.getString("last_tv_channel", prefs.getString("last_channel", null)),
+            prefs.getLong("last_tv_played_at", prefs.getLong("last_played_at", 0)).takeIf { it > 0 }, System.currentTimeMillis())
     }
 
     private fun read(context: Context, name: String, maximum: Int): String? {

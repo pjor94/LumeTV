@@ -167,7 +167,7 @@ def main():
         if args.mode == "tv":
             passed("La chiusura ripristina il focus nel catalogo", bool(focus))
         click("Opzioni")
-        click("Chiudi")
+        key(4)
         passed("Il ritorno da Opzioni non ripropone la stessa versione", TITLE not in texts() and
                not any(value.startswith("Interfaccia:") for value in texts()))
         key(223)
@@ -190,8 +190,7 @@ def main():
         key(4)
         passed("Il ritorno dal controllo manuale non duplica il popup", TITLE not in texts())
         click("Opzioni")
-        current_interface = next(n.get("text") for n in nodes() if n.get("text", "").startswith("Interfaccia:"))
-        click(current_interface)
+        click("Interfaccia")
         click("Smartphone" if args.mode == "tv" else "TV")
         wait_for("Cambio interfaccia", lambda items: "Canali" in texts(items))
         passed("Il cambio di interfaccia conserva il rinvio", TITLE not in texts())
@@ -228,8 +227,13 @@ def main():
 
         seed()
         launch("integration")
-        items = wait_for("Dialog di integrazione", lambda items: "Collegamento con AURA" in texts(items))
+        items = wait_for("Dialog di integrazione", lambda items: any("collegamento" in value.casefold() and
+                         value.casefold().startswith(("consenti", "revoca")) for value in texts(items)))
         passed("Il popup non si sovrappone ad altre finestre", TITLE not in texts(items))
+        key(4)
+        wait_for("Pagina Opzioni dopo il consenso", lambda items: any(n.get("content-desc") == "Chiudi opzioni" or
+                 n.get("resource-id") == PACKAGE + ":id/tv_options" for n in items))
+        passed("Il popup attende anche la chiusura della pagina Opzioni", TITLE not in texts())
         key(4)
         wait_for("Avviso dopo la finestra", lambda items: TITLE in texts(items))
         passed("L’avviso in attesa compare alla chiusura dell’altra finestra")

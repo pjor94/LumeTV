@@ -11,7 +11,7 @@ from dependency_sources import verified_sources, verify_legal, verify_report
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN = {'.git', '.android', '.sdk', '.avd', '.gradle', '.gradle-user', '.signing', 'build', 'dist', '__pycache__', 'analysis'}
 SOURCE_DIRS = {'.github', 'app', 'core', 'catalog', 'docs', 'gradle', 'test-fixtures', 'tools', 'third_party'}
-SOURCE_SUFFIXES = {'.kt', '.kts', '.py', '.md', '.txt', '.xml', '.json', '.properties', '.pro', '.m3u', '.yml', '.yaml', '.png', '.svg', '.jar'}
+SOURCE_SUFFIXES = {'.kt', '.kts', '.java', '.py', '.md', '.txt', '.xml', '.json', '.properties', '.pro', '.m3u', '.yml', '.yaml', '.png', '.svg', '.jar'}
 
 
 def new_source(name):

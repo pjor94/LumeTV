@@ -4,7 +4,7 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Questa guida descrive l’interfaccia per telecomando. Se usi un telefono, consulta la [guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md).
 
-Questa guida descrive **Lume TV 0.6.0**, che include anche la UI smartphone. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
+Questa guida descrive **Lume TV 0.7.0**, con radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
 
 [Download e installazione](../README.md#distribuzione-e-installazione) · [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
@@ -51,7 +51,7 @@ La scelta rimane salvata sul dispositivo. Cambiare interfaccia conserva catalogo
 
 ![Catalogo dei canali](screenshots/catalog.png)
 
-Nel catalogo trovi numero, nome e logo dei canali. Le sezioni in alto sono **Canali**, **Cosa guardare** e **Guida TV**. All’interno di Canali, i filtri **Tutti**, **Rai**, **Mediaset** e **Preferiti** permettono di restringere l’elenco.
+Nel catalogo trovi numero, nome e logo dei canali. Il menu superiore contiene **Canali**, **Radio**, **Cosa guardare**, **Guida TV**, **Opzioni** ed **Esci**, e rimane disponibile nella pagina Opzioni. All’interno di Canali, i filtri **Tutti**, **Rai**, **Mediaset**, **Preferiti** e **Recenti** permettono di restringere l’elenco.
 
 - Usa le **frecce** per spostare la selezione: la scheda evidenziata è quella che aprirai.
 - Premi **OK** per guardare il canale a tutto schermo.
@@ -220,3 +220,18 @@ Il collegamento con AURA è facoltativo. Si abilita o si revoca in **Opzioni →
 ---
 
 Schermate acquisite dall’interfaccia nativa su emulatore Android TV. Programmi, orari e immagini possono variare. Lume TV è un progetto indipendente basato sul lavoro di WorldLiveTV / WLTV Group; non è un’app ufficiale delle emittenti.
+
+
+## Radio e anteprima
+
+Queste funzioni sono disponibili dalla versione 0.7.0.
+
+La scheda **Radio** contiene le emittenti italiane di WorldRadio/WLTV. **Tutte / Preferite / Recenti** restringe l’elenco; **Cerca radio** permette di inserire il nome della stazione o della città. OK apre una radio, OK prolungato la aggiunge ai preferiti. I recenti vengono registrati quando la riproduzione inizia correttamente.
+
+La schermata radio mostra nome, stato e titolo del brano quando disponibile. Con frecce e OK raggiungi **Precedente**, **Pausa/Riprendi**, **Successiva**, **Preferiti**, **Interrompi** e **Catalogo**. I tasti multimediali e CH+/CH− continuano a funzionare e il cambio stazione rimane nel catalogo radio.
+
+Indietro ritorna al catalogo mantenendo la riproduzione. Per la TV, il video passa in un’anteprima accanto al catalogo o alla guida; per la radio compare il nome della stazione in ascolto. **Apri la diretta** riapre il player, **Interrompi** termina la riproduzione. Viene sempre usato lo stesso player.
+
+Premendo Home, aprendo un’altra app o uscendo da Lume TV, la riproduzione si interrompe. Questa versione non prevede ascolto radio in background, timer di spegnimento o PiP di sistema sulla TV.
+
+**Opzioni** apre una pagina dedicata e mantiene il menu superiore delle altre pagine TV, con **Opzioni** evidenziato. Con **↑/↓** selezioni una voce e con **OK** apri la scelta; il valore corrente compare sotto il titolo e la descrizione a destra. Dalla prima voce, **↑** raggiunge il menu per passare direttamente a Canali, Radio, Cosa guardare o Guida TV. Se una diretta è attiva, l’anteprima continua nella pagina: **→** raggiunge i suoi comandi e **←** ritorna alla voce selezionata. **Indietro** riapre il catalogo o la guida precedente. Alla riapertura dell’app, la pagina e la voce selezionata vengono ripristinate; la riproduzione resta interrotta dopo l’uscita dalla TV.

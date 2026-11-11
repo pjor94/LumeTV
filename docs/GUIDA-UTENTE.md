@@ -6,8 +6,8 @@ Scegli la guida per il tuo dispositivo:
 
 | Dispositivo | Guida | Cosa trovi |
 | --- | --- | --- |
-| Android TV e Google TV | [Guida per Android TV e Google TV](GUIDA-ANDROID-TV.md) | Installazione, telecomando, guida a griglia, elenco laterale durante la diretta e uscita dall’app |
-| Smartphone Android | [Guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md) | Installazione, navigazione touch, preferiti, guida per canale, comandi del video e schermo intero |
+| Android TV e Google TV | [Guida per Android TV e Google TV](GUIDA-ANDROID-TV.md) | Installazione, telecomando, guida a griglia, radio, anteprima e pagina Opzioni |
+| Smartphone Android | [Guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md) | Installazione, navigazione touch, radio in background, mini player, Picture in Picture e pagina Opzioni |
 
 ## Quale interfaccia si apre
 
@@ -17,7 +17,7 @@ La scelta rimane salvata. Cambiare interfaccia conserva catalogo, guida e prefer
 
 ## Versioni e download
 
-Queste guide descrivono **Lume TV 0.6.2**, che comprende entrambe le interfacce e gli avvisi per le nuove versioni. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.6.2/LumeTV-0.6.2.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
+Queste guide descrivono **Lume TV 0.7.0**, con radio, riproduzione continua e nuove pagine Opzioni su entrambe le interfacce. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.7.0/LumeTV-0.7.0.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
 
 Il supporto smartphone è stato introdotto nella versione 0.6.0. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 

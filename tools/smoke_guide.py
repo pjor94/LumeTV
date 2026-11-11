@@ -85,7 +85,7 @@ def main():
         functools.partial(QuietHandler, directory=str(args.video.resolve().parent)))
     Thread(target=server.serve_forever, daemon=True).start()
     video_url = "http://10.0.2.2:" + str(server.server_port) + "/" + args.video.name
-    paths = ["files/channels.m3u", "files/guide.json", "shared_prefs/guide.xml", "shared_prefs/lume.xml", "shared_prefs/app_updates.xml"]
+    paths = ["files/channels.m3u", "files/radios.json", "files/guide.json", "shared_prefs/guide.xml", "shared_prefs/lume.xml", "shared_prefs/app_updates.xml"]
     stop()
     adb("shell", "run-as", PACKAGE, "mkdir", "-p", "files", "shared_prefs")
     backup = {path: read(path) for path in paths}
@@ -117,10 +117,17 @@ def main():
         write("shared_prefs/guide.xml", ('<map><long name="updated" value="' + str(now) +
               '"/><int name="policy_version" value="1"/><int name="logo_metadata_version" value="1"/></map>').encode())
         write("shared_prefs/lume.xml", ('<map><long name="catalog_updated" value="' + str(now) +
+              '"/><long name="radios_updated" value="' + str(now) +
               '"/><boolean name="auto_update_check" value="false"/></map>').encode())
         write("shared_prefs/app_updates.xml", b'<map><boolean name="automatic" value="false"/></map>')
         adb("shell", "am", "start", "-W", "-a", "android.intent.action.VIEW", "-d", "lumetv://guide", "-n", PACKAGE + "/.MainActivity")
         initial = nodes()
+        # The service connection and first guide layout complete asynchronously.
+        for _ in range(8):
+            if any(n.get("focused") == "true" for n in initial):
+                break
+            time.sleep(.25)
+            initial = nodes()
         passed("Apertura sul programma attuale", "Notizie in diretta" in focused(initial).get("content-desc", ""))
         key(19)
         passed("Filtro attivo espone lo stato selezionato", focused().get("selected") == "true")

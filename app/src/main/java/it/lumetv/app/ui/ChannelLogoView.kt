@@ -9,6 +9,7 @@ import it.lumetv.app.data.ChannelLogoRepository
 import it.lumetv.app.data.LogoArtwork
 import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.core.Channel
+import it.lumetv.app.R
 import kotlinx.coroutines.Job
 
 /** A fixed optical footprint, shared by cards, guide rows and the live banner. */
@@ -34,8 +35,9 @@ class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository
     }
 
     fun bind(value: Channel) {
-        if (channel?.id != value.id) { artwork = null; placeholder() }
+        val changed = channel?.id != value.id
         channel = value
+        if (changed) { artwork = null; placeholder() }
         if (isAttachedToWindow) load(value)
     }
 
@@ -59,13 +61,22 @@ class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository
     }
 
     private fun placeholder() {
-        image.setImageDrawable(null)
-        image.visibility = INVISIBLE
-        background = null
-        clipToOutline = false
+        if (channel?.isRadio == true) {
+            image.setImageResource(R.drawable.ic_mobile_radio)
+            image.imageTintList = android.content.res.ColorStateList.valueOf(TvStyle.accent)
+            image.visibility = VISIBLE
+            background = TvStyle.rounded(TvStyle.surface, context.dp(12).toFloat())
+            clipToOutline = true
+        } else {
+            image.setImageDrawable(null)
+            image.visibility = INVISIBLE
+            background = null
+            clipToOutline = false
+        }
     }
 
     private fun surface(light: Boolean) {
+        image.imageTintList = null
         clipToOutline = true
         background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
             if (light) intArrayOf(0xFFF3F5F8.toInt(), 0xFFDDE3EB.toInt())

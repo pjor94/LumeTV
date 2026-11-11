@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.accessibility.AccessibilityManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -16,6 +17,9 @@ import android.widget.ProgressBar
 import androidx.media3.ui.PlayerView
 import it.lumetv.app.R
 import it.lumetv.app.data.Programme
+import it.lumetv.app.data.ChannelLogoRepository
+import it.lumetv.app.playback.PlaybackSnapshot
+import it.lumetv.app.ui.AudioPlaybackView
 import it.lumetv.app.data.ProgrammeWindow
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
@@ -28,6 +32,7 @@ import java.util.Locale
 @SuppressLint("ViewConstructor")
 class MobilePlaybackView(
     context: Context,
+    logos: ChannelLogoRepository,
     back: () -> Unit,
     togglePause: () -> Unit,
     previous: () -> Unit,
@@ -37,6 +42,9 @@ class MobilePlaybackView(
     toggleFavorite: () -> Unit,
     details: () -> Unit,
     retry: () -> Unit,
+    audioMode: () -> Unit,
+    pip: () -> Unit,
+    stop: () -> Unit,
 ) : FrameLayout(context) {
     val video = PlayerView(context).apply {
         useController = false
@@ -52,6 +60,8 @@ class MobilePlaybackView(
     private val description = TvStyle.text(context, "", 14f, TvStyle.white).apply { maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
     private val favorite = MobileStyle.icon(context, R.drawable.ic_mobile_heart, "Aggiungi ai preferiti", toggleFavorite)
     private val expand = MobileStyle.icon(context, R.drawable.ic_mobile_expand, "Schermo intero", fullscreen)
+    val pipButton = MobileStyle.icon(context, R.drawable.ic_mobile_pip, "Picture in Picture", pip)
+    private val audioView = AudioPlaybackView(context, logos, false, back, togglePause, previous, next, toggleFavorite, stop, retry, audioMode)
     private val play = MobileStyle.icon(context, R.drawable.ic_mobile_pause, "Pausa", togglePause)
     private val centerControls = LinearLayout(context)
     private val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -67,6 +77,8 @@ class MobilePlaybackView(
     private var playing = false
     private var busy = false
     private var failed = false
+    private var audio = false
+    private var inPip = false
     private val hideControls = Runnable { if (playing && !busy && !failed) setControlsVisible(false) }
 
     init {
@@ -80,6 +92,7 @@ class MobilePlaybackView(
         top.addView(MobileStyle.icon(context, R.drawable.ic_mobile_back, "Torna al catalogo", back), LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
         top.addView(channelName, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = context.dp(4) })
         top.addView(favorite, LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
+        top.addView(pipButton, LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
         top.addView(expand, LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
         controls.addView(top, LayoutParams(-1, -2, Gravity.TOP))
         centerControls.gravity = Gravity.CENTER
@@ -110,7 +123,10 @@ class MobilePlaybackView(
         bottom.addView(title, LinearLayout.LayoutParams(-1, -2))
         bottom.addView(description, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(4) })
         bottom.addView(progress, LinearLayout.LayoutParams(-1, context.dp(2)).apply { topMargin = context.dp(14); bottomMargin = context.dp(8) })
-        bottom.addView(MobileStyle.button(context, "Canali", action = channelPicker), LinearLayout.LayoutParams(-1, -2))
+        val actions = LinearLayout(context)
+        actions.addView(MobileStyle.button(context, "Canali", action = channelPicker), LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(MobileStyle.button(context, "Solo audio", action = audioMode), LinearLayout.LayoutParams(0, -2, 1f))
+        bottom.addView(actions, LinearLayout.LayoutParams(-1, -2))
         controls.addView(bottom, LayoutParams(-1, -2, Gravity.BOTTOM))
         addView(controls, LayoutParams(-1, -1))
         loading.apply {
@@ -131,6 +147,8 @@ class MobilePlaybackView(
             visibility = GONE
         }
         addView(error, LayoutParams(-1, -2, Gravity.CENTER).apply { leftMargin = context.dp(24); rightMargin = context.dp(24) })
+        addView(audioView, LayoutParams(-1, -1))
+        audioView.visibility = GONE
         updateConfiguration()
     }
 
@@ -187,11 +205,29 @@ class MobilePlaybackView(
 
     fun setControlsVisible(visible: Boolean) {
         removeCallbacks(hideControls)
-        controls.visibility = if (visible || !playing || busy || failed) VISIBLE else GONE
+        controls.visibility = if (inPip || audio) GONE else if (visible || !playing || busy || failed) VISIBLE else GONE
         if (controls.visibility == VISIBLE) scheduleHide()
     }
 
     fun stopTimers() { removeCallbacks(hideControls) }
+    fun renderState(state: PlaybackSnapshot, preferred: Boolean) {
+        audio = state.audioOnly
+        audioView.visibility = if (audio && !inPip) VISIBLE else GONE
+        if (audio) { audioView.bind(state, preferred); controls.visibility = GONE; loading.visibility = GONE; error.visibility = GONE }
+        video.visibility = if (audio) GONE else VISIBLE
+        if (inPip) { controls.visibility = GONE; loading.visibility = GONE; error.visibility = GONE }
+    }
+    fun restoreVideo() {
+        if (video.parent !== this) {
+            (video.parent as? ViewGroup)?.removeView(video)
+            addView(video, 0, LayoutParams(-1, -1))
+        }
+    }
+    fun setInPip(value: Boolean) {
+        inPip = value
+        setControlsVisible(!value)
+        if (value) { loading.visibility = GONE; error.visibility = GONE; audioView.visibility = GONE }
+    }
     private fun scheduleHide() {
         removeCallbacks(hideControls)
         val accessibility = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
