@@ -54,6 +54,7 @@ class MobilePlaybackView(
         setOnClickListener { setControlsVisible(controls.visibility != VISIBLE) }
     }
     private val controls = FrameLayout(context)
+    val onDemand=it.lumetv.app.ui.OnDemandControls(context)
     private val channelName = TvStyle.text(context, "", 16f, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
     private val title = TvStyle.text(context, "", 21f, bold = true).apply { maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
     private val timing = TvStyle.text(context, "", 13f, TvStyle.accent).apply { fontFeatureSettings = "tnum" }
@@ -123,6 +124,7 @@ class MobilePlaybackView(
         bottom.addView(title, LinearLayout.LayoutParams(-1, -2))
         bottom.addView(description, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(4) })
         bottom.addView(progress, LinearLayout.LayoutParams(-1, context.dp(2)).apply { topMargin = context.dp(14); bottomMargin = context.dp(8) })
+        bottom.addView(onDemand,LinearLayout.LayoutParams(-1,-2))
         val actions = LinearLayout(context)
         actions.addView(MobileStyle.button(context, "Canali", action = channelPicker), LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(MobileStyle.button(context, "Solo audio", action = audioMode), LinearLayout.LayoutParams(0, -2, 1f))
@@ -211,6 +213,13 @@ class MobilePlaybackView(
 
     fun stopTimers() { removeCallbacks(hideControls) }
     fun renderState(state: PlaybackSnapshot, preferred: Boolean) {
+        onDemand.render(state)
+        val demand=state.mode!=it.lumetv.core.PlaybackMode.LIVE
+        if(demand)play.contentDescription=if(state.ended)"Rivedi il video" else if(state.wantsToPlay)"Pausa" else "Riprendi il video"
+        centerControls.getChildAt(0).visibility=if(demand)GONE else VISIBLE
+        centerControls.getChildAt(2).visibility=if(demand)GONE else VISIBLE
+        if(demand){title.text=state.title;timing.text=if(state.mode==it.lumetv.core.PlaybackMode.ARCHIVE)"Archivio" else "Video";description.visibility=GONE;progress.visibility=GONE}
+        title.isClickable=!demand
         audio = state.audioOnly
         audioView.visibility = if (audio && !inPip) VISIBLE else GONE
         if (audio) { audioView.bind(state, preferred); controls.visibility = GONE; loading.visibility = GONE; error.visibility = GONE }

@@ -12,9 +12,13 @@ import java.util.concurrent.TimeUnit
 internal class GithubUpdateClient(
     client: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS).callTimeout(5, TimeUnit.MINUTES).followSslRedirects(false).build(),
+    private val urlAllowed: (okhttp3.HttpUrl) -> Boolean = { it.isHttps },
     private val now: () -> Long = System::currentTimeMillis,
 ) : UpdateFeed {
-    private val http = HttpClient(client.newBuilder().addInterceptor { chain ->
+    private val http = HttpClient(client.newBuilder().followSslRedirects(false).addNetworkInterceptor { chain ->
+        if(!urlAllowed(chain.request().url))throw UpdateException("Il servizio aggiornamenti richiede HTTPS.")
+        chain.proceed(chain.request())
+    }.addInterceptor { chain ->
         val response = chain.proceed(chain.request())
         if (response.code == 403 || response.code == 429) {
             val retryAt = UpdatePolicy.retryAt(now(), response.header("Retry-After"),

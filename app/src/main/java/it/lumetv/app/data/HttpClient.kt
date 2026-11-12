@@ -23,7 +23,7 @@ class SourceException(message: String, val status: Int = 0) : IOException(messag
 
 class HttpClient(val client: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
-    .callTimeout(30, TimeUnit.SECONDS).build()) : Transport {
+    .callTimeout(30, TimeUnit.SECONDS).addNetworkInterceptor(BuiltinNetworkPolicy).build()) : Transport {
     companion object {
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
         fun browserHeaders(host: String) = mapOf("User-Agent" to USER_AGENT, "Origin" to host, "Referer" to "$host/")

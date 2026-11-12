@@ -7,12 +7,19 @@ import android.graphics.drawable.RippleDrawable
 import android.view.Gravity
 import android.widget.ImageButton
 import android.widget.TextView
+import android.widget.LinearLayout
 import androidx.annotation.DrawableRes
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 
 /** Shared Lume colors, with touch-sized controls and native press feedback. */
 object MobileStyle {
+    fun pageHeader(context:Context,heading:TextView,backLabel:String,back:()->Unit)=LinearLayout(context).apply {
+        gravity=Gravity.CENTER_VERTICAL;minimumHeight=context.dp(64)
+        setPadding(context.dp(8),context.dp(4),context.dp(20),context.dp(4))
+        addView(icon(context,it.lumetv.app.R.drawable.ic_mobile_back,backLabel,back),LinearLayout.LayoutParams(context.dp(48),context.dp(48)))
+        addView(heading,LinearLayout.LayoutParams(0,-2,1f).apply {leftMargin=context.dp(12)})
+    }
     fun ripple(context: Context, selected: Boolean = false, radius: Int = 12) = RippleDrawable(
         ColorStateList.valueOf(0x3399CAFF),
         TvStyle.rounded(if (selected) TvStyle.raised else Color.TRANSPARENT, context.dp(radius).toFloat()),

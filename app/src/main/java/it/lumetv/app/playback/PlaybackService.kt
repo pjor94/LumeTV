@@ -36,7 +36,12 @@ import it.lumetv.app.data.HttpClient
 import it.lumetv.app.data.PersonalPlaylistNetwork
 import it.lumetv.app.data.StreamResolver
 import it.lumetv.core.Channel
+import it.lumetv.core.DrmScheme
 import it.lumetv.core.ResolvedStream
+import it.lumetv.core.PlaybackMode
+import it.lumetv.core.PlaybackTarget
+import it.lumetv.app.data.PersonalPlaybackResolver
+import it.lumetv.app.data.PersonalPlaybackStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +49,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
 /** One playback owner for TV, touch UI, lock-screen controls and Bluetooth. */
@@ -84,17 +90,33 @@ class PlaybackService : MediaSessionService() {
     private var recordedId: String? = null
     private var refreshPersonalBeforeRetry = false
     private var personalRefreshAttempted = false
-    var snapshot = PlaybackSnapshot()
+    private var personalHttpConsent = false
+    private var personalPolicyToken = ""
+    private var seekingAllowed = true
+    private lateinit var personalResolver:PersonalPlaybackResolver
+    private lateinit var history:PersonalPlaybackStore
+    private var target=PlaybackTarget("")
+    private var contentTitle=""
+    private var contentDuration=0L
+    private var baseOffset=0L
+    private var resumePosition:Long?=null
+    private var regenerate=false
+    private var loaded=false
+    private var ended=false
+    @Volatile var snapshot = PlaybackSnapshot()
         private set
 
     override fun onCreate() {
         super.onCreate()
         repository = ChannelRepository(this, http)
+        personalResolver=PersonalPlaybackResolver(this,repository.personal,http.client)
+        history=PersonalPlaybackStore.get(this)
         resolver = StreamResolver(http) { repository.personal.resolve(it, http.client) }
         scope.launch {
             repository.personal.version.collect {
                 selected?.takeIf { it.isPersonal }?.let { channel ->
-                    if (!repository.personal.available(channel.sourceId)) stopPlayback()
+                    if (!repository.personal.available(channel.sourceId) || personalHttpConsent && !repository.personal.allowsHttp(channel.sourceId) ||
+                        personalPolicyToken.isNotEmpty() && repository.personal.requestContext(channel.sourceId)?.token!=personalPolicyToken) stopPlayback()
                     else repository.personal.cached().firstOrNull { it.id == channel.id }?.takeIf { it != channel }?.let {
                         selected = it; updateMetadata(); publish()
                     }
@@ -122,8 +144,13 @@ class PlaybackService : MediaSessionService() {
                                 message = ""; error = null
                                 if (player.currentMediaItem?.mediaId == selected?.id) changingChannel = false
                             }
-                            if (state == Player.STATE_ENDED && desiredPlaying)
-                                recovery.onFailure(PlaybackFailure("La diretta si è interrotta. Riprova o scegli un’altra emittente.", true))
+                            if (state == Player.STATE_ENDED) {
+                                if(target.mode==PlaybackMode.LIVE && desiredPlaying)
+                                    recovery.onFailure(PlaybackFailure("La diretta si è interrotta. Riprova o scegli un’altra emittente.", true))
+                                else if(target.mode!=PlaybackMode.LIVE) {
+                                    ended=true;capturePosition(true);desiredPlaying=false;recovery.stop();message="Riproduzione terminata"
+                                }
+                            }
                         }
                         publish()
                     }
@@ -137,7 +164,7 @@ class PlaybackService : MediaSessionService() {
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         if (isPlaying) {
                             recovery.onPlaying()
-                            selected?.takeIf { it.id != recordedId }?.let {
+                            selected?.takeIf { target.mode==PlaybackMode.LIVE && it.id != recordedId }?.let {
                                 recordedId = it.id; repository.recordPlayback(it)
                             }
                         } else recovery.onNotPlaying()
@@ -171,6 +198,10 @@ class PlaybackService : MediaSessionService() {
             }
         debug("player_created")
         val controls = object : ForwardingPlayer(player) {
+            override fun getCurrentPosition():Long=if(target.mode==PlaybackMode.ARCHIVE)position() else super.getCurrentPosition()
+            override fun getContentPosition():Long=if(target.mode==PlaybackMode.ARCHIVE)position() else super.getContentPosition()
+            override fun getDuration():Long=if(target.mode==PlaybackMode.ARCHIVE && contentDuration>0)duration() else super.getDuration()
+            override fun getBufferedPosition():Long=if(target.mode==PlaybackMode.ARCHIVE)(baseOffset+super.getBufferedPosition()).coerceAtMost(duration()) else super.getBufferedPosition()
             override fun play() = resume()
             override fun pause() = pausePlayback()
             override fun stop() = stopPlayback()
@@ -178,7 +209,12 @@ class PlaybackService : MediaSessionService() {
             override fun seekToPrevious() = zap(-1)
             override fun seekToNextMediaItem() = zap(1)
             override fun seekToPreviousMediaItem() = zap(-1)
+            override fun seekTo(positionMs:Long) {if(target.mode!=PlaybackMode.LIVE)seek(positionMs) else if(seekingAllowed)super.seekTo(positionMs)}
+            override fun seekTo(mediaItemIndex:Int,positionMs:Long) {if(target.mode!=PlaybackMode.LIVE)seek(positionMs) else if(seekingAllowed)super.seekTo(mediaItemIndex,positionMs)}
+            override fun seekBack(){if(target.mode!=PlaybackMode.LIVE)seekBy(-10_000) else if(seekingAllowed)super.seekBack()}
+            override fun seekForward(){if(target.mode!=PlaybackMode.LIVE)seekBy(30_000) else if(seekingAllowed)super.seekForward()}
             override fun getAvailableCommands(): Player.Commands = super.getAvailableCommands().buildUpon()
+                .apply {if(!seekingAllowed)removeAll(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,Player.COMMAND_SEEK_BACK,Player.COMMAND_SEEK_FORWARD,Player.COMMAND_SEEK_TO_DEFAULT_POSITION)}
                 .add(Player.COMMAND_SEEK_TO_NEXT).add(Player.COMMAND_SEEK_TO_PREVIOUS)
                 .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM).add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM).build()
             override fun isCommandAvailable(command: Int) = availableCommands.contains(command)
@@ -211,6 +247,10 @@ class PlaybackService : MediaSessionService() {
             }).build()
         addSession(session)
         network.start()
+        scope.launch {
+            var ticks=0
+            while(true){delay(1000);if(target.mode!=PlaybackMode.LIVE && selected!=null){if(++ticks%5==0)capturePosition();publish()}}
+        }
     }
 
     override fun onBind(intent: Intent): IBinder? = if (intent.action == LOCAL_BIND) binder else super.onBind(intent)
@@ -230,11 +270,22 @@ class PlaybackService : MediaSessionService() {
     fun removeObserver(observer: (PlaybackSnapshot) -> Unit) { observers -= observer }
 
     fun select(channel: Channel, mobile: Boolean, audio: Boolean = channel.isRadio, play: Boolean = true) {
+        selectTarget(channel,mobile,audio,play,PlaybackTarget(channel.id,if(channel.isVod)PlaybackMode.VOD else PlaybackMode.LIVE))
+    }
+    fun selectArchive(channel:Channel,eventId:String,mobile:Boolean) {
+        if(channel.isPersonal && eventId.isNotEmpty())selectTarget(channel,mobile,channel.isRadio,true,PlaybackTarget(channel.id,PlaybackMode.ARCHIVE,eventId))
+    }
+    private fun selectTarget(channel:Channel,mobile:Boolean,audio:Boolean,play:Boolean,nextTarget:PlaybackTarget) {
         if (channel.isPersonal && !repository.personal.available(channel.sourceId)) return
+        capturePosition()
+        target=nextTarget;contentTitle=channel.name;contentDuration=0;baseOffset=0;resumePosition=null;regenerate=false;loaded=false;ended=false
         changingChannel = selected != null && selected?.id != channel.id
         this.mobile = mobile
         audioOnly = channel.isRadio || audio
         selected = channel
+        personalHttpConsent = channel.isPersonal && repository.personal.allowsHttp(channel.sourceId)
+        personalPolicyToken = if(channel.isPersonal)repository.personal.requestContext(channel.sourceId)?.token.orEmpty() else ""
+        seekingAllowed = true
         refreshPersonalBeforeRetry = false; personalRefreshAttempted = false
         desiredPlaying = play
         error = null; nowPlaying = ""; recordedId = null
@@ -244,6 +295,8 @@ class PlaybackService : MediaSessionService() {
 
     private fun open() {
         val channel = selected ?: return
+        capturePosition()
+        loaded=false
         val request = ++generation
         resolveJob?.cancel()
         switching = true
@@ -261,18 +314,27 @@ class PlaybackService : MediaSessionService() {
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                     catch (_: Exception) { /* A source error does not discard the cached channel. */ }
                 }
-                val stream = resolver.resolve(channel)
+                val result=if(channel.isPersonal)personalResolver.resolve(channel,target,resumePosition) else null
+                val stream = result?.stream ?: resolver.resolve(channel)
                 if (request != generation || selected?.id != channel.id) return@launch
+                if(result!=null){target=result.target;contentTitle=result.title;contentDuration=result.duration;baseOffset=result.baseOffset;regenerate=result.regenerate}
+                if (stream.personalAllowHttp && !repository.personal.allowsHttp(channel.sourceId))
+                    throw it.lumetv.app.data.SourceException("Il consenso HTTP di questa lista è stato disattivato.")
+                if(stream.personal && repository.personal.requestContext(channel.sourceId)?.token!=stream.personalNetworkToken)
+                    throw it.lumetv.app.data.SourceException("La configurazione della lista è cambiata. Riapri il canale.")
+                personalPolicyToken=stream.personalNetworkToken;seekingAllowed=stream.seekable!=false
                 player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                     .setContentType(if (channel.isRadio) C.AUDIO_CONTENT_TYPE_MUSIC else C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
                 applyTrackPreferences()
-                player.setMediaSource(source(stream, channel))
+                player.setMediaSource(source(stream, channel),if(result?.target?.mode==PlaybackMode.LIVE)C.TIME_UNSET else result?.startPosition ?: C.TIME_UNSET)
+                loaded=true;ended=false
                 player.prepare()
                 player.playWhenReady = desiredPlaying
                 publish()
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (exception: Exception) {
                 if (request == generation) {
+                    debug("source_error type=${exception.javaClass.simpleName} at=${exception.stackTrace.firstOrNull {it.className.startsWith("it.lumetv.")}?.let {it.fileName+":"+it.lineNumber}}")
                     requestPersonalRefresh((exception as? it.lumetv.app.data.PlaylistFetchException)?.status)
                     val failure = PlaybackFailure.fromSource(exception)
                     if (desiredPlaying) recovery.onFailure(failure) else fail(failure.message)
@@ -288,9 +350,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun source(stream: ResolvedStream, channel: Channel): androidx.media3.exoplayer.source.MediaSource {
-        val client = if (stream.personal) PersonalPlaylistNetwork.client(streamHttp, stream.url, stream.headers.keys) else streamHttp
         val factory = DefaultMediaSourceFactory(DefaultDataSource.Factory(this,
-            OkHttpDataSource.Factory(client).setUserAgent(HttpClient.USER_AGENT).setDefaultRequestProperties(stream.headers)))
+            PersonalMediaSources.http(streamHttp, stream.headers)))
         val drm = DefaultDrmSessionManagerProvider().apply {
             setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(http.client).setUserAgent(HttpClient.USER_AGENT))
         }
@@ -298,16 +359,19 @@ class PlaybackService : MediaSessionService() {
         val item = MediaItem.Builder().setMediaId(channel.id).setUri(stream.url).setMediaMetadata(metadata(channel)).apply {
             stream.mimeType?.let { setMimeType(it) }
             stream.drm?.let {
-                setDrmConfiguration(MediaItem.DrmConfiguration.Builder(C.WIDEVINE_UUID)
-                    .setLicenseUri(it.licenseUrl).setLicenseRequestHeaders(it.headers).build())
+                setDrmConfiguration(MediaItem.DrmConfiguration.Builder(if(it.scheme==DrmScheme.CLEARKEY) C.CLEARKEY_UUID else C.WIDEVINE_UUID)
+                    .apply { if(it.licenseUrl.isNotBlank())setLicenseUri(it.licenseUrl) }
+                    .setLicenseRequestHeaders(it.headers).setMultiSession(it.multiSession)
+                    .setForceDefaultLicenseUri(stream.personal && it.licenseUrl.isNotBlank()).build())
             }
         }.build()
-        return factory.createMediaSource(item)
+        return if(stream.personal) PersonalMediaSources.create(this,stream,item,streamHttp,http.client,repository.personal.requestContext(channel.sourceId)) { repository.personal.allowsHttp(channel.sourceId) }
+            else factory.createMediaSource(item)
     }
 
-    private fun metadata(channel: Channel): MediaMetadata = MediaMetadata.Builder().setTitle(channel.name)
-        .setArtist(nowPlaying.ifBlank { if (channel.isRadio) channel.group.ifBlank { "Radio in diretta" } else "TV in diretta" })
-        .setMediaType(if (channel.isRadio) MediaMetadata.MEDIA_TYPE_RADIO_STATION else MediaMetadata.MEDIA_TYPE_TV_CHANNEL)
+    private fun metadata(channel: Channel): MediaMetadata = MediaMetadata.Builder().setTitle(contentTitle.ifBlank {channel.name})
+        .setArtist(if(target.mode==PlaybackMode.ARCHIVE)"${channel.name} · Archivio" else if(target.mode==PlaybackMode.VOD)"Video" else nowPlaying.ifBlank { if (channel.isRadio) channel.group.ifBlank { "Radio in diretta" } else "TV in diretta" })
+        .setMediaType(if(target.mode!=PlaybackMode.LIVE)MediaMetadata.MEDIA_TYPE_MOVIE else if (channel.isRadio) MediaMetadata.MEDIA_TYPE_RADIO_STATION else MediaMetadata.MEDIA_TYPE_TV_CHANNEL)
         .apply { if (!channel.isPersonal && channel.logo.startsWith("https://")) setArtworkUri(android.net.Uri.parse(channel.logo)) }.build()
 
     private fun updateMetadata() {
@@ -317,6 +381,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun pausePlayback() {
+        capturePosition()
         changingChannel = false
         desiredPlaying = false
         recovery.stop(); resolveJob?.cancel(); generation++
@@ -327,12 +392,13 @@ class PlaybackService : MediaSessionService() {
 
     fun resume() {
         if (selected == null) return
+        if(ended && target.mode!=PlaybackMode.LIVE){restart();return}
         desiredPlaying = true
         error = null
         recovery.start()
         if (player.mediaItemCount == 0 || player.playerError != null || player.playbackState in setOf(Player.STATE_IDLE, Player.STATE_ENDED)) open()
         else {
-            if (player.isCurrentMediaItemLive && player.isCurrentMediaItemSeekable) player.seekToDefaultPosition()
+            if (target.mode==PlaybackMode.LIVE && seekingAllowed && player.isCurrentMediaItemLive && player.isCurrentMediaItemSeekable) player.seekToDefaultPosition()
             player.play()
             if (player.playbackState == Player.STATE_BUFFERING) recovery.onBuffering()
         }
@@ -340,6 +406,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun stopPlayback() {
+        capturePosition();loaded=false
         changingChannel = false
         generation++; resolveJob?.cancel(); recovery.stop()
         selected = null; desiredPlaying = false; message = ""; error = null; nowPlaying = ""
@@ -349,6 +416,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun zap(direction: Int) {
+        if(target.mode!=PlaybackMode.LIVE){seekBy(if(direction>0)30_000 else -10_000);return}
         val channel = selected ?: return
         val request = generation
         scope.launch {
@@ -379,12 +447,14 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun waiting(text: String) {
+        capturePosition();loaded=false
         switching = true; player.stop(); switching = false
         message = text
         publish()
     }
 
     private fun fail(text: String) {
+        capturePosition();loaded=false
         changingChannel = false
         recovery.stop(); resolveJob?.cancel()
         error = text; message = ""
@@ -396,7 +466,8 @@ class PlaybackService : MediaSessionService() {
         val next = PlaybackSnapshot(selected, player.isPlaying, desiredPlaying,
             selected != null && error == null && desiredPlaying && (message.isNotEmpty() || player.playbackState == Player.STATE_BUFFERING),
             player.playbackState == Player.STATE_READY, audioOnly,
-            PlaybackPolicy.canContinueInBackground(mobile, selected, audioOnly), message, error, nowPlaying)
+            PlaybackPolicy.canContinueInBackground(mobile, selected, audioOnly), message, error, nowPlaying,
+            target.mode,contentTitle,position(),duration(),target.mode!=PlaybackMode.LIVE && seekingAllowed && (regenerate || player.isCurrentMediaItemSeekable),ended)
         if (next != snapshot) {
             snapshot = next
             observers.toList().forEach { it(next) }
@@ -408,10 +479,30 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        capturePosition()
         recovery.stop(); network.stop(); scope.cancel(); observers.clear()
         session.release(); player.release()
         super.onDestroy()
     }
+
+    private fun position():Long=if(loaded && player.mediaItemCount>0)(baseOffset+player.currentPosition).coerceAtLeast(0) else resumePosition ?: 0L
+    private fun duration():Long=if(target.mode==PlaybackMode.ARCHIVE && contentDuration>0)contentDuration else if(player.duration>0)player.duration+baseOffset else contentDuration
+    private fun capturePosition(completed:Boolean=ended) {
+        val channel=selected ?: return
+        if(target.mode==PlaybackMode.LIVE || !channel.isPersonal || !loaded)return
+        val point=position();resumePosition=point
+        repository.personal.requestContext(channel.sourceId)?.let {history.enqueue(it,channel.sourceId,target,point,duration(),completed)}
+    }
+    fun seek(position:Long) {
+        if(target.mode==PlaybackMode.LIVE || !seekingAllowed || selected==null)return
+        val wanted=position.coerceIn(0,(duration()-1).coerceAtLeast(0))
+        ended=false;message=""
+        if(loaded && player.isCurrentMediaItemSeekable && wanted>=baseOffset){player.seekTo(wanted-baseOffset);resumePosition=wanted;capturePosition();publish()}
+        else if(regenerate){capturePosition();resumePosition=wanted;loaded=false;open()}
+    }
+    fun seekBy(delta:Long)=seek(position()+delta)
+    fun restart(){if(target.mode!=PlaybackMode.LIVE){resumePosition=0;loaded=false;ended=false;desiredPlaying=true;recovery.start();open()}}
+    fun returnToLive() {val channel=selected ?: return;if(target.mode==PlaybackMode.ARCHIVE)select(channel,mobile,audioOnly,true) else resume()}
 
     private fun debug(value: String) {
         if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) android.util.Log.i("LumePlayer", value)

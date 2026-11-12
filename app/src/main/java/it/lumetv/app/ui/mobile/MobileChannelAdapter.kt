@@ -84,9 +84,9 @@ class MobileChannelAdapter(
         val programme = item.programme
         val now = System.currentTimeMillis()
         val live = programme != null && programme.start <= now && programme.end > now
-        val number = channel.number.takeIf { it != 9999 }?.let { "$it · " }.orEmpty()
+        val number = channel.displayNumber?.let { "$it · " }.orEmpty()
         holder.title.text = if (item.channelRow) number + channel.name else programme?.title.orEmpty()
-        holder.subtitle.text = if (item.channelRow) programme?.title ?: if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "Guarda la diretta" else number + channel.name
+        holder.subtitle.text = if (item.channelRow) programme?.title ?: if(channel.isVod)"Guarda il video" else if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "Guarda la diretta" else number + channel.name
         if (item.channelRow && channel.isPersonal) holder.subtitle.text = listOfNotNull(sourceNames[channel.sourceId], holder.subtitle.text.toString()).joinToString(" · ")
         holder.timing.text = programme?.let { (if (live) "In onda · " else "") + time(it.start) + " – " + time(it.end) }.orEmpty()
         holder.timing.visibility = if (programme == null) View.GONE else View.VISIBLE

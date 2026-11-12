@@ -131,7 +131,7 @@ class LiveChannelAdapter(
         val channel = items[position]
         val context = holder.row.context
         val current = channel.id == currentId
-        holder.number.text = channel.number.takeIf { it != 9999 }?.let { String.format(Locale.ITALY, "%d", it) }.orEmpty()
+        holder.number.text = channel.displayNumber?.let { String.format(Locale.ITALY, "%d", it) }.orEmpty()
         holder.logo.bind(channel)
         holder.name.text = channel.name
         holder.badge.text = when {
@@ -157,7 +157,7 @@ class LiveChannelAdapter(
         // Reserve the same space when the guide is missing, so every logo stays aligned.
         holder.progress.visibility = if (window.current != null) View.VISIBLE else View.INVISIBLE
         holder.row.contentDescription = listOfNotNull(
-            channel.number.takeIf { it != 9999 }?.toString(), channel.name, window.current?.title,
+            channel.displayNumber?.toString(), channel.name, window.current?.title,
             "In visione".takeIf { channel.id == currentId }, "Preferito".takeIf { favorite(channel) },
         ).joinToString(", ")
     }

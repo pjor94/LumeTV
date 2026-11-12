@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
+    <!-- User-selected HTTP hosts are gated per source by PersonalPlaylistNetwork.
+         Built-in services retain their previous restrictions in BuiltinNetworkPolicy. -->
+    <base-config cleartextTrafficPermitted="true" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">streaming.bitonlive.net</domain>
         <!-- WLTV's public XMLTV endpoint can redirect to HTTP on this exact host. -->

@@ -72,11 +72,13 @@ internal class GuideNavigator {
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
     val shows: List<Programme> get() = channel?.let { schedules[it.epgId] }.orEmpty()
     val programme: Programme? get() = shows.firstOrNull { it.start == programmeStart }
-    val end: Long get() = maxOf(GuideSchedule.halfHour(now) + GuideSchedule.WINDOW,
+    private val hasPersonal get()=channels.any {it.isPersonal}
+    val earliest:Long get()=GuideSchedule.halfHour(now-if(hasPersonal)7*86_400_000L else 0L)
+    val end: Long get() = if(hasPersonal)now+48*3_600_000L else maxOf(GuideSchedule.halfHour(now) + GuideSchedule.WINDOW,
         minOf(now + 24 * 60 * GuideSchedule.MINUTE, schedules.values.maxOfOrNull { list -> list.maxOfOrNull { it.end } ?: now } ?: now))
-    val canGoEarlier: Boolean get() = windowStart > GuideSchedule.halfHour(now)
+    val canGoEarlier: Boolean get() = windowStart > earliest
     val canGoLater: Boolean get() = windowStart + GuideSchedule.WINDOW < end
-    val covered: Int get() = channels.count { c -> schedules[c.epgId].orEmpty().any { it.end > now } }
+    val covered: Int get() = channels.count { c -> schedules[c.epgId].orEmpty().any { it.end > windowStart && it.start < windowStart+GuideSchedule.WINDOW } }
 
     fun submit(items: List<Channel>, programmes: Map<String, List<Programme>>, favoriteIds: Set<String>,
                currentId: String?, time: Long) {
@@ -84,7 +86,7 @@ internal class GuideNavigator {
         allChannels = items
         favorites = favoriteIds
         schedules = programmes.mapValues { GuideSchedule.normalize(it.value) }
-        if (windowStart == 0L || windowStart > end || windowStart + 24 * 60 * GuideSchedule.MINUTE < now) {
+        if (windowStart == 0L || windowStart > end || windowStart < earliest) {
             windowStart = GuideSchedule.halfHour(now); anchor = now; programmeStart = null
         }
         if (channels.none { it.id == channelId }) {
@@ -124,8 +126,8 @@ internal class GuideNavigator {
 
     fun moveProgramme(direction: Int): Boolean {
         val channel = channel ?: return false
-        val from = minOf(windowStart, GuideSchedule.halfHour(now))
-        val cells = slots(channel, from, end)
+        val from = if(hasPersonal)maxOf(earliest,windowStart-GuideSchedule.WINDOW) else minOf(windowStart,earliest)
+        val cells = slots(channel, from, if(hasPersonal)minOf(end,windowStart+2*GuideSchedule.WINDOW) else end)
         val position = cells.indexOfFirst(::selected)
         val target = (position + direction).coerceIn(0, cells.lastIndex)
         if (position < 0 || position == target) return false
@@ -177,7 +179,7 @@ internal class GuideNavigator {
         programmeStart = channel?.let { c -> slots(c, anchor, anchor + 1).firstOrNull()?.programme?.start }
     }
     private fun clampWindow() {
-        windowStart = windowStart.coerceIn(GuideSchedule.halfHour(now), maxOf(GuideSchedule.halfHour(now), end - GuideSchedule.WINDOW))
+        windowStart = windowStart.coerceIn(earliest, maxOf(earliest, end - GuideSchedule.WINDOW))
     }
     private fun revealRow() {
         val position = channels.indexOfFirst { it.id == channelId }.coerceAtLeast(0)

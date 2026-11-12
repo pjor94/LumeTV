@@ -4,6 +4,7 @@ import android.content.Context
 import it.lumetv.core.MediaKind
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -35,7 +36,7 @@ class PersonalPlaylistRepositoryTest {
         val id = repo.save("Casa", draft)
         val channel = repo.local().single()
         assertEquals(id, channel.sourceId); assertTrue(channel.isPersonal)
-        assertEquals("", channel.source); assertEquals("", channel.epgId); assertTrue(channel.headers.isEmpty())
+        assertEquals("", channel.source); assertEquals(PersonalGuideKeys.channel(id,channel.id), channel.epgId); assertTrue(channel.headers.isEmpty())
         assertFalse(channel.toString().contains("private")); assertFalse(repo.state.value.toString().contains("secret"))
         val restored = repository()
         assertEquals(channel, restored.local().single())
@@ -86,10 +87,39 @@ class PersonalPlaylistRepositoryTest {
         val id = repo.save("Casa", repo.prepareUrl("https://example.com/list"))
         val original = repo.local(); val updated = repo.state.value.single().updated
         time += 31_000
-        answer = { url, tag, _ -> assertEquals("v1", tag); PlaylistDownload(null, url) }
+        answer = { url, tag, _ -> assertEquals("v1", tag); PlaylistDownload(null, url, "v2") }
         assertTrue(repo.refresh(id))
         assertEquals(original, repo.local()); assertEquals(updated, repo.state.value.single().updated)
         assertEquals(time, repo.state.value.single().checked)
+        time+=31_000
+        answer={ url,tag,_ -> assertEquals("v2",tag);PlaylistDownload(null,url) }
+        assertTrue(repo.refresh(id))
+    }
+
+    @Test fun `cancelling an import closes its stream and removes the unfinished SQLite snapshot`() = runTest {
+        val started=CompletableDeferred<Unit>();val closed=java.util.concurrent.atomic.AtomicBoolean()
+        val latch=java.util.concurrent.CountDownLatch(1)
+        val input=object:java.io.InputStream() {
+            override fun read():Int { started.complete(Unit);latch.await();return -1 }
+            override fun read(buffer:ByteArray,offset:Int,length:Int):Int { started.complete(Unit);latch.await();return -1 }
+            override fun close() { closed.set(true);latch.countDown() }
+        }
+        answer={url,_,_->PlaylistDownload(null,url,input=input)}
+        val repo=repository();val pending=async { repo.prepareUrl("https://example.com/slow") }
+        started.await();pending.cancelAndJoin()
+        assertTrue(closed.get());assertTrue(repo.local().isEmpty())
+        assertTrue(File(context.filesDir,"personal-playlists").listFiles().orEmpty().none { it.name.startsWith(".draft-") })
+    }
+
+    @Test fun `SQL identity matching retains separate qualities and restores bounded archived records`() = runTest {
+        fun list(hd:String,sd:String)=listOf("#EXTM3U","#EXTINF:-1 tvg-id=\"shared\",HD",hd,"#EXTINF:-1 tvg-id=\"shared\",SD",sd).joinToString("\n")
+        val repo=repository();val id=repo.save("Qualita",repo.prepareFile(list("https://example.com/hd.m3u8","https://example.com/sd.m3u8").toByteArray()))
+        val old=repo.local().associate { it.name to it.id }
+        val onlySd="#EXTM3U\n#EXTINF:-1 tvg-id=\"shared\",SD\nhttps://example.com/sd.m3u8"
+        repo.save("Qualita",repo.prepareFile(onlySd.toByteArray()),id)
+        assertEquals(old["SD"],repo.local().single().id)
+        repo.save("Qualita",repo.prepareFile(list("https://example.com/renewed-hd.m3u8","https://example.com/renewed-sd.m3u8").toByteArray()),id)
+        assertEquals(old,repo.local().associate { it.name to it.id })
     }
 
     @Test fun `truncated refresh retains the previous catalog and reports a bounded safe error`() = runTest {
@@ -123,7 +153,7 @@ class PersonalPlaylistRepositoryTest {
         val repo = repository()
         val a = repo.save("A", repo.prepareFile(text.toByteArray()))
         val b = repo.save("B", repo.prepareFile(text.toByteArray()))
-        File(context.filesDir, "personal-playlists/$a.json").writeText("broken")
+        File(context.filesDir, "personal-playlists/$a.sqlite").writeText("broken")
         val restored = repository()
         assertEquals(b, restored.local().single().sourceId)
         assertEquals(2, restored.state.value.size)
@@ -133,5 +163,88 @@ class PersonalPlaylistRepositoryTest {
         assertNotNull(blocked.storageError)
         try { blocked.save("C", blocked.prepareFile(text.toByteArray())); fail("Corrupt index overwritten") } catch (_: java.io.IOException) { }
         assertEquals("broken index", index.readText())
+    }
+
+    @Test fun `HTTP is explicit per source and revocation survives restart`() = runTest {
+        val repo=repository()
+        var requested=false
+        answer={ url,_,_ -> requested=true;PlaylistDownload(text.replace("https://example.com/live","http://example.com/live"),url) }
+        try { repo.prepareUrl("http://example.com/list");fail("HTTP fetched without consent") } catch(_:java.io.IOException) {}
+        assertFalse(requested)
+        val id=repo.save("HTTP",repo.prepareUrl("http://example.com/list",allowHttp=true))
+        val channel=repo.local().single()
+        assertTrue(repo.resolve(channel.id,okhttp3.OkHttpClient()).personalAllowHttp)
+        repo.setHttpAllowed(id,false)
+        try { repo.resolve(channel.id,okhttp3.OkHttpClient());fail("HTTP playback authorized after revocation") } catch(_:it.lumetv.core.PlaylistFormatException) {}
+        val restored=repository();assertEquals(channel.id,restored.local().single().id);assertFalse(restored.state.value.single().allowHttp)
+    }
+
+    @Test fun `HTTP consent changes clear local failures but retain server rate limits across restart`() = runTest {
+        val repo=repository();val id=repo.save("HTTP",repo.prepareUrl("https://example.com/list"))
+        time+=31_000
+        answer={_,_,_->throw java.io.IOException("local policy failure")}
+        try { repo.refresh(id);fail("Failure ignored") } catch(_:java.io.IOException) {}
+        repo.setHttpAllowed(id,true)
+        answer={url,_,_->PlaylistDownload(text,url)}
+        assertTrue(repo.refresh(id))
+        time+=31_000
+        answer={_,_,_->throw PlaylistFetchException(429,time+120_000,"Il servizio richiede una pausa.")}
+        try { repo.refresh(id);fail("Rate limit ignored") } catch(_:PlaylistFetchException) {}
+        repo.setHttpAllowed(id,false);repo.setHttpAllowed(id,true)
+        answer={url,_,_->PlaylistDownload(text,url)}
+        val restored=repository();assertFalse(restored.refresh(id))
+        time+=120_001;assertTrue(restored.refresh(id))
+    }
+
+    @Test fun `invalid catalog rows isolate their source while preserving the rest of the catalog`() = runTest {
+        val repo=repository();val bad=repo.save("Danneggiata",repo.prepareFile(text.toByteArray()))
+        val good=repo.save("Valida",repo.prepareFile(text.toByteArray()))
+        android.database.sqlite.SQLiteDatabase.openDatabase(File(context.filesDir,"personal-playlists/$bad.sqlite").absolutePath,
+            null,android.database.sqlite.SQLiteDatabase.OPEN_READWRITE).use { db ->
+            db.execSQL("UPDATE records SET groups_json='invalid JSON'")
+        }
+        val restored=repository();assertEquals(good,restored.local().single().sourceId)
+        assertEquals("Lista non leggibile",restored.state.value.first { it.id==bad }.name)
+        assertTrue(File(context.filesDir,"personal-playlists/$bad.sqlite").isFile)
+    }
+
+    @Test fun `version one JSON migrates to SQLite without changing IDs favorites or private playback`() = runTest {
+        val id="user_"+"1".repeat(32);val channel="a".repeat(24)
+        val dir=File(context.filesDir,"personal-playlists").apply { mkdirs() }
+        File(dir,"index.json").writeText(JSONObject().put("version",1).put("ids",org.json.JSONArray(listOf(id))).toString())
+        val record=JSONObject().put("id",channel).put("name","Migrato").put("url","https://example.com/one.m3u8?secret=private")
+            .put("tvgId","one").put("logo","").put("number",5).put("groups",org.json.JSONArray(listOf("Test"))).put("kind","TV")
+            .put("headers",JSONObject().put("Authorization","private-token")).put("position",0).put("active",true).put("seen",time)
+        File(dir,"$id.json").writeText(JSONObject().put("version",1).put("id",id).put("name","Da 0.8.0").put("location","URL")
+            .put("address","https://example.com/list").put("enabled",true).put("kind","TV").put("updated",time).put("checked",time)
+            .put("revision",4).put("records",org.json.JSONArray().put(record)).toString())
+        val prefs=context.getSharedPreferences("lume",Context.MODE_PRIVATE)
+        prefs.edit().putStringSet("favorites",setOf(channel)).putString("last_channel",channel).commit()
+        val repo=repository();assertEquals(channel,repo.local().single().id)
+        assertTrue(File(dir,"$id.sqlite").isFile);assertFalse(File(dir,"$id.json").exists())
+        assertEquals(setOf(channel),prefs.getStringSet("favorites",emptySet()))
+        assertEquals(channel,prefs.getString("last_channel",null))
+        assertEquals("private-token",repo.resolve(channel,okhttp3.OkHttpClient()).headers["Authorization"])
+        assertEquals(channel,repository().local().single().id)
+        assertFalse(repo.local().toString().contains("private"))
+    }
+
+    @Test fun `large files stream into disk snapshots and indexed reconciliation retains identities`() = runTest(timeout=kotlin.time.Duration.parse("120s")) {
+        val input=File(context.cacheDir,"large.m3u")
+        fun generate(suffix:String) { input.bufferedWriter().use { out ->
+            out.appendLine("#EXTM3U")
+            for(i in 1..14000) { out.appendLine("#EXTINF:-1 tvg-id=\"id$i\" group-title=\"Test\",Canale $i")
+                out.appendLine("https://example.com/$i.m3u8?token="+"x".repeat(650)+suffix) }
+        } }
+        generate("before");assertTrue(input.length()>8*1024*1024)
+        val repo=repository();var bytes=0L
+        val draft=repo.prepareFile(input,progress={ bytes=it.bytes })
+        assertEquals(14000,draft.report.count);assertEquals(5,draft.report.sample.size);assertEquals(input.length(),bytes)
+        val id=repo.save("Grande",draft);val old=repo.local().map { it.id }
+        generate("after");repo.save("Grande",repo.prepareFile(input),id)
+        assertEquals(old,repo.local().map { it.id });assertEquals(old,repository().local().map { it.id })
+        assertTrue(repo.resolve(old.last(),okhttp3.OkHttpClient()).url.endsWith("after"))
+        assertTrue(File(context.filesDir,"personal-playlists").listFiles().orEmpty().none { it.name.startsWith(".draft-") })
+        input.delete()
     }
 }

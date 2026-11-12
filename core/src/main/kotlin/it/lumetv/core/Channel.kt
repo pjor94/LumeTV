@@ -20,7 +20,11 @@ data class Channel(
     val sourceId: String = BUILTIN_TV_SOURCE,
     val position: Int = 0,
     val groups: List<String> = emptyList(),
+    val numberKnown: Boolean = number != 9999,
+    val contentKind: PlaylistContentKind = PlaylistContentKind.LIVE,
 ) {
+    val isVod get() = contentKind==PlaylistContentKind.VOD
+    val displayNumber: Int? get() = number.takeIf { numberKnown }
     val isPersonal: Boolean get() = sourceId.startsWith("user_")
     val isRadio: Boolean get() = kind == MediaKind.RADIO
     val family: String get() = if (isRadio) "Radio" else when (broadcaster) {
@@ -89,14 +93,36 @@ object M3uParser {
     private fun decode(value: String) = runCatching { URLDecoder.decode(value.replace("+", "%2B"), "UTF-8") }.getOrDefault(value)
 }
 
-data class DrmSpec(val licenseUrl: String, val headers: Map<String, String> = emptyMap())
+enum class DrmScheme { WIDEVINE, CLEARKEY }
+enum class LicenseChallengeEncoding { RAW, BASE64, BASE64_URL }
+enum class LicenseResponseEncoding { RAW, BASE64, JSON, JSON_BASE64, BASE64_JSON }
+data class LicenseRequestSpec(val method: String = "POST", val challenge: LicenseChallengeEncoding = LicenseChallengeEncoding.RAW,
+    val response: LicenseResponseEncoding = LicenseResponseEncoding.RAW, val responsePath: List<String> = emptyList(),
+    val template: String? = null, val wrappers: List<String> = emptyList(), val unwrappers: List<String> = emptyList()) {
+    override fun toString() = "LicenseRequestSpec(method=$method, response=$response)"
+}
+data class HlsKeySpec(val parameters: String = "", val headers: Map<String,String> = emptyMap()) {
+    override fun toString() = "HlsKeySpec()"
+}
+data class DrmSpec(val licenseUrl: String, val headers: Map<String, String> = emptyMap(),
+    val scheme: DrmScheme = DrmScheme.WIDEVINE, val clearKeyResponse: String? = null,
+    val multiSession: Boolean = false, val request: LicenseRequestSpec = LicenseRequestSpec()) {
+    override fun toString() = "DrmSpec(scheme=$scheme, local=${clearKeyResponse != null})"
+}
 data class ResolvedStream(
     val url: String,
     val mimeType: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val drm: DrmSpec? = null,
     val personal: Boolean = false,
-)
+    val personalAllowHttp: Boolean = false,
+    val manifestHeaders: Map<String, String>? = null,
+    val personalNetworkToken: String = "",
+    val seekable: Boolean? = null,
+    val hlsKey: HlsKeySpec? = null,
+) {
+    override fun toString() = "ResolvedStream(mimeType=$mimeType, personal=$personal, drm=$drm)"
+}
 
 object ChannelNavigation {
     fun next(channels: List<Channel>, currentId: String?, direction: Int, favoriteIds: Set<String>? = null): Channel? {
@@ -108,5 +134,5 @@ object ChannelNavigation {
             else Math.floorMod(index + direction, available.size)
         return available[next]
     }
-    fun byNumber(channels: List<Channel>, number: Int) = channels.firstOrNull { !it.isRadio && it.number == number }
+    fun byNumber(channels: List<Channel>, number: Int) = channels.firstOrNull { !it.isRadio && it.displayNumber == number }
 }

@@ -19,6 +19,13 @@ class HomeInspection : Instrumentation() {
             check(Build.HARDWARE in setOf("ranchu", "goldfish")) { "Only disposable emulators are supported" }
             check(Build.VERSION.SDK_INT >= 26)
             val context = targetContext
+            if(arguments.getString("operation").orEmpty().startsWith("playlist-")) {
+                val result=if(arguments.getString("operation")=="playlist-pages")it.lumetv.app.playlists.PlaylistPagesInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-def")kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                    it.lumetv.app.playlists.OnDemandInspection.run(context,requireNotNull(arguments.getString("fixtureRoot")),arguments.getString("mode")=="phone")
+                } else it.lumetv.app.playlists.PlaylistInspection.run(context,arguments)
+                finish(Activity.RESULT_OK,Bundle().apply {putString("snapshot",result.toString())});return
+            }
             val store = AndroidHomeRowStore(context)
             when (arguments.getString("operation", "snapshot")) {
                 "snapshot" -> Unit
@@ -53,7 +60,7 @@ class HomeInspection : Instrumentation() {
             val result = JSONObject().put("rows", rows).put("programs", allPrograms).put("summary", HomeChannels.summary(context))
             finish(Activity.RESULT_OK, Bundle().apply { putString("snapshot", result.toString()) })
         } catch (error: Exception) {
-            finish(Activity.RESULT_CANCELED, Bundle().apply { putString("failure", error.javaClass.simpleName + ": " + error.message) })
+            finish(Activity.RESULT_CANCELED, Bundle().apply { putString("failure", error.javaClass.simpleName + ": " + error.message); putString("at", error.stackTrace.firstOrNull { it.className.startsWith("it.lumetv.") }?.toString()) })
         }
     }
 }

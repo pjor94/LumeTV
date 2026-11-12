@@ -67,6 +67,15 @@ class TvPlayer(context: Context, @Suppress("UNUSED_PARAMETER") http: HttpClient)
         service?.resume()
         return true
     }
+    fun returnToLive(){service?.returnToLive()}
+    fun resumePlayback(){service?.resume()}
+    fun selectArchive(channel:Channel,eventId:String,mobile:Boolean) {
+        val action={service?.selectArchive(channel,eventId,mobile);Unit}
+        if(service==null)pending=action else action()
+    }
+    fun seek(position:Long){service?.seek(position)}
+    fun seekBy(delta:Long){service?.seekBy(delta)}
+    fun restart(){service?.restart()}
     fun setAudioOnly(value: Boolean) { service?.setAudioOnly(value) }
     fun refreshPreferences() { service?.refreshPreferences() }
     fun stop() { pending = null; service?.stopPlayback() }

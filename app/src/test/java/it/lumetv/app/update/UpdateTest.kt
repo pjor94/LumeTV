@@ -196,7 +196,7 @@ class UpdateTest {
         try {
             for (status in listOf(403, 429)) {
                 server.enqueue(MockResponse().setResponseCode(status).setHeader("Retry-After", "7200"))
-                val client = GithubUpdateClient(OkHttpClient()) { 100_000L }
+                val client = GithubUpdateClient(OkHttpClient(), urlAllowed = { it.host == "localhost" }) { 100_000L }
                 try { client.text(server.url("/releases").toString(), 1024); fail() }
                 catch (limited: UpdateRateLimitException) { assertEquals(7_300_000L, limited.retryAt) }
             }

@@ -2,6 +2,7 @@ package it.lumetv.app.playback
 
 import android.view.KeyEvent
 import it.lumetv.core.Channel
+import it.lumetv.core.PlaybackMode
 
 /** UI state contains catalog identity, never temporary stream URLs or DRM credentials. */
 data class PlaybackSnapshot(
@@ -15,6 +16,12 @@ data class PlaybackSnapshot(
     val message: String = "",
     val error: String? = null,
     val nowPlaying: String = "",
+    val mode:PlaybackMode=PlaybackMode.LIVE,
+    val title:String="",
+    val position:Long=0,
+    val duration:Long=0,
+    val seekable:Boolean=false,
+    val ended:Boolean=false,
 )
 
 internal object PlaybackPolicy {

@@ -133,4 +133,11 @@ class GuideScheduleTest {
         assertEquals(anchor, nav.anchor)
         assertEquals(window, nav.windowStart)
     }
+    @Test fun `historical coverage counts the visible window and keeps past navigation`() {
+        val channel=one.copy(sourceId="user_"+"a".repeat(32))
+        val nav=GuideNavigator();val past=show("Archivio",-120,-60)
+        nav.submit(listOf(channel),mapOf(channel.epgId to listOf(past)),emptySet(),channel.id,now)
+        nav.jump(at(-150));assertEquals(1,nav.covered);assertTrue(nav.canGoEarlier)
+        nav.jump(at(-600));assertEquals(0,nav.covered)
+    }
 }

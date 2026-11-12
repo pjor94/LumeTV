@@ -72,7 +72,7 @@ class ChannelRepository(context: Context, private val http: Transport) {
 
     fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int, current: Channel? = null): Channel? {
         val playing = channels.firstOrNull { it.id == currentId } ?: current
-        val scoped = if (playing == null) channels else channels.filter { it.sourceId == playing.sourceId && it.kind == playing.kind }
+        val scoped = channels.filter {!it.isVod && (playing==null || it.sourceId==playing.sourceId && it.kind==playing.kind)}
         return ChannelNavigation.next(scoped, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
     }
 

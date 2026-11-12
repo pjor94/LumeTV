@@ -300,7 +300,7 @@ class DiscoveryView(
         val item = controller.selected ?: return
         val now = System.currentTimeMillis(); val p = item.programme
         logo.bind(item.channel)
-        channel.text = listOfNotNull(item.channel.number.takeIf { it != 9999 }?.toString(), item.channel.name,
+        channel.text = listOfNotNull(item.channel.displayNumber?.toString(), item.channel.name,
             "★".takeIf { favorite(item.channel) }).joinToString(" · ")
         stateLabel.setText(if (item.isLive(now)) R.string.discovery_live else R.string.discovery_next)
         title.text = p.title

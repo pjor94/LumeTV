@@ -63,6 +63,11 @@ class MobileBrowseView(
     private var sourceGroup: String? = null
     private var sourceNames = emptyMap<String, String>()
     var sourceChooser: ((String, it.lumetv.core.MediaKind?, (String) -> Unit) -> Unit)? = null
+    var openVideoLibrary:()->Unit={}
+    var onProgrammeSearch:(Channel)->Unit={}
+    var onGuideWindow:(List<Channel>,Long,Long)->Unit={_,_,_->}
+    private var requestedGuide=""
+    private var guideDay=0
     var trackModal: ((AlertDialog) -> Unit)? = null
     private val sourceControls = LinearLayout(context)
     private val sourceButton = MobileStyle.button(context, "Lista: Catalogo Lume") {
@@ -115,6 +120,7 @@ class MobileBrowseView(
         itemAnimator = null
         clipToPadding = false
         setPadding(0, 0, 0, context.dp(12))
+        addOnScrollListener(object:RecyclerView.OnScrollListener(){override fun onScrolled(view:RecyclerView,dx:Int,dy:Int){if(section!=MobileSection.GUIDE)requestVisibleGuide(adapterItems())}})
     }
     private val content: LinearLayout
 
@@ -174,6 +180,7 @@ class MobileBrowseView(
         content.addView(filterScroll, LayoutParams(-1, -2))
         sourceControls.addView(sourceButton, LayoutParams(0, -2, 1f).apply { rightMargin = context.dp(8) })
         sourceControls.addView(groupButton, LayoutParams(0, -2, 1f))
+        sourceControls.addView(MobileStyle.button(context,"Video"){openVideoLibrary()},LayoutParams(-2,-2))
         content.addView(sourceControls, LayoutParams(-1, -2).apply { topMargin = context.dp(8) })
         guideSelector.gravity = Gravity.CENTER_VERTICAL
         guideChannel.apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
@@ -318,8 +325,13 @@ class MobileBrowseView(
                 chip(name, radioFilter == name) { radioFilter = name }
             }
             MobileSection.GUIDE -> {
-                chip("Da adesso", !guideEvening) { guideEvening = false }
-                chip("Stasera", guideEvening) { guideEvening = true }
+                chip("Da adesso", !guideEvening && guideDay==0) { guideEvening = false;guideDay=0 }
+                chip("Stasera", guideEvening) { guideEvening = true;guideDay=0 }
+                if(sourceId!="builtin")chip(if(guideDay==0)"Scegli giorno" else dayLabel(guideDay),guideDay!=0) {
+                    val days=(-7..2).toList()
+                    AlertDialog.Builder(context).setTitle("Giorno della guida").setItems(days.map(::dayLabel).toTypedArray()){_,n->guideDay=days[n];guideEvening=false;buildFilters();renderRows(true)}.setNegativeButton("Chiudi",null).show()
+                }
+                if(sourceId!="builtin")chip("Cerca nella guida",false){channels.firstOrNull {it.id==guideChannelId}?.let(onProgrammeSearch)}
             }
             MobileSection.DISCOVER -> {
                 listOf("Ora", "Tra poco", "Stasera").forEachIndexed { index, label ->
@@ -338,7 +350,7 @@ class MobileBrowseView(
         }
         if (sourceGroup != null && it.lumetv.core.CatalogSelection.channels(channels, sourceId)
                 .none { it.isRadio == (section == MobileSection.RADIO) && sourceGroup in it.groups }) sourceGroup = null
-        val catalog = if (section == MobileSection.FAVORITES) channels else it.lumetv.core.CatalogSelection.channels(channels, sourceId, sourceGroup)
+        val catalog = if(section==MobileSection.FAVORITES)channels else it.lumetv.core.CatalogSelection.channels(channels,sourceId,sourceGroup).filterNot {it.isVod}
         sourceControls.visibility = if (sourceNames.isEmpty() || section == MobileSection.FAVORITES) GONE else VISIBLE
         sourceButton.text = "Lista: " + (sourceNames[sourceId] ?: "Catalogo Lume")
         sourceButton.maxLines = 2; sourceButton.ellipsize = TextUtils.TruncateAt.END
@@ -363,9 +375,9 @@ class MobileBrowseView(
             }.let { rows -> if (radioFilter == "Recenti") rows.sortedBy { recentIds.indexOf(it.id) } else rows }
                 .map { MobileBrowseItem(it, channelRow = true) }
             MobileSection.GUIDE -> selectedChannel?.let { channel ->
-                val start = if (guideEvening) GuideSchedule.evening(now) else now
+                val start = guideStart(now)
                 GuideSchedule.normalize(programmes[channel.epgId].orEmpty()).filter {
-                    it.end > start && (query.isBlank() || it.title.contains(query, true) || it.description.contains(query, true))
+                    it.end > start && it.start<start+86_400_000L && (query.isBlank() || it.title.contains(query, true) || it.description.contains(query, true))
                 }.map { MobileBrowseItem(channel, it) }
             }.orEmpty()
             MobileSection.DISCOVER -> DiscoveryEngine.select(catalog.filterNot(Channel::isRadio), programmes,
@@ -408,13 +420,33 @@ class MobileBrowseView(
         emptyAction.visibility = if (!loaded || query.isNotBlank() || recentMode || section == MobileSection.FAVORITES ||
             section == MobileSection.RADIO && radioFilter == "Preferite" || sourceId != "builtin" && section == MobileSection.DISCOVER) GONE else VISIBLE
         emptyAction.text = if (section == MobileSection.GUIDE && selectedChannel != null) "Guarda ${selectedChannel.name}" else "Aggiorna"
+        if(section!=MobileSection.GUIDE){requestVisibleGuide(rows);return}
+        val requested=listOfNotNull(selectedChannel)
+        val from=if(section==MobileSection.GUIDE)guideStart(now) else now/1_800_000*1_800_000
+        val until=from+if(section==MobileSection.GUIDE)86_400_000L else GuideSchedule.WINDOW
+        val key=requested.joinToString {it.id}+from
+        if(key!=requestedGuide){requestedGuide=key;onGuideWindow(requested,from,until)}
     }
+    private fun adapterItems()=adapter.items
+    private fun requestVisibleGuide(rows:List<MobileBrowseItem>) {
+        val manager=list.layoutManager as LinearLayoutManager
+        val first=manager.findFirstVisibleItemPosition().coerceAtLeast(0)
+        val last=manager.findLastVisibleItemPosition().coerceAtLeast(first+9)
+        val requested=rows.drop(first).take((last-first+1).coerceAtMost(80)).map {it.channel}.distinctBy {it.id}
+        val from=System.currentTimeMillis()/1_800_000*1_800_000
+        val key=requested.joinToString {it.id}+from
+        if(key!=requestedGuide){requestedGuide=key;onGuideWindow(requested,from,from+GuideSchedule.WINDOW)}
+    }
+    fun reloadGuideWindow(){requestedGuide="";renderRows()}
+    private fun guideStart(now:Long):Long=if(guideEvening)GuideSchedule.evening(now) else if(guideDay==0 || sourceId=="builtin")now/1_800_000*1_800_000 else
+        java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.systemDefault()).toLocalDate().plusDays(guideDay.toLong()).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+    private fun dayLabel(offset:Int)=java.time.LocalDate.now().plusDays(offset.toLong()).format(java.time.format.DateTimeFormatter.ofPattern("EEE d MMM",java.util.Locale.ITALY))
 
     private fun chooseGuideChannel() {
-        val channels = it.lumetv.core.CatalogSelection.channels(channels, sourceId, sourceGroup).filterNot(Channel::isRadio)
+        val channels = it.lumetv.core.CatalogSelection.channels(channels, sourceId, sourceGroup).filter {!it.isRadio && !it.isVod}
         if (channels.isEmpty()) return
         AlertDialog.Builder(context).setTitle("Guida del canale")
-            .setSingleChoiceItems(channels.map { (if (it.number == 9999) "" else "${it.number} · ") + it.name }.toTypedArray(),
+            .setSingleChoiceItems(channels.map { (if (it.displayNumber == null) "" else "${it.number} · ") + it.name }.toTypedArray(),
                 channels.indexOfFirst { it.id == guideChannelId }) { dialog, index ->
                 guideChannelId = channels[index].id; dialog.dismiss(); renderRows(true)
             }.setNegativeButton("Chiudi", null).show()

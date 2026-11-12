@@ -2,19 +2,15 @@ package it.lumetv.app.ui.mobile
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.ColorStateList
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.doOnLayout
-import it.lumetv.app.R
+import it.lumetv.app.ui.OptionsRowView
 import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 
@@ -33,7 +29,7 @@ enum class MobileOption(val label: String) {
 /** A settings destination in the same activity, keeping the current catalog and player alive. */
 @SuppressLint("ViewConstructor")
 class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOption) -> Unit) : LinearLayout(context) {
-    private val rows = linkedMapOf<MobileOption, Pair<View, TextView>>()
+    private val rows = linkedMapOf<MobileOption, OptionsRowView>()
     private val column = LinearLayout(context).apply {
         orientation = VERTICAL
         setPadding(context.dp(20), context.dp(8), context.dp(20), context.dp(24))
@@ -49,16 +45,9 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
         orientation = VERTICAL
         setBackgroundColor(TvStyle.background)
         ViewCompat.setAccessibilityPaneTitle(this, "Opzioni")
-        val header = LinearLayout(context).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = context.dp(64)
-            setPadding(context.dp(8), context.dp(4), context.dp(20), context.dp(4))
-        }
-        header.addView(MobileStyle.icon(context, R.drawable.ic_mobile_back, "Chiudi opzioni", back),
-            LayoutParams(context.dp(48), context.dp(48)))
-        header.addView(TvStyle.text(context, "Opzioni", 28f, bold = true).apply {
+        val header=MobileStyle.pageHeader(context,TvStyle.text(context, "Opzioni", 28f, bold = true).apply {
             ViewCompat.setAccessibilityHeading(this, true)
-        }, LayoutParams(0, -2, 1f).apply { leftMargin = context.dp(12) })
+        },"Chiudi opzioni",back)
         addView(header, LayoutParams(-1, -2))
         addView(scroll, LayoutParams(-1, 0, 1f))
         addView(miniHolder, LayoutParams(-1, -2).apply {
@@ -71,33 +60,10 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
             }, LayoutParams(-1, -2).apply { topMargin = context.dp(if (first) 8 else 24); bottomMargin = context.dp(8) })
         }
         fun row(option: MobileOption, divider: Boolean = true) {
-            val summary = TvStyle.text(context, "", 14f, TvStyle.muted).apply { importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO }
-            val copy = LinearLayout(context).apply {
-                orientation = VERTICAL
-                addView(TvStyle.text(context, option.label, 16f, bold = true).apply {
-                    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, LayoutParams(-1, -2))
-                addView(summary, LayoutParams(-1, -2).apply { topMargin = context.dp(6) })
-            }
-            val item = LinearLayout(context).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                minimumHeight = context.dp(72)
-                setPadding(context.dp(8), context.dp(14), context.dp(8), context.dp(14))
-                isClickable = true; isFocusable = true
-                descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-                background = MobileStyle.ripple(context)
-                TvStyle.buttonSemantics(this)
-                addView(copy, LayoutParams(0, -2, 1f))
-                addView(ImageView(context).apply {
-                    setImageResource(R.drawable.ic_mobile_chevron)
-                    imageTintList = ColorStateList.valueOf(TvStyle.muted)
-                    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-                }, LayoutParams(context.dp(24), context.dp(24)).apply { leftMargin = context.dp(16) })
-                setOnClickListener { choose(option) }
-            }
-            rows[option] = item to summary
+            val item=OptionsRowView(context,true,option.label){choose(option)}
+            rows[option] = item
             column.addView(item, LayoutParams(-1, -2))
-            if (divider) column.addView(View(context).apply { setBackgroundColor(TvStyle.surface) },
+            if (divider) column.addView(OptionsRowView.divider(context),
                 LayoutParams(-1, context.dp(1)).apply { leftMargin = context.dp(8); rightMargin = context.dp(8) })
         }
         heading("Preferenze", first = true)
@@ -116,7 +82,7 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
     fun bind(interfaceLabel: String, favoritesOnly: Boolean, dataSaver: Boolean, auraAllowed: Boolean,
              version: String, availableVersion: String?, homeSummary: String) {
         val values = mapOf(
-            MobileOption.PLAYLISTS to "Aggiungi liste M3U da URL HTTPS o file",
+            MobileOption.PLAYLISTS to "Aggiungi liste M3U da URL HTTP/HTTPS o file",
             MobileOption.INTERFACE to interfaceLabel,
             MobileOption.ZAPPING to if (favoritesOnly) "Solo preferiti" else "Tutte le emittenti",
             MobileOption.QUALITY to if (dataSaver) "Risparmio dati" else "Automatica",
@@ -127,8 +93,7 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
             MobileOption.LICENSES to "Crediti, sorgenti e licenze del software",
         )
         rows.forEach { (option, row) ->
-            row.second.text = values.getValue(option)
-            row.first.contentDescription = "${option.label}: ${values.getValue(option)}"
+            row.bind(option.label,values.getValue(option))
         }
     }
 

@@ -107,7 +107,7 @@ class LiveBanner(context: Context, logos: ChannelLogoRepository) : LinearLayout(
         }
         synopsisScroll.visibility = if (description.isBlank()) GONE else VISIBLE
         if (!hasDescription) synopsisHint.visibility = GONE
-        title.text = "${channel.number.takeIf { it != 9999 }?.let { "$it  ·  " }.orEmpty()}${channel.name}"
+        title.text = "${channel.displayNumber?.let { "$it  ·  " }.orEmpty()}${channel.name}"
         show.text = window.current?.title ?: "Diretta · Guida non disponibile per il programma attuale"
         timing.visibility = if (window.current == null) GONE else VISIBLE
         progress.visibility = timing.visibility

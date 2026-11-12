@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
+    <base-config cleartextTrafficPermitted="true" />
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">streaming.bitonlive.net</domain>
         <!-- WLTV's public XMLTV endpoint can redirect to HTTP on this exact host. -->
@@ -9,7 +9,7 @@
         <domain includeSubdomains="false">www.epg-guide.com</domain>
         <domain includeSubdomains="false">116.202.210.205</domain>
         <domain includeSubdomains="false">www.man-ga.it</domain>
-        <!-- Emulator-only fixture host; the release policy remains unchanged. -->
+        <!-- Emulator fixture host; built-in requests remain gated in code. -->
         <domain includeSubdomains="false">10.0.2.2</domain>
     </domain-config>
 </network-security-config>

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 · Liste personali, guida e video — 2026-11-12
+
+- Gestione delle liste tramite pagine interne nello stile di **Opzioni**: intestazione, sezioni, descrizioni e separatori su smartphone; elenco con dettaglio e focus su TV. Indietro conserva campi e posizione. Verifica, anteprima, errori, conferme ed eliminazione restano nella pagina; il selettore file usa quello di Android.
+- Liste HTTP attivabili per singola sorgente, con consenso inizialmente disattivato e revocabile. Limiti portati a **64 MiB per documento, 50.000 voci per lista e 100.000 complessive**, fino a 10 liste. Importazione progressiva e interrompibile da URL e file.
+- Archivi SQLite privati per sorgente, sostituzione atomica della copia valida e migrazione dai JSON della 0.8.0, conservando ID, preferiti e impostazioni. Errori di rete, formato o spazio conservano la copia precedente.
+- Lettura M3U semplice o estesa, codifiche UTF-8, Windows-1252 e Latin-1, profili dei gruppi e intervallo di aggiornamento configurabile. Liste incluse con limiti condivisi e controllo dei cicli; metadati e indirizzi finali conservati per documento.
+- Header da EXTVLCOPT, EXTHTTP, suffisso URL e KODIPROP, con accesso manuale e server autorizzati distinti per download, manifest, video, licenze DRM, chiavi HLS, loghi e guida. Cookie di sessione isolati per sorgente; credenziali rimosse nei passaggi verso origini diverse.
+- **ClearKey DASH/CENC** con coppie KID:KEY, più chiavi, JSON/JWK o server licenze, e configurazioni Widevine personali. Traduzione delle direttive KODIPROP supportate in Media3, richieste di licenza Kodi e opzioni dedicate alle chiavi HLS AES-128. Le forme non supportate producono un motivo esplicito.
+- Loghi relativi o autenticati, consenso HTTP delle immagini separato e cache isolata per sorgente e accesso. **Stato e ultima importazione** mostra conteggi, motivi degli scarti e informazioni del servizio.
+- **Guida XMLTV personale** in XML, gzip e xz: lingua, fuso, correzione oraria, associazioni automatiche e manuali, accesso e consenso HTTP separati. Storico configurabile fino a sette giorni e 48 ore successive, ricerca paginata e database distinti per lista.
+- **Catalogo Video** con filtri per lista e gruppo, ricerca e pagine da 50 elementi. Live, video on demand e archivio usano l’unico player del servizio; posizione e avanzamento restano privati, con seek, ripresa e riavvio. La fine di un video non avvia riconnessioni live.
+- **Archivio e dall’inizio** per i servizi compatibili: catch-up default/append/shift, Flussonic, Xtream e URL da catchup-id. La guida propone replay e dall’inizio quando disponibili; **Torna alla diretta** lascia il replay. Fusi, disponibilità e margini sono configurabili; non vengono create registrazioni locali.
+- Corretti l’apertura di un canale da collegamento mentre è visibile la gestione, il numero personale 9999 e la pulizia dei journal SQLite dopo la sostituzione degli snapshot. Avanzamento ed errori restano raggiungibili anche con tastiera e orientamento orizzontale.
+- Liste, guida personale e avanzamenti restano sul dispositivo, esclusi da AURA e dalla Home dei launcher. I consensi Home/AURA del catalogo integrato e i controlli sulle firme restano separati.
+
+Formati supportati, limiti e convenzioni escluse sono descritti in [Liste personali](docs/personal-playlists.md).
+
+Verifiche: 276 test JVM superati e tre controlli di rete facoltativi esclusi; 30 test Python superati. Build Debug/Release e Android Lint completati senza errori; verificati i 58 archivi sorgente delle dipendenze.
+
+Collaudo delle nuove pagine su simulatori Android TV 14 e smartphone Android 15: 190 controlli, con testo normale e al 130%, più 14 verifiche di selezione file. Verificata anche l'APK Release firmata: 48 controlli di aggiornamento dalla 0.8.0 ufficiale, senza disinstallazione, con conservazione dei preferiti, degli identificativi e delle impostazioni di accesso e migrazione dei JSON a SQLite. Le prove usano dati e servizi sintetici; la compatibilità con ogni fornitore di liste, DRM, VOD e archivio richiede il relativo servizio e non è garantita da questo collaudo.
+
+Per aggiornare dalla 0.8.0: **Opzioni → Aggiornamenti → Controlla ora**, dopo la pubblicazione. Il codice Android passa da 19 a 20 e la stessa chiave di firma conserva dati e impostazioni. L’integrazione AURA di produzione continua a richiedere la variabile `AURA_TRUSTED_CERTIFICATE_SHA256`; senza configurazione il provider rimane chiuso.
+
 ## 0.8.0 · Liste personali e canali nella Home — 2026-11-12
 
 - **Opzioni → Le mie liste** su smartphone e Android TV: importazione di liste M3U/M3U8 UTF-8 da URL HTTPS o file, verifica con anteprima, rinomina, sostituzione, aggiornamento, attivazione ed eliminazione.

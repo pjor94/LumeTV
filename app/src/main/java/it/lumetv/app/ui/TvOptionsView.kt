@@ -15,7 +15,7 @@ import it.lumetv.app.R
 import it.lumetv.app.ui.TvStyle.dp
 
 enum class TvOption(val label: String, val description: String) {
-    PLAYLISTS("Le mie liste", "Aggiungi e gestisci liste personali M3U per TV e radio, tramite indirizzo HTTPS o file."),
+    PLAYLISTS("Le mie liste", "Aggiungi e gestisci liste personali M3U per TV e radio, tramite indirizzo HTTP/HTTPS o file."),
     INTERFACE("Interfaccia", "Scegli la disposizione TV o smartphone, oppure lascia il riconoscimento automatico."),
     ZAPPING("CH+/CH−", "Scegli se i tasti di cambio canale scorrono tutte le emittenti o soltanto i preferiti."),
     AURA("Collegamento con AURA", "Gestisci la condivisione di canali, preferiti e guida con AURA su questa TV."),
@@ -28,7 +28,7 @@ enum class TvOption(val label: String, val description: String) {
 /** A remote-controlled destination with one focus column and the existing playback preview. */
 @SuppressLint("ViewConstructor")
 class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(context) {
-    private data class Row(val view: View, val title: TextView, val value: TextView)
+    private data class Row(val view: OptionsRowView)
     private val rows = linkedMapOf<TvOption, Row>()
     private var selected = TvOption.INTERFACE
     private var navigation = emptyList<View>()
@@ -76,28 +76,9 @@ class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(
         addView(content, LayoutParams(-1, -1))
 
         TvOption.entries.forEach { option ->
-            val title = TvStyle.text(context, option.label, 18f, bold = true)
-            val value = TvStyle.text(context, "", 14f, TvStyle.muted)
-            val row = LinearLayout(context).apply {
-                id = generateViewId(); orientation = LinearLayout.VERTICAL
-                minimumHeight = context.dp(64)
-                setPadding(context.dp(18), context.dp(10), context.dp(18), context.dp(10))
-                isFocusable = true; isClickable = true
-                background = TvStyle.focusBackground(context)
-                TvStyle.buttonSemantics(this)
-                addView(title, LinearLayout.LayoutParams(-1, -2))
-                addView(value, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(5) })
-                title.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-                value.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-                setOnClickListener { choose(option) }
-                setOnFocusChangeListener { view, focused ->
-                    title.setTextColor(if (focused) TvStyle.background else TvStyle.white)
-                    value.setTextColor(if (focused) TvStyle.raised else TvStyle.muted)
-                    TvStyle.focusMotion(view, focused, 1.015f)
-                    if (focused) { selected = option; showDescription(); linkFocus() }
-                }
-            }
-            rows[option] = Row(row, title, value)
+            val row=OptionsRowView(context,false,option.label){choose(option)}
+            row.onFocused={selected=option;showDescription();linkFocus()}
+            rows[option] = Row(row)
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = context.dp(2) })
         }
         showDescription(); linkFocus()
@@ -111,8 +92,7 @@ class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(
             TvOption.UPDATES to (availableVersion?.let { "Lume TV $it è disponibile" } ?: "Versione installata: $version"),
             TvOption.ABOUT to "Lume TV $version", TvOption.LICENSES to "Crediti e sorgenti")
         rows.forEach { (option, row) ->
-            row.value.text = values.getValue(option)
-            row.view.contentDescription = "${option.label}: ${values.getValue(option)}"
+            row.view.bind(option.label,values.getValue(option))
         }
     }
 

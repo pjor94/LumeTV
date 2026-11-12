@@ -95,7 +95,7 @@ class ChannelAdapter(
         val channel = items[position]
         val context = holder.card.context
         val sourceLabel = (if (channel.isPersonal) sourceNames[channel.sourceId] ?: "Lista personale" else channel.family).uppercase(Locale.ITALY)
-        holder.number.text = if (channel.number == 9999) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)
+        holder.number.text = if (channel.displayNumber == null) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)
         holder.badge.text = when {
             favorite(channel) -> "★"
             channel.id == currentId -> "●"
@@ -147,10 +147,10 @@ class ChannelAdapter(
         val label = if (guideMode) {
             listOfNotNull(current?.let { "ORA  ${it.title}" }, next?.let { "${time(it.start)}  ${it.title}" })
                 .joinToString("\n").ifBlank { guidePlaceholder }
-        } else current?.title ?: if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "In diretta"
+        } else current?.title ?: if(channel.isVod)"Video" else if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "In diretta"
         if (holder.show.text.toString() != label) holder.show.text = label
         holder.card.contentDescription = listOfNotNull(
-            channel.number.takeIf { it != 9999 }?.toString(), channel.name, holder.show.text.toString(),
+            channel.displayNumber?.toString(), channel.name, holder.show.text.toString(),
             "canale corrente".takeIf { channel.id == currentId }, "preferito".takeIf { favorite(channel) },
         ).joinToString(", ")
     }

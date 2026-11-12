@@ -34,13 +34,14 @@ internal class LogoFetcher(
         })
         .connectTimeout(4, TimeUnit.SECONDS).readTimeout(6, TimeUnit.SECONDS).callTimeout(10, TimeUnit.SECONDS).build()
 
-    suspend fun fetch(url: HttpUrl, etag: String? = null, modified: String? = null): LogoDownload = withTimeout(15_000) {
+    suspend fun fetch(url: HttpUrl, etag: String? = null, modified: String? = null, headers:Map<String,String> = emptyMap()): LogoDownload = withTimeout(15_000) {
         require(allowed(url))
         var target = url
         repeat(4) {
             val request = Request.Builder().url(target).header("User-Agent", "WLTV ${HttpClient.USER_AGENT}")
                 .header("Accept", "image/png,image/webp,image/jpeg,image/gif")
                 .apply {
+                    headers.forEach { (name,value) -> header(name,value) }
                     etag?.let { header("If-None-Match", it) }
                     modified?.let { header("If-Modified-Since", it) }
                 }.build()

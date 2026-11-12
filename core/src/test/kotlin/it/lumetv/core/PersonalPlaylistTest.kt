@@ -4,12 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PersonalPlaylistTest {
-    @Test fun `five thousand entries retain their order and oversized entry counts are rejected`() {
-        val text = "#EXTM3U\n" + (1..5000).joinToString("\n") { "#EXTINF:-1 tvg-id=\"id$it\" group-title=\"Gruppo ${it % 10}\",Canale $it\nhttps://example.com/$it.m3u8" }
+    @Test fun `fifty thousand entries retain their order and oversized entry counts are rejected`() {
+        val text = "#EXTM3U\n" + (1..50000).joinToString("\n") { "#EXTINF:-1 tvg-id=\"id$it\" group-title=\"Gruppo ${it % 10}\",Canale $it\nhttps://example.com/$it.m3u8" }
         val entries = PersonalM3uParser.parse(text).entries
-        assertEquals(5000, entries.size); assertEquals("Canale 5000", entries.last().name)
+        assertEquals(50000, entries.size); assertEquals("Canale 50000", entries.last().name)
         val records = PlaylistIdentity.reconcile(entries, emptyList(), 1)
-        assertEquals(5000, records.map { it.id }.toSet().size)
+        assertEquals(50000, records.map { it.id }.toSet().size)
         assertEquals(records.map { it.id }, PlaylistIdentity.reconcile(entries, records, 2).map { it.id })
         try { PersonalM3uParser.parse(text + "\n#EXTINF:-1,Extra\nhttps://example.com/extra"); fail("Count limit ignored") }
         catch (_: PlaylistFormatException) { }
@@ -52,12 +52,53 @@ class PersonalPlaylistTest {
         assertEquals(2, report.entries.size); assertEquals(1, report.duplicates); assertEquals(1, report.excluded)
     }
 
-    @Test fun `header injection and DRM directives are excluded without leaking values`() {
+    @Test fun `DRM directives remain private while header injection is excluded`() {
         val report = PersonalM3uParser.parse(playlist(entry("Valid"),
             "#EXTINF:-1,Protected\n#KODIPROP:inputstream.adaptive.license_key=secret\nhttps://example.com/drm.mpd",
             entry("Injected", "https://example.com/stream|Authorization=secret%0D%0AX-Evil%3Ayes")))
-        assertEquals(1, report.entries.size); assertEquals(2, report.excluded)
+        assertEquals(2, report.entries.size); assertEquals(1, report.excluded)
+        assertEquals("secret", report.entries.last().properties["inputstream.adaptive.license_key"])
+        assertFalse(report.entries.last().toString().contains("secret"))
         assertFalse(report.warnings.joinToString().contains("secret"))
+    }
+
+    @Test fun `streaming scanner emits entries without retaining input and scopes properties per entry`() {
+        val text = playlist("#EXTINF:-1,Uno\n#EXTHTTP:{\"X-Token\":\"private\"}\n#KODIPROP:inputstream.adaptive.manifest_type=mpd\nhttp://example.com/one",
+            entry("Due"))
+        val entries = mutableListOf<PlaylistEntry>()
+        val result = PersonalM3uParser.scan(text.reader(), allowHttp = { true }, accept = { entries += it; null })
+        assertEquals(2, result.imported); assertEquals(1, result.httpEntries)
+        assertEquals("application/dash+xml", entries.first().mimeType)
+        assertTrue(entries.last().properties.isEmpty())
+    }
+
+    @Test fun `unbounded lines are stopped before a whole document is allocated`() {
+        var read = 0
+        val input = object : java.io.Reader() {
+            override fun close() {}
+            override fun read(chars: CharArray, offset: Int, length: Int): Int {
+                chars.fill('x', offset, offset + length); read += length; return length
+            }
+        }
+        try { PersonalM3uParser.scan(input, accept = { null }); fail("Long line accepted") }
+        catch (_: PlaylistFormatException) { assertTrue(read <= PersonalM3uParser.MAX_LINE + 8192) }
+    }
+
+    @Test fun `all directive forms share the same per entry property budget`() {
+        val directives=(1..31).joinToString("\n") { "#KODIPROP:vendor.option$it=value" }
+        val oversized="#EXTINF:-1,Troppi dati\n$directives\n#EXTHTTP:{\"X-Token\":\"value\"}\nhttps://example.com/live|User-Agent=Fixture"
+        val report=PersonalM3uParser.parse(playlist(oversized,entry("Valido")))
+        assertEquals(1,report.excluded);assertEquals("Valido",report.entries.single().name)
+        val tooLarge="#EXTINF:-1,Dati eccessivi\n#KODIPROP:vendor.option="+"x".repeat(32769)+"\nhttps://example.com/large"
+        assertEquals(1,PersonalM3uParser.parse(playlist(tooLarge,entry("Valido"))).excluded)
+    }
+
+    @Test fun `custom headers decode form encoding and transport overrides are rejected`() {
+        val entry = PersonalM3uParser.parse(playlist(entry("Headers", "https://example.com/live|X-Token=a%2Bb&User-Agent=My+Player"))).entries.single()
+        assertEquals("a+b", entry.headers["X-Token"]); assertEquals("My Player", entry.headers["User-Agent"])
+        listOf("Host", "Content-Length", "Range").forEach { name ->
+            try { PlaylistHeaders.merge(mapOf(name to "invalid")); fail("Transport override accepted") } catch (_: PlaylistFormatException) {}
+        }
     }
 
     @Test fun `identity survives renumber rename URL and group changes with a unique provider ID`() {

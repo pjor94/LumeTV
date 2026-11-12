@@ -28,11 +28,14 @@ import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 data class LogoArtwork(val bitmap: Bitmap, val lightSurface: Boolean)
 
 /** Original images are downloaded directly and cached privately on this device. */
-class ChannelLogoRepository(context: Context, http: HttpClient, private val scope: CoroutineScope) {
+class ChannelLogoRepository internal constructor(context: Context, private val http: HttpClient, private val scope: CoroutineScope,
+    private val artworkAddressAllowed:(java.net.InetAddress)->Boolean=LogoPolicy::publicAddress) {
+    private val personal=PersonalPlaylistRepository.get(context)
     private val directory = File(context.applicationContext.filesDir, "channel-artwork")
     private val index = AtomicFile(File(directory, "index.json"))
     private val indexLock = Any()
@@ -48,6 +51,17 @@ class ChannelLogoRepository(context: Context, http: HttpClient, private val scop
     private val retryAfter = ConcurrentHashMap<String, Long>()
     private val downloads = Semaphore(3)
     private val fetcher = LogoFetcher(http.client)
+    init {scope.launch {
+        personal.local()
+        var observed=personal.state.value.associate {it.id to personal.requestContext(it.id)?.token}
+        withContext(Dispatchers.IO) {clearPersonalCache(emptySet(),observed.keys)}
+        personal.version.collect {
+            val next=personal.state.value.associate {it.id to personal.requestContext(it.id)?.token}
+            val changed=observed.keys.filter {observed[it]!=next[it] || it !in next}.toSet()
+            withContext(Dispatchers.IO) {clearPersonalCache(changed,next.keys)}
+            observed=next;version.update {it+1}
+        }
+    }}
 
     suspend fun local() = withContext(Dispatchers.IO) {
         synchronized(indexLock) {
@@ -84,6 +98,33 @@ class ChannelLogoRepository(context: Context, http: HttpClient, private val scop
 
     /** Callback always runs on the activity's main scope; recycled views cancel only their subscription. */
     fun request(channel: Channel, display: (LogoArtwork?) -> Unit): Job = scope.launch {
+        if(channel.isPersonal) {
+            val artwork=personal.artwork(channel)
+            if(artwork==null) {display(null);return@launch}
+            val key="personal:${channel.sourceId}:"+artwork.cacheKey
+            val context=artwork.context
+            if(!context.valid()) {display(null);return@launch}
+            val cached=withContext(Dispatchers.IO) {cached(key)}
+            if(cached!=null && context.valid()) {
+                display(cached.artwork)
+                if(LogoPolicy.fresh(cached.checked,System.currentTimeMillis()))return@launch
+            }
+            if((retryAfter[key] ?: 0)>System.currentTimeMillis()) {if(cached==null)display(null);return@launch}
+            val task=requests.withLock {
+                inFlight[key] ?: scope.async(Dispatchers.IO) {
+                    val client=context.client(http.client,artwork.url,PlaylistResource.LOGO,artwork.headers.keys)
+                    val personalFetcher=LogoFetcher(client,allowed={context.allowed(java.net.URI(it.toString()),PlaylistResource.LOGO)},
+                        redirectAllowed={_,to->context.allowed(java.net.URI(to.toString()),PlaylistResource.LOGO)},addressAllowed=artworkAddressAllowed)
+                    download(artwork.url,cached,key,personalFetcher,artwork.headers,context::valid,context)
+                }.also {deferred ->
+                    inFlight[key]=deferred
+                    deferred.invokeOnCompletion {scope.launch {requests.withLock {if(inFlight[key]===deferred)inFlight.remove(key)}}}
+                }
+            }
+            val result=task.await()
+            display(result?.artwork?.takeIf {context.valid()})
+            return@launch
+        }
         val urls = LogoPolicy.candidates(channel, sources)
         for (url in urls) {
             val cached = withContext(Dispatchers.IO) { cached(url) }
@@ -123,27 +164,30 @@ class ChannelLogoRepository(context: Context, http: HttpClient, private val scop
         }.getOrNull()
     }
 
-    private suspend fun download(url: String, cached: Cached?): Cached? = downloads.withPermit {
+    private suspend fun download(url: String, cached: Cached?, cacheKey:String=url, downloader:LogoFetcher=fetcher,
+                                 headers:Map<String,String> = emptyMap(),valid:()->Boolean={true},guard:PersonalRequestContext?=null): Cached? = downloads.withPermit {
         try {
             currentCoroutineContext().ensureActive()
-            val downloaded = fetcher.fetch(requireNotNull(LogoPolicy.url(url)), cached?.etag, cached?.modified)
+            if(!valid())return@withPermit null
+            val downloaded = downloader.fetch(requireNotNull(url.toHttpUrlOrNull()), cached?.etag, cached?.modified,headers)
+            if(!valid())return@withPermit null
             val artwork = downloaded.bytes?.let(::decode) ?: cached?.artwork ?: throw LogoDownloadException()
             val saved = Cached(artwork, System.currentTimeMillis(), downloaded.etag, downloaded.modified)
-            runCatching {
+            fun persist() {runCatching {
                 directory.mkdirs()
-                downloaded.bytes?.let { write(AtomicFile(file(url, ".image")), it) }
+                downloaded.bytes?.let { write(AtomicFile(file(cacheKey, ".image")), it) }
                 val metadata = JSONObject().put("checked", saved.checked).put("etag", saved.etag).put("modified", saved.modified)
-                write(AtomicFile(file(url, ".json")), metadata.toString().toByteArray(Charsets.UTF_8))
+                write(AtomicFile(file(cacheKey, ".json")), metadata.toString().toByteArray(Charsets.UTF_8))
                 prune()
-            }.onFailure { Log.w("LumeLogos", "image_write_failed") }
-            memory.put(url, saved)
-            retryAfter.remove(url)
+            }.onFailure { Log.w("LumeLogos", "image_write_failed") };memory.put(cacheKey,saved)}
+            if(guard!=null) {if(guard.whileValid {persist();true}!=true)return@withPermit null} else persist()
+            retryAfter.remove(cacheKey)
             saved
         } catch (error: Exception) {
             currentCoroutineContext().ensureActive()
             val wait = if (error is LogoDownloadException && error.status in setOf(403, 404, 429)) 6 * 60 * 60_000L else 15 * 60_000L
-            retryAfter[url] = System.currentTimeMillis() + wait
-            cached
+            if(valid())retryAfter[cacheKey] = System.currentTimeMillis() + wait
+            cached?.takeIf {valid()}
         }
     }
 
@@ -179,7 +223,17 @@ class ChannelLogoRepository(context: Context, http: HttpClient, private val scop
 
     private fun file(url: String, suffix: String): File {
         val hash = MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString("") { "%02x".format(it) }
-        return File(directory, hash + suffix)
+        val source=url.takeIf {it.startsWith("personal:")}?.split(':',limit=3)?.getOrNull(1)?.takeIf(PersonalPlaylistStore::validId)
+        return File(directory, (source?.let {"$it-"} ?: "") + hash + suffix)
+    }
+
+    private fun clearPersonalCache(changed:Set<String>,existing:Set<String>) {
+        memory.snapshot().keys.filter {key -> key.startsWith("personal:") && key.split(':',limit=3).getOrNull(1) in changed}.forEach(memory::remove)
+        retryAfter.keys.filter {key -> key.startsWith("personal:") && key.split(':',limit=3).getOrNull(1) in changed}.forEach(retryAfter::remove)
+        directory.listFiles().orEmpty().forEach {file ->
+            val source=file.name.substringBefore('-')
+            if(PersonalPlaylistStore.validId(source) && (source in changed || source !in existing))file.delete()
+        }
     }
 
     private fun write(file: AtomicFile, bytes: ByteArray) {
@@ -191,11 +245,12 @@ class ChannelLogoRepository(context: Context, http: HttpClient, private val scop
     private fun prune() {
         val files = directory.listFiles()?.filter { it.extension == "image" }.orEmpty()
         var bytes = files.sumOf { it.length() }
-        if (bytes <= 24L * 1024 * 1024) return
+        if (bytes <= 24L * 1024 * 1024 && files.size<=1024) return
+        var count=files.size
         files.sortedBy { it.lastModified() }.forEach { file ->
-            if (bytes > 20L * 1024 * 1024) {
+            if (bytes > 20L * 1024 * 1024 || count>768) {
                 val length = file.length()
-                if (file.delete()) { bytes -= length; File(directory, file.nameWithoutExtension + ".json").delete() }
+                if (file.delete()) { bytes -= length;count--; File(directory, file.nameWithoutExtension + ".json").delete() }
             }
         }
     }

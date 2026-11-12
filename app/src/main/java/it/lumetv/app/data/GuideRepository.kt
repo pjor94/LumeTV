@@ -20,6 +20,8 @@ import java.util.concurrent.TimeUnit
 
 class GuideRepository(context: Context, private val http: HttpClient, private val onLogos: (Map<String, String>) -> Unit = {}) {
     private val app = context.applicationContext
+    val personal=PersonalGuideRepository.get(app)
+    private var builtin:Map<String,List<Programme>>?=null
     private val prefs = context.getSharedPreferences("guide", Context.MODE_PRIVATE)
     private val cache = AtomicFile(File(context.filesDir, "guide.json"))
     // A slow TV may need longer to parse the guide than a stream session request.
@@ -82,19 +84,32 @@ class GuideRepository(context: Context, private val http: HttpClient, private va
     val lastUpdated: Long get() = store.updated
     val nextRetry: Long get() = store.retryAfter
     val failure: String get() = store.failure
-    suspend fun local(): Map<String, List<Programme>> = sync.local().also { IntegrationStore.guideChanged(app, it, lastUpdated) }
-    suspend fun refresh(channels: List<Channel>, force: Boolean = false): Map<String, List<Programme>>? = try {
-        sync.refresh(channels.map { it.epgId }.filter { it.isNotBlank() }.toSet(), force)?.also { shows ->
+    suspend fun local(): Map<String, List<Programme>> {
+        val shows=sync.local();builtin=shows;IntegrationStore.guideChanged(app,shows,lastUpdated)
+        val channels=PersonalPlaylistRepository.get(app).local().filter {!it.isVod}.take(100)
+        val now=System.currentTimeMillis()
+        return shows+personal.window(channels,now,now+GuideSchedule.WINDOW)
+    }
+    suspend fun window(channels:List<Channel>,from:Long,until:Long):Map<String,List<Programme>> =
+        (builtin ?: sync.local().also {builtin=it})+personal.window(channels,from,until)
+    suspend fun refresh(channels: List<Channel>, force: Boolean = false): Map<String, List<Programme>>? {
+      try {
+        sync.refresh(channels.filter {!it.isPersonal && !it.isVod}.map { it.epgId }.filter { it.isNotBlank() }.toSet(), force)?.also { shows ->
+            builtin=shows
             IntegrationStore.guideChanged(app, shows, lastUpdated)
             Log.i("LumeGuide", "imported channels=${shows.size} programmes=${shows.values.sumOf { it.size }}")
         }
-    } catch (error: Exception) {
+      } catch (error: Exception) {
         if (error !is kotlinx.coroutines.CancellationException) {
             // Protocol-policy exceptions contain host/protocol details, never a stream URL or token.
             val protocol = if (error is java.net.UnknownServiceException) " reason=${error.message?.replace('\n', ' ')?.take(220)}" else ""
             Log.w("LumeGuide", "refresh_failed type=${error.javaClass.simpleName} status=${(error as? SourceException)?.status ?: 0}$protocol")
         }
-        throw error
+        if(error is kotlinx.coroutines.CancellationException)throw error
+      }
+      personal.refresh(force)
+      val now=System.currentTimeMillis()
+      return window(channels.filter {it.isPersonal}.take(100),now,now+GuideSchedule.WINDOW)
     }
 }
 

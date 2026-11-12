@@ -44,10 +44,13 @@ class MobileMiniPlayer(context: Context, private val open: () -> Unit, toggle: (
 
     fun bind(state: PlaybackSnapshot, video: PlayerView) {
         visibility = if (state.channel == null) GONE else VISIBLE
-        title.text = state.channel?.name.orEmpty()
+        title.text = if(state.mode==it.lumetv.core.PlaybackMode.LIVE)state.channel?.name.orEmpty() else state.title
         status.text = state.error?.let { "Riproduzione interrotta · Apri" } ?: when {
             state.buffering -> "Caricamento…"
+            state.ended -> "Terminato"
             !state.wantsToPlay -> "In pausa"
+            state.mode==it.lumetv.core.PlaybackMode.ARCHIVE -> "Archivio"
+            state.mode==it.lumetv.core.PlaybackMode.VOD -> "Video"
             else -> state.nowPlaying.ifBlank { if (state.audioOnly) "In ascolto" else "In diretta" }
         }
         play.setImageResource(if (state.wantsToPlay) R.drawable.ic_mobile_pause else R.drawable.ic_mobile_play)

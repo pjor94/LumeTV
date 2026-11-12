@@ -48,6 +48,10 @@ class GuideView(
     private val toggleFavorite: (Channel) -> Unit,
     private val exitUp: () -> Unit,
 ) : LinearLayout(context) {
+    var onReplay:(Channel,Programme)->Unit={_,_->}
+    var onSearch:(Channel)->Unit={}
+    var onWindowChanged:(List<Channel>,Long,Long)->Unit={_,_,_->}
+    private var requestedWindow=""
     private val navigation = GuideNavigator()
     private val eyebrow = TvStyle.text(context, "", 11f, TvStyle.accent, true)
     private val title = TvStyle.text(context, "", 27f, bold = true)
@@ -61,8 +65,16 @@ class GuideView(
     private val evening = control("Stasera") { jump(GuideSchedule.evening(System.currentTimeMillis())) }
     private val earlier = control("‹", "Ora precedente") { navigation.pageTime(-1); render(true) }
     private val later = control("›", "Ora successiva") { navigation.pageTime(1); render(true) }
+    private val day=control("Giorno") {
+        val today=java.time.LocalDate.now()
+        val days=(-7..2).map {today.plusDays(it.toLong())}
+        android.app.AlertDialog.Builder(context).setTitle("Giorno della guida").setItems(days.map {it.format(DateTimeFormatter.ofPattern("EEE d MMM",Locale.ITALY))}.toTypedArray()) {_,index->
+            jump(days[index].atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli())
+        }.setNegativeButton("Chiudi",null).show()
+    }
+    private val search=control("Cerca") {navigation.channel?.let(onSearch)}
     private val watch = control("Guarda il canale") { navigation.channel?.let(choose) }
-    private val controls get() = listOf(all, favorites, nowButton, evening, earlier, later)
+    private val controls get() = listOf(all, favorites, nowButton, evening, day,search,earlier, later)
     private var currentId: String? = null
     private var gridActive = false
     private var rendering = false
@@ -83,7 +95,7 @@ class GuideView(
             navigation.select(channel, slot)
             val show = slot.programme
             val now = System.currentTimeMillis()
-            if (show == null || show.start <= now && show.end > now) choose(channel)
+            if (show == null || show.start <= now && show.end > now && !show.replayAvailable) choose(channel)
             else showDetails(channel, show)
         },
         onFavorite = { channel -> toggleFavorite(channel) },
@@ -119,7 +131,7 @@ class GuideView(
         toolbar.addView(View(context), LayoutParams(0, 1, 1f))
         date.apply { maxLines = 1; fontFeatureSettings = "tnum"; gravity = Gravity.END }
         toolbar.addView(date, LayoutParams(-2, -2).apply { rightMargin = context.dp(12) })
-        listOf(nowButton, evening, earlier, later).forEach { button ->
+        listOf(nowButton, evening,day,search, earlier, later).forEach { button ->
             toolbar.addView(button, LayoutParams(-2, context.dp(34)).apply { leftMargin = context.dp(4) })
         }
         addView(toolbar, LayoutParams(-1, context.dp(36)).apply { topMargin = context.dp(7) })
@@ -133,6 +145,8 @@ class GuideView(
     }
 
     fun submit(channels: List<Channel>, programmes: Map<String, List<Programme>>, currentId: String?) {
+        day.visibility=if(channels.any {it.isPersonal})VISIBLE else GONE
+        search.visibility=day.visibility
         this.currentId = currentId
         val focusedGrid = gridActive && isShown
         navigation.submit(channels, programmes, channels.filter(favorite).map { it.id }.toSet(),
@@ -148,6 +162,8 @@ class GuideView(
 
     fun tick() { navigation.tick(System.currentTimeMillis()); render(gridActive && isShown) }
     fun refreshLogos() = timeline.refreshLogos()
+    fun reloadWindow(){requestedWindow="";render(false)}
+    fun showProgramme(channel:Channel,programme:Programme){showDetails(channel,programme)}
     fun showMessage(message: String) { guideStatus.text = message }
     fun setStatus(message: String) { statusMessage = message; updateDetails() }
     fun selectChannel(id: String) { navigation.selectChannel(id); render(true) }
@@ -257,6 +273,11 @@ class GuideView(
         updateControls()
         rendering = false
         if (focus && isShown) focusSelection()
+        if(isShown) {
+            val rows=navigation.channels.drop(navigation.rowStart).take(navigation.rowCount)
+            val key=rows.joinToString {it.id}+navigation.windowStart
+            if(key!=requestedWindow){requestedWindow=key;onWindowChanged(rows,navigation.windowStart,navigation.windowStart+GuideSchedule.WINDOW)}
+        }
     }
 
     private fun requestGridFocus() {
@@ -325,6 +346,7 @@ class GuideView(
             live -> R.string.guide_hint_live
             else -> R.string.guide_hint_future
         })
+        if(show!=null && show.end<=now)hint.text=if(show.replayAvailable)"OK per rivedere il programma" else "Programma concluso · Archivio non disponibile"
         guideStatus.text = statusMessage.ifBlank { navigation.covered.toString() + " di " + navigation.channels.size + " canali con guida" }
     }
 
@@ -352,13 +374,17 @@ class GuideView(
             TvStyle.text(context, "Ora su " + channel.name + ": " + current.title, 13f, TvStyle.muted),
             LayoutParams(-1, -2).apply { topMargin = context.dp(16) })
         val actions = LinearLayout(context)
+        actions.orientation=VERTICAL
         lateinit var details: Dialog
+        if(show.replayAvailable)actions.addView(TvStyle.button(context,if(show.end>System.currentTimeMillis())"Guarda dall’inizio" else "Rivedi dall’archivio") {
+            suppressDialogFocus=true;details.dismiss();suppressDialogFocus=false;onReplay(channel,show)
+        },LayoutParams(-1,context.dp(48)))
         val play = TvStyle.button(context, "Guarda " + channel.name + " ora") {
             suppressDialogFocus = true; details.dismiss(); suppressDialogFocus = false; choose(channel)
         }
         val back = TvStyle.button(context, "Torna alla guida") { details.dismiss() }
-        actions.addView(play, LayoutParams(-2, context.dp(42)))
-        actions.addView(back, LayoutParams(-2, context.dp(42)).apply { leftMargin = context.dp(12) })
+        actions.addView(play, LayoutParams(-1, context.dp(42)))
+        actions.addView(back, LayoutParams(-1, context.dp(42)))
         panel.addView(actions, LayoutParams(-1, -2).apply { topMargin = context.dp(24) })
         details = Dialog(context).apply {
             requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -470,7 +496,7 @@ private class GuideTimelineView(
                 setOnLongClickListener { onFavorite(channel); true }
             }
             brands += brand to channel
-            brand.addView(TvStyle.text(context, if (channel.number == 9999) "" else "%02d".format(channel.number), 12f, TvStyle.muted).apply { fontFeatureSettings = "tnum" },
+            brand.addView(TvStyle.text(context, if (channel.displayNumber == null) "" else "%02d".format(channel.number), 12f, TvStyle.muted).apply { fontFeatureSettings = "tnum" },
                 LinearLayout.LayoutParams((context.dp(24) * resources.configuration.fontScale).toInt(), -2))
             val logo = ChannelLogoView(context, logos, compact = true).apply { bind(channel) }
             logoViews += logo

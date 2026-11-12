@@ -3,6 +3,7 @@ package it.lumetv.app.playback
 import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.HttpDataSource
 import it.lumetv.app.data.SourceException
+import it.lumetv.core.PlaylistFormatException
 import java.io.IOException
 import javax.net.ssl.SSLException
 
@@ -15,7 +16,7 @@ data class PlaybackFailure(val message: String, val recoverable: Boolean) {
                 is IOException -> true
                 else -> false
             }
-            return PlaybackFailure((error as? SourceException)?.message
+            return PlaybackFailure((error as? SourceException)?.message ?: (error as? PlaylistFormatException)?.message
                 ?: "Non riesco ad aprire la diretta. Controlla la connessione e riprova.", recoverable)
         }
 

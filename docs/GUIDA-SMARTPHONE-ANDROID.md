@@ -2,7 +2,7 @@
 
 Lume TV permette di guardare le dirette italiane sul telefono, con comandi touch, preferiti e palinsesto. La stessa APK comprende anche l’interfaccia per telecomando: se usi una TV, consulta la [guida per Android TV e Google TV](GUIDA-ANDROID-TV.md).
 
-Questa guida descrive **Lume TV 0.8.0**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
+Questa guida descrive **Lume TV 0.9.0**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 
 La funzione **Canali nella Home**, dalla versione 0.8.0, compare nelle Opzioni soltanto sui dispositivi TV, anche quando si usa l’interfaccia Smartphone. Sui telefoni non pubblica canali. Vedi la [guida per Android TV](GUIDA-ANDROID-TV.md#canali-nella-home).
 
@@ -30,19 +30,27 @@ Le schermate di questa guida provengono dall’app nativa su emulatore Android e
 
 ## Liste personali
 
-**Opzioni → Le mie liste** apre la gestione delle sorgenti personali. **Aggiungi URL** accetta l’indirizzo HTTPS di una lista M3U; **Importa file** usa il selettore documenti Android. Assegna un nome, scegli il tipo predefinito dei canali privi di indicazione TV/radio, premi **Verifica lista** e controlla il numero di voci importabili, escluse e duplicate prima di confermare.
+Apri **Opzioni → Le mie liste → Aggiungi URL** e assegna un nome alla sorgente. Sono accettati indirizzi HTTPS e, selezionando **Consenti HTTP per questa lista**, anche HTTP. **Importa file** usa il selettore documenti Android, quando disponibile. Scegli TV o radio come tipo predefinito per le voci che non lo indicano.
 
-In **Canali** e **Radio**, il controllo **Lista** seleziona la sorgente e **Tutti i gruppi** restringe l’elenco. I preferiti comprendono le diverse sorgenti. Precedente/successivo e i controlli di sistema rimangono nella sorgente e nel tipo del canale in riproduzione.
+**Verifica lista** mostra avanzamento e anteprima con voci importabili, escluse e duplicate; **Interrompi verifica** conserva i dati inseriti. Conferma con **Importa lista** o **Sostituisci lista**. I file sono copiati nell’archivio privato: spostare l’originale non rende indisponibili i canali.
 
-Dalla gestione puoi rinominare, aggiornare, cambiare URL, sostituire il file, disattivare o eliminare una lista. La disattivazione conserva i preferiti; l’eliminazione rimuove anche i preferiti e i recenti associati e interrompe la relativa diretta. Un aggiornamento non riuscito conserva la copia precedente. I file importati sono copiati nell’archivio privato: spostare l’originale non rende indisponibili i canali.
+La gestione usa pagine nello stile di **Opzioni**, con salvataggio esplicito ed errori e conferme nella pagina. **Sorgente** modifica nome, attivazione, consenso HTTP e URL/file. **Lettura e contenuti** contiene formato, codifica, gruppi e aggiornamento; **Accesso ai server** contiene header, server autorizzati, cookie e HTTP dei loghi. **Stato e ultima importazione** riporta metadati e motivi degli scarti. **Indietro** conserva i campi tornando dalle sottosezioni e propone di continuare o scartare eventuali modifiche non salvate.
 
-Le liste restano sul singolo dispositivo e sono escluse dalla condivisione AURA e dalla Home dei launcher. Il primo rilascio supporta stream HTTPS, fino a 10 liste, 5.000 voci per lista, 20.000 voci complessive e file UTF-8 fino a 8 MiB. Guida XMLTV personale, catch-up, cataloghi VOD e direttive DRM aggiuntive non sono inclusi. L’apertura del selettore file esterno segue le normali regole di riproduzione in background del telefono.
+Nel catalogo, **Lista** seleziona la sorgente e **Tutti i gruppi** restringe l’elenco. Preferiti e cambio canale mantengono la distinzione tra TV, radio e sorgenti. Gli aggiornamenti conservano la riproduzione e l’ultima copia valida. Disattivare conserva i dati; eliminare rimuove anche preferiti, guida e avanzamenti associati e interrompe la relativa riproduzione.
+
+Limiti: **10 liste, 50.000 voci per lista, 100.000 complessive e 64 MiB per documento**. Sono disponibili M3U semplice o estesa, UTF-8/Windows-1252/Latin-1, liste incluse e le forme di header, KODIPROP e ClearKey DASH/CENC documentate. HTTP invia senza cifratura indirizzi e dati di accesso; i consensi di lista, loghi e guida restano separati.
+
+**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. Il pulsante **Video** apre i contenuti on demand con ricerca e pagine; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
+
+Gli archivi della 0.8.0 vengono migrati conservando ID, preferiti e impostazioni. Liste, guida personale e avanzamenti restano locali ed esclusi da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](personal-playlists.md).
+
+L’apertura del selettore documenti segue le normali regole di riproduzione in background del telefono.
 
 ## Installazione e primo avvio
 
 Serve uno **smartphone con Android 6.0 o successivo**, collegato a Internet, e un’APK che includa il supporto smartphone.
 
-1. Scarica [LumeTV-0.8.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.8.0/LumeTV-0.8.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
+1. Scarica [LumeTV-0.9.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.9.0/LumeTV-0.9.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
 2. Trasferisci il file sul telefono e aprilo dal gestore file. Se Android lo richiede, autorizza quel programma a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV**.
 4. Nella sezione **Canali**, tocca il nome del canale che vuoi guardare.
