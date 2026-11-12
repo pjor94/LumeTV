@@ -10,6 +10,7 @@ import java.util.UUID
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        it.lumetv.app.home.HomeChannels.schedule(applicationContext)
         route(intent)
     }
 

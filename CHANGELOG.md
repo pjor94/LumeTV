@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.0 · Liste personali e canali nella Home — 2026-11-12
+
+- **Opzioni → Le mie liste** su smartphone e Android TV: importazione di liste M3U/M3U8 UTF-8 da URL HTTPS o file, verifica con anteprima, rinomina, sostituzione, aggiornamento, attivazione ed eliminazione.
+- Filtri per lista e gruppo nel catalogo. I preferiti comprendono le diverse sorgenti, mantenendo la distinzione tra TV e radio; il cambio canale resta nella sorgente in riproduzione anche dai controlli di sistema.
+- Identificativi personali persistenti, cache atomica per sorgente e controllo delle revisioni: gli aggiornamenti conservano la diretta e le risposte tardive non ripristinano liste eliminate o configurazioni precedenti.
+- URL e header di riproduzione delle liste restano nell’archivio privato. I metadati personali sono esclusi dal provider AURA e dalla pubblicazione nella Home.
+- Limiti delle liste: 10 sorgenti, 5.000 voci per lista, 20.000 voci complessive e 8 MiB per documento. Le sorgenti personali della release richiedono HTTPS; XMLTV personale, HTTP generico, VOD/catch-up e direttive DRM aggiuntive non sono inclusi.
+- **Opzioni → Canali nella Home** pubblica una riga Lume TV nei launcher Android TV compatibili, tramite le API standard da Android 8. Si possono seguire i preferiti del catalogo integrato oppure scegliere manualmente fino a 24 canali.
+- Tessere con poster locali, programma in onda quando disponibile e collegamenti diretti al player Lume. Aggiornamenti da cache tramite JobScheduler, senza avviare rete, resolver o video in background.
+- Consenso Home separato da AURA, rispetto delle tessere e delle righe rimosse dall’utente, ripristino esplicito e rimozione alla revoca. Radio e liste personali sono escluse dalla Home; il contratto AURA v1 e le verifiche delle firme restano invariati.
+- Corretta la selezione manuale dopo **Deseleziona tutti**: le caselle del selettore Android restano coerenti anche quando la lista viene ridisegnata.
+- Contratto documentato per i launcher e strumenti di collaudo limitati agli emulatori. La visibilità dipende dal launcher; scheda Live, Watch Next e raccomandazioni generali di Google TV non vengono abilitate da questa funzione.
+
+Verifiche: 203 test JVM superati e tre controlli di rete facoltativi esclusi; 30 test Python superati. Build Debug/Release e Android Lint completati senza errori. Compilazione e firma della release con incremento del codice versione da 18 a 19, per consentire l’aggiornamento dalla 0.7.0.
+
+Collaudo funzionale su emulatori Android TV 14 e smartphone Android 15, con liste, palinsesti e video sintetici locali: importazione, aggiornamento, identificativi persistenti, preferiti, zapping per sorgente, revoca, ricreazione del processo e testo al 130%. Verificate anche la pubblicazione nel provider Android TV e l’apertura del canale dal launcher Projectivy 4.73, con primo frame confermato. I dispositivi fisici non sono inclusi nel collaudo funzionale di queste novità.
+
+Per aggiornare dalla 0.7.0: **Opzioni → Aggiornamenti → Controlla ora**, dopo la pubblicazione. La stessa chiave di firma conserva dati e impostazioni. L’integrazione AURA di produzione richiede la variabile GitHub `AURA_TRUSTED_CERTIFICATE_SHA256`; in sua assenza il provider resta chiuso, come nella release precedente. La funzione Canali nella Home ha un consenso indipendente.
+
 ## 0.7.0 · Radio, riproduzione continua e nuove Opzioni — 2026-11-11
 
 - Catalogo italiano WorldRadio di WLTV, con copia locale, aggiornamento separato, ricerca per nome e città, preferiti e recenti distinti dalla TV.

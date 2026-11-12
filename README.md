@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.7.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.7.0/LumeTV-0.7.0.apk)
+> ### [Scarica Lume TV 0.8.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.8.0/LumeTV-0.8.0.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.7.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.8.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -35,7 +35,13 @@ Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedica
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Novità della 0.7.0
+## Novità della 0.8.0
+
+**Opzioni → Le mie liste** permette di importare liste personali M3U da URL HTTPS o file, verificarle prima del salvataggio e gestirle sul singolo dispositivo. Nel catalogo puoi scegliere lista e gruppo; preferiti e cambio canale mantengono la distinzione tra TV e radio. Gli aggiornamenti conservano la diretta e l’ultima copia valida.
+
+Su Android TV 8 o successivo, **Opzioni → Canali nella Home** pubblica fino a 24 canali del catalogo integrato nei launcher compatibili, seguendo i preferiti oppure una selezione manuale. Le tessere aprono la diretta in Lume. Il consenso è separato da AURA; radio e liste personali sono escluse dalla Home. [Guida per i launcher](docs/integration-launchers.md).
+
+## TV, radio e riproduzione continua
 
 Lume TV include le radio italiane WorldRadio di WLTV, con ricerca per nome/città, preferiti e recenti separati dai canali TV.
 
@@ -49,6 +55,8 @@ Il progetto continua a usare un solo player. Timer di spegnimento e integrazioni
 
 ## Funzioni
 
+- **Opzioni → Canali nella Home** pubblica fino a 24 canali del catalogo integrato nei launcher Android TV compatibili, con consenso separato da AURA. [Funzionamento e contratto per launcher](docs/integration-launchers.md).
+- Liste M3U personali da URL HTTPS o file, gestibili in **Opzioni → Le mie liste**, con filtri per sorgente e gruppo. Le liste restano sul dispositivo e sono escluse dalla condivisione AURA e dalla Home dei launcher.
 - Canali Rai, Rai/TGR e Mediaset presenti nella lista WLTV, insieme alle altre sorgenti supportate.
 - Riproduzione a tutto schermo di flussi HLS e DASH, con supporto Widevine quando richiesto dall’emittente.
 - Su TV: navigazione con telecomando, selezione numerica e cambio canale con CH+/CH−.
@@ -120,9 +128,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.7.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.8.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.7.0 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.8.0 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 

@@ -12,6 +12,8 @@ Apri il progetto in Android Studio oppure configura `sdk.dir` nel file locale `l
 
 ## Verifiche
 
+Per le liste personali usa `tools/smoke_personal_playlists.py --adb /percorso/adb --serial emulator-5570 --mode phone --video /percorso/video.mp4`, e ripeti su un emulatore Android TV con `--mode tv` e il suo seriale esplicito. Il comando rifiuta dispositivi fisici, usa M3U e video sintetici locali, verifica importazione, isolamento del catalogo, zapping dalla UI e dal servizio, aggiornamento senza riavvio, conservazione degli ID, disattivazione, riavvio del processo ed eliminazione. Ripristina i dati precedenti e salva il report in `analysis/personal-playlists/`. Soltanto le build debug ammettono `http://10.0.2.2` per questi campioni; le sorgenti personali di release richiedono HTTPS.
+
 ```sh
 python3 tools/update_catalog.py --check
 python3 -m unittest discover -s tools -p 'test_*.py'
@@ -113,3 +115,16 @@ python3 tools/smoke_tv_channel_switch.py --adb /percorso/adb --serial emulator-5
 ```
 
 Il probe viene eseguito come shell sull’emulatore e non entra nell’APK. Il test invia uno Stop senza timestamp e sorgente durante l’apertura lenta del secondo canale; verifica anche che Stop dopo l’apertura e Stop con un timestamp reale continuino a funzionare.
+
+## Collaudare i launcher su emulatori
+
+`tools/smoke_home_channels.py` rifiuta seriali diversi da `emulator-*`. Compila e installa sull’emulatore sia `:app:assembleDebug` sia `:app:assembleDebugAndroidTest`; il runner `HomeInspection` è presente solo nell’APK di test e controlla anche `Build.HARDWARE`. Ispeziona esclusivamente le righe preview appartenenti a Lume attraverso il provider reale, senza privilegi di root o modifiche alle autorizzazioni del dispositivo.
+
+```sh
+python3 tools/smoke_home_channels.py --adb "$ANDROID_HOME/platform-tools/adb" --serial emulator-5572 --video analysis/guide-fixture.mp4
+python3 tools/smoke_home_channels.py --adb "$ANDROID_HOME/platform-tools/adb" --serial emulator-5570 --video analysis/guide-fixture.mp4 --phone
+```
+
+Il collaudo usa video e palinsesti sintetici locali, ripristina cache, preferenze e font scale, e verifica consenso, selezione, riavvio, ID persistenti, guida, rimozioni, ripristino e revoca. Il telefono verifica il fallback senza API Home. La verifica visuale di un launcher esterno, come Projectivy, richiede l’APK del relativo autore installata esclusivamente sull’emulatore. Il fatto che TvProvider accetti una pubblicazione non certifica la visibilità in ogni launcher.
+
+Per il controllo manuale di Projectivy su emulatore, aggiungi `--projectivy-only --output analysis/home-launchers/projectivy-validation`: il server locale resta attivo mentre abiliti la riga e apri **TV Test 2** dal launcher. Invio verifica la sessione e ripristina i dati. Non abilitare accessibilità, root o accesso alle notifiche per questo collaudo; è sufficiente il permesso del launcher per leggere gli elenchi TV.

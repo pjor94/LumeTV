@@ -4,12 +4,14 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Questa guida descrive l’interfaccia per telecomando. Se usi un telefono, consulta la [guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md).
 
-Questa guida descrive **Lume TV 0.7.0**, con radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
+Questa guida descrive **Lume TV 0.8.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
 
 [Download e installazione](../README.md#distribuzione-e-installazione) · [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
 ## In questa guida
 
+- [Liste personali](#liste-personali)
+- [Canali nella Home](#canali-nella-home)
 - [Installazione e primo avvio](#installazione-e-primo-avvio)
 - [Scegliere l’interfaccia](#scegliere-linterfaccia)
 - [Scegliere un canale](#scegliere-un-canale)
@@ -24,11 +26,32 @@ Questa guida descrive **Lume TV 0.7.0**, con radio, anteprima durante la navigaz
 - [Se qualcosa non funziona](#se-qualcosa-non-funziona)
 - [Dati e collegamento con AURA](#dati-e-collegamento-con-aura)
 
+## Canali nella Home
+
+Apri **Opzioni → Canali nella Home → Attiva e scegli canali**. Scegli **I miei preferiti** per seguire i preferiti del catalogo integrato, oppure **Selezione manuale** per scegliere fino a 24 canali e premi **Pubblica**. Se Android chiede di aggiungere la riga Lume TV, conferma. In altri launcher puoi abilitarla dalle loro impostazioni dei canali.
+
+Su **Projectivy 4.73**, dopo aver consentito la lettura degli elenchi TV al launcher, apri **Edit channels → Lume TV → Visible** per rendere visibile la riga. Se la riga non compare, usa prima **Mostra nella Home** in Lume e conferma l’eventuale richiesta Android.
+
+Le tessere aprono la diretta dentro Lume. Nomi, immagini e programma in onda vengono condivisi con la Home; radio e liste personali sono escluse. Il consenso è separato da AURA. I programmi scaduti tornano alla descrizione del canale al successivo aggiornamento; il sistema può ritardare i lavori in background.
+
+**Mostra nella Home** richiede nuovamente la visualizzazione della riga. **Ripristina tessere rimosse** recupera i canali che hai rimosso dalla Home; la conferma di una selezione manuale ripubblica i canali scelti. **Disattiva e rimuovi** elimina la pubblicazione. La visibilità e l’ordine dipendono dal launcher; la funzione richiede Android TV 8 o successivo e non equivale all’inserimento nella scheda Live di Google TV.
+
+
+## Liste personali
+
+Apri **Opzioni → Le mie liste** e scegli **Aggiungi URL** per inserire nome e indirizzo HTTPS di una lista M3U. **Verifica lista** mostra l’anteprima con voci importabili, escluse e duplicate; **Importa** salva la sorgente. **Importa file** usa il selettore documenti, quando disponibile sulla TV; in sua assenza usa un URL.
+
+Nel catalogo, **Lista** seleziona la sorgente e **Tutti i gruppi** mostra i gruppi del file. I preferiti attraversano le sorgenti, mantenendo la distinzione TV/radio. CH+/CH− e i controlli multimediali rimangono nella sorgente del canale in riproduzione. I numeri cercano nella sorgente visualizzata nel catalogo e in quella in riproduzione durante la diretta; se più canali hanno lo stesso numero, compare una scelta.
+
+La gestione permette rinomina, aggiornamento, modifica dell’URL, sostituzione del file, disattivazione ed eliminazione. Gli aggiornamenti conservano la diretta e, in caso di errore, l’ultima copia valida. Disattivare conserva i dati; eliminare rimuove i relativi preferiti e recenti. Entrambe le azioni interrompono la riproduzione della sorgente interessata. **Indietro** ritorna alle Opzioni; i comandi in fondo alla pagina permettono di riaprire o interrompere la diretta corrente.
+
+Le liste sono locali e sono escluse dalla condivisione AURA e dalla Home dei launcher. Limiti iniziali: 10 liste, 5.000 voci per lista, 20.000 voci complessive e 8 MiB per documento UTF-8. Sono supportati stream HTTPS; XMLTV personale, HTTP generico, catch-up/VOD e direttive DRM aggiuntive non sono inclusi. Aprire un selettore file esterno interrompe la riproduzione secondo le regole della UI TV.
+
 ## Installazione e primo avvio
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Scarica [LumeTV-0.6.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.6.0/LumeTV-0.6.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
+1. Scarica [LumeTV-0.8.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.8.0/LumeTV-0.8.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.

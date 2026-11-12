@@ -27,6 +27,7 @@ class ChannelAdapter(
 ) : RecyclerView.Adapter<ChannelAdapter.Holder>() {
     init { setHasStableIds(true) }
     var items = emptyList<Channel>()
+    var sourceNames = emptyMap<String, String>()
     var programmes: Map<String, List<Programme>> = emptyMap()
     var guideMode = false
     var currentId: String? = null
@@ -93,7 +94,8 @@ class ChannelAdapter(
     override fun onBindViewHolder(holder: Holder, position: Int) {
         val channel = items[position]
         val context = holder.card.context
-        holder.number.text = if (channel.number == 9999) channel.family.uppercase(Locale.ITALY) else "%02d   /   %s".format(channel.number, channel.family.uppercase(Locale.ITALY))
+        val sourceLabel = (if (channel.isPersonal) sourceNames[channel.sourceId] ?: "Lista personale" else channel.family).uppercase(Locale.ITALY)
+        holder.number.text = if (channel.number == 9999) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)
         holder.badge.text = when {
             favorite(channel) -> "★"
             channel.id == currentId -> "●"

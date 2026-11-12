@@ -17,15 +17,22 @@ data class Channel(
     val key: String,
     val headers: Map<String, String> = emptyMap(),
     val kind: MediaKind = MediaKind.TV,
+    val sourceId: String = BUILTIN_TV_SOURCE,
+    val position: Int = 0,
+    val groups: List<String> = emptyList(),
 ) {
+    val isPersonal: Boolean get() = sourceId.startsWith("user_")
     val isRadio: Boolean get() = kind == MediaKind.RADIO
     val family: String get() = if (isRadio) "Radio" else when (broadcaster) {
         "rai", "rainewsrg" -> "Rai"
         "mediaset" -> "Mediaset"
         else -> "Altri canali"
     }
-    val supported: Boolean get() = broadcaster in setOf("rai", "rainewsrg", "mediaset", "sky", "la7", "discovery", "direct")
+    val supported: Boolean get() = broadcaster in setOf("rai", "rainewsrg", "mediaset", "sky", "la7", "discovery", "direct", "personal")
 }
+
+const val BUILTIN_TV_SOURCE = "builtin_tv"
+const val BUILTIN_RADIO_SOURCE = "builtin_radio"
 
 object M3uParser {
     private val attribute = Regex("([\\w-]+)=\"([^\"]*)\"")
@@ -88,12 +95,13 @@ data class ResolvedStream(
     val mimeType: String? = null,
     val headers: Map<String, String> = emptyMap(),
     val drm: DrmSpec? = null,
+    val personal: Boolean = false,
 )
 
 object ChannelNavigation {
     fun next(channels: List<Channel>, currentId: String?, direction: Int, favoriteIds: Set<String>? = null): Channel? {
-        val kind = channels.firstOrNull { it.id == currentId }?.kind
-        val available = channels.filter { (kind == null || it.kind == kind) && (favoriteIds == null || it.id in favoriteIds) }
+        val current = channels.firstOrNull { it.id == currentId }
+        val available = channels.filter { (current == null || it.kind == current.kind && it.sourceId == current.sourceId) && (favoriteIds == null || it.id in favoriteIds) }
         if (available.isEmpty()) return null
         val index = available.indexOfFirst { it.id == currentId }
         val next = if (index < 0) { if (direction < 0) available.lastIndex else 0 }

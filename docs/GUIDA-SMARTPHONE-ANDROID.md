@@ -2,7 +2,9 @@
 
 Lume TV permette di guardare le dirette italiane sul telefono, con comandi touch, preferiti e palinsesto. La stessa APK comprende anche l’interfaccia per telecomando: se usi una TV, consulta la [guida per Android TV e Google TV](GUIDA-ANDROID-TV.md).
 
-Questa guida descrive **Lume TV 0.7.0**, con radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
+Questa guida descrive **Lume TV 0.8.0**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
+
+La funzione **Canali nella Home**, dalla versione 0.8.0, compare nelle Opzioni soltanto sui dispositivi TV, anche quando si usa l’interfaccia Smartphone. Sui telefoni non pubblica canali. Vedi la [guida per Android TV](GUIDA-ANDROID-TV.md#canali-nella-home).
 
 [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
@@ -10,6 +12,7 @@ Le schermate di questa guida provengono dall’app nativa su emulatore Android e
 
 ## In questa guida
 
+- [Liste personali](#liste-personali)
 - [Installazione e primo avvio](#installazione-e-primo-avvio)
 - [Scegliere l’interfaccia](#scegliere-linterfaccia)
 - [Navigare tra le sezioni](#navigare-tra-le-sezioni)
@@ -25,11 +28,21 @@ Le schermate di questa guida provengono dall’app nativa su emulatore Android e
 - [Se qualcosa non funziona](#se-qualcosa-non-funziona)
 - [Dati e collegamento con AURA](#dati-e-collegamento-con-aura)
 
+## Liste personali
+
+**Opzioni → Le mie liste** apre la gestione delle sorgenti personali. **Aggiungi URL** accetta l’indirizzo HTTPS di una lista M3U; **Importa file** usa il selettore documenti Android. Assegna un nome, scegli il tipo predefinito dei canali privi di indicazione TV/radio, premi **Verifica lista** e controlla il numero di voci importabili, escluse e duplicate prima di confermare.
+
+In **Canali** e **Radio**, il controllo **Lista** seleziona la sorgente e **Tutti i gruppi** restringe l’elenco. I preferiti comprendono le diverse sorgenti. Precedente/successivo e i controlli di sistema rimangono nella sorgente e nel tipo del canale in riproduzione.
+
+Dalla gestione puoi rinominare, aggiornare, cambiare URL, sostituire il file, disattivare o eliminare una lista. La disattivazione conserva i preferiti; l’eliminazione rimuove anche i preferiti e i recenti associati e interrompe la relativa diretta. Un aggiornamento non riuscito conserva la copia precedente. I file importati sono copiati nell’archivio privato: spostare l’originale non rende indisponibili i canali.
+
+Le liste restano sul singolo dispositivo e sono escluse dalla condivisione AURA e dalla Home dei launcher. Il primo rilascio supporta stream HTTPS, fino a 10 liste, 5.000 voci per lista, 20.000 voci complessive e file UTF-8 fino a 8 MiB. Guida XMLTV personale, catch-up, cataloghi VOD e direttive DRM aggiuntive non sono inclusi. L’apertura del selettore file esterno segue le normali regole di riproduzione in background del telefono.
+
 ## Installazione e primo avvio
 
 Serve uno **smartphone con Android 6.0 o successivo**, collegato a Internet, e un’APK che includa il supporto smartphone.
 
-1. Scarica [LumeTV-0.6.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.6.0/LumeTV-0.6.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
+1. Scarica [LumeTV-0.8.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.8.0/LumeTV-0.8.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
 2. Trasferisci il file sul telefono e aprilo dal gestore file. Se Android lo richiede, autorizza quel programma a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV**.
 4. Nella sezione **Canali**, tocca il nome del canale che vuoi guardare.

@@ -79,6 +79,8 @@ class MobileActivity : ComponentActivity() {
     private lateinit var browse: MobileBrowseView
     private lateinit var miniPlayer: MobileMiniPlayer
     private lateinit var options: MobileOptionsView
+    private lateinit var playlists: it.lumetv.app.ui.PersonalPlaylistsScreen
+    private lateinit var homeSettings: it.lumetv.app.home.HomeChannelSettings
     private lateinit var playback: MobilePlaybackView
     private var channels = emptyList<Channel>()
     private var programmes = emptyMap<String, List<Programme>>()
@@ -150,6 +152,27 @@ class MobileActivity : ComponentActivity() {
         root.addView(browse, FrameLayout.LayoutParams(-1, -1))
         root.addView(playback, FrameLayout.LayoutParams(-1, -1))
         root.addView(options, FrameLayout.LayoutParams(-1, -1))
+        playlists = it.lumetv.app.ui.PersonalPlaylistsScreen(this, lifecycleScope, repository.personal, true, ::trackDialog,
+            {}, ::openPlayback, ::stopPlayback)
+        root.addView(playlists, FrameLayout.LayoutParams(-1, -1))
+        playlists.restoreState(savedInstanceState)
+        homeSettings = it.lumetv.app.home.HomeChannelSettings(this, lifecycleScope, ::trackDialog,
+            { showingOptions && !playlists.isShowing }, ::renderOptions, ::message)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                it.lumetv.app.home.HomeChannels.revisions.collect { if (showingOptions) renderOptions() }
+            }
+        }
+        browse.sourceChooser = { selected, kind, choose -> playlists.chooseSource(selected, false, kind, choose) }
+        browse.trackModal = ::trackDialog
+        lifecycleScope.launch {
+            repository.personal.version.collect {
+                if (catalogLoaded) {
+                    channels = channels.filterNot { it.isPersonal } + repository.personal.cached()
+                    renderData(); refreshPicker?.invoke()
+                }
+            }
+        }
         if (showingOptions) { browse.visibility = View.GONE; options.setMiniPlayer(miniPlayer) }
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
@@ -186,6 +209,7 @@ class MobileActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
+                    playlists.handleBack() -> Unit
                     showingOptions -> closeOptions()
                     !showingCatalog -> showCatalog()
                     browse.closeSearch() -> Unit
@@ -267,6 +291,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        playlists.saveState(outState)
         outState.putString("mobile_channel", current?.id)
         outState.putBoolean("mobile_catalog", showingCatalog)
         outState.putBoolean("mobile_options", showingOptions)
@@ -302,13 +327,14 @@ class MobileActivity : ComponentActivity() {
         when (request) {
             is LaunchRequest.ChannelId -> channels.firstOrNull { it.id == request.id }?.let { selectChannel(it) }
                 ?: run { showCatalog(MobileSection.CHANNELS); message("Canale non più disponibile") }
-            LaunchRequest.Last -> channels.firstOrNull { it.id == repository.lastChannelId }?.let { selectChannel(it) }
+            LaunchRequest.Last -> channels.firstOrNull { !it.isPersonal && it.id == repository.lastIntegratedChannelId }?.let { selectChannel(it) }
                 ?: run { showCatalog(MobileSection.CHANNELS); message("Nessun ultimo canale disponibile") }
             LaunchRequest.Catalog -> showCatalog(MobileSection.CHANNELS)
             LaunchRequest.Favorites -> showCatalog(MobileSection.FAVORITES)
             LaunchRequest.Guide -> showCatalog(MobileSection.GUIDE)
             LaunchRequest.Discover -> showCatalog(MobileSection.DISCOVER)
             LaunchRequest.Integration -> { showCatalog(MobileSection.CHANNELS); showOptions(); showIntegrationOptions() }
+            LaunchRequest.Home -> { showCatalog(MobileSection.CHANNELS); showOptions(); homeSettings.show() }
             LaunchRequest.Invalid -> { showCatalog(MobileSection.CHANNELS); message("Collegamento non valido") }
         }
         return true
@@ -349,6 +375,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun renderPlayback(state: PlaybackSnapshot) {
+        if (::playlists.isInitialized) playlists.bindPlayback(state.channel != null)
         if (!::miniPlayer.isInitialized) return
         if (state.channel == null) {
             miniPlayer.visibility = View.GONE
@@ -454,7 +481,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun zap(direction: Int) {
-        repository.nextChannel(channels, current?.id, direction)?.let { selectChannel(it) }
+        repository.nextChannel(channels, current?.id, direction, current)?.let { selectChannel(it) }
             ?: message("Nessun preferito. Aggiungi un canale ai preferiti o cambia la modalità nelle Opzioni.")
     }
 
@@ -470,6 +497,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun renderData() {
+        browse.setSourceNames(repository.personal.state.value.filter { it.enabled }.associate { it.id to it.name })
         browse.submit(channels, programmes, current?.id, catalogLoaded, repository.recentIds)
         updateGuideStatus()
     }
@@ -550,7 +578,7 @@ class MobileActivity : ComponentActivity() {
         panel.addView(empty, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
         panel.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
         fun render() {
-            rows.items = channels.filter { it.isRadio == (current?.isRadio == true) && (!favoritesOnly || repository.isFavorite(it)) }.map {
+            rows.items = channels.filter { it.isRadio == (current?.isRadio == true) && (current == null || it.sourceId == current?.sourceId) && (!favoritesOnly || repository.isFavorite(it)) }.map {
                 MobileBrowseItem(it, ProgrammeWindow.at(programmes[it.epgId].orEmpty(), System.currentTimeMillis()).current, channelRow = true)
             }
             rows.notifyDataSetChanged()
@@ -617,6 +645,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun checkReminders() {
+        if (playlists.isShowing || catalogDialogs.any { it.isShowing }) return
         if (!catalogLoaded || !hasWindowFocus() || reminderDialog?.isShowing == true || programmeDialog?.isShowing == true ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
         val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
@@ -660,11 +689,13 @@ class MobileActivity : ComponentActivity() {
     private fun renderOptions() {
         options.bind(InterfacePreferences.selected(this).label, repository.zapFavoritesOnly,
             getSharedPreferences("lume", MODE_PRIVATE).getBoolean("data_saver", false),
-            IntegrationStore.allowed(this), BuildConfig.VERSION_NAME, updates.available?.versionName)
+            IntegrationStore.allowed(this), BuildConfig.VERSION_NAME, updates.available?.versionName,
+            it.lumetv.app.home.HomeChannels.summary(this))
     }
 
     private fun chooseOption(option: MobileOption) {
         when (option) {
+            MobileOption.PLAYLISTS -> { playlists.bindPlayback(player.snapshot.channel != null); playlists.show() }
             MobileOption.INTERFACE -> trackDialog(InterfacePreferences.choose(this, ::changeInterface))
             MobileOption.ZAPPING -> trackDialog(AlertDialog.Builder(this).setTitle("Cambio canale")
                 .setSingleChoiceItems(arrayOf("Tutte le emittenti", "Solo preferiti"), if (repository.zapFavoritesOnly) 1 else 0) { dialog, choice ->
@@ -680,6 +711,7 @@ class MobileActivity : ComponentActivity() {
             }
             MobileOption.UPDATES -> updates.show()
             MobileOption.AURA -> showIntegrationOptions()
+            MobileOption.HOME -> homeSettings.show()
             MobileOption.ABOUT -> trackDialog(AlertDialog.Builder(this).setTitle("Lume TV · ${BuildConfig.VERSION_NAME}")
                 .setMessage("La TV, fatta semplice.\n\nTV, radio, guida e preferiti sul tuo dispositivo.\n\nIntegrazioni adattate da WorldLiveTV e WLTV Group. Software libero, GPL-3.0-or-later.\n\nSorgenti: github.com/pjor94/LumeTV.")
                 .setPositiveButton("Chiudi", null).setNeutralButton("Licenze") { _, _ -> showLicenses() }.show())
@@ -691,6 +723,7 @@ class MobileActivity : ComponentActivity() {
         catalogDialogs += dialog
         dialog.setOnDismissListener {
             catalogDialogs -= dialog
+            if (playlists.isShowing) root.post { if (catalogDialogs.none { it.isShowing }) playlists.focusSelection() }
             if (showingOptions) renderOptions()
             root.post { updates.maybePrompt() }
         }

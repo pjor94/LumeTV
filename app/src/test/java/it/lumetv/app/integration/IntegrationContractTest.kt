@@ -7,6 +7,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class IntegrationContractTest {
+    @Test fun personalChannelsAreExcludedEvenWhenTheyAreFavoritesOrLastPlayed() {
+        val privateChannel = channel().copy(sourceId = "user_" + "a".repeat(32))
+        val json = IntegrationContract.snapshot("test", true, listOf(privateChannel), setOf(privateChannel.id), emptyMap(), 1, null,
+            privateChannel.id, 1, 2)
+        assertEquals(0, JSONObject(json).getJSONArray("channels").length())
+        assertTrue(JSONObject(json).isNull("lastChannelId"))
+        assertFalse(json.contains("private")); assertFalse(json.contains("secret"))
+    }
     private val id = "0123456789abcdef01234567"
     private val certificate = "a".repeat(64)
     private fun channel(id: String = this.id, name: String = "Canale prova") = Channel(id, name, 1, "test", "TV",
@@ -20,6 +28,7 @@ class IntegrationContractTest {
         assertEquals(LaunchRequest.Guide, LaunchRequest.parse("lumetv://guide"))
         assertEquals(LaunchRequest.Discover, LaunchRequest.parse("lumetv://discover"))
         assertEquals(LaunchRequest.Integration, LaunchRequest.parse("lumetv://integration"))
+        assertEquals(LaunchRequest.Home, LaunchRequest.parse("lumetv://home"))
         listOf(null, "", "https://channel/$id", "lumetv://channel/$id?stream=x", "lumetv://channel/$id#x",
             "lumetv://channel/$id/", "lumetv://channel/%30${id.drop(1)}", "lumetv://user@catalog",
             "lumetv://catalog:443", "lumetv://guide/", "lumetv://channel/../../last", "lumetv://channel/${id.uppercase()}")

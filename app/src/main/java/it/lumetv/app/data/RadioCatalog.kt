@@ -68,7 +68,8 @@ internal object RadioCatalog {
                     val url = if (source.host == "radio.garden") source.newBuilder().scheme("https").build() else source
                     val id = MessageDigest.getInstance("SHA-256").digest("radio|$code".toByteArray())
                         .take(12).joinToString("") { "%02x".format(it) }
-                    Channel(id, name, 9999, "", city, "", url.toString(), "direct", url.toString(), kind = MediaKind.RADIO)
+                    Channel(id, name, 9999, "", city, "", url.toString(), "direct", url.toString(), kind = MediaKind.RADIO,
+                        sourceId = it.lumetv.core.BUILTIN_RADIO_SOURCE)
                 }
             }
         }.distinctBy { it.id }

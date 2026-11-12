@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.ListenableFuture
 import it.lumetv.app.MainActivity
 import it.lumetv.app.data.ChannelRepository
 import it.lumetv.app.data.HttpClient
+import it.lumetv.app.data.PersonalPlaylistNetwork
 import it.lumetv.app.data.StreamResolver
 import it.lumetv.core.Channel
 import it.lumetv.core.ResolvedStream
@@ -81,13 +82,25 @@ class PlaybackService : MediaSessionService() {
     private var error: String? = null
     private var nowPlaying = ""
     private var recordedId: String? = null
+    private var refreshPersonalBeforeRetry = false
+    private var personalRefreshAttempted = false
     var snapshot = PlaybackSnapshot()
         private set
 
     override fun onCreate() {
         super.onCreate()
         repository = ChannelRepository(this, http)
-        resolver = StreamResolver(http)
+        resolver = StreamResolver(http) { repository.personal.resolve(it, http.client) }
+        scope.launch {
+            repository.personal.version.collect {
+                selected?.takeIf { it.isPersonal }?.let { channel ->
+                    if (!repository.personal.available(channel.sourceId)) stopPlayback()
+                    else repository.personal.cached().firstOrNull { it.id == channel.id }?.takeIf { it != channel }?.let {
+                        selected = it; updateMetadata(); publish()
+                    }
+                }
+            }
+        }
         network = NetworkMonitor(this) { recovery.onNetworkChanged(it) }
         recovery = PlaybackRecovery(scope, { network.isOnline }, { open() },
             onWaiting = { waiting("Connessione assente · Riprendo quando torna la rete…") },
@@ -132,6 +145,9 @@ class PlaybackService : MediaSessionService() {
                     }
                     override fun onPlayerError(exception: PlaybackException) {
                         debug("error=${exception.errorCodeName}")
+                        val status = generateSequence<Throwable>(exception) { it.cause }
+                            .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
+                        requestPersonalRefresh(status)
                         val failure = PlaybackFailure.fromPlayer(exception)
                         if (desiredPlaying) recovery.onFailure(failure) else fail(failure.message)
                     }
@@ -214,10 +230,12 @@ class PlaybackService : MediaSessionService() {
     fun removeObserver(observer: (PlaybackSnapshot) -> Unit) { observers -= observer }
 
     fun select(channel: Channel, mobile: Boolean, audio: Boolean = channel.isRadio, play: Boolean = true) {
+        if (channel.isPersonal && !repository.personal.available(channel.sourceId)) return
         changingChannel = selected != null && selected?.id != channel.id
         this.mobile = mobile
         audioOnly = channel.isRadio || audio
         selected = channel
+        refreshPersonalBeforeRetry = false; personalRefreshAttempted = false
         desiredPlaying = play
         error = null; nowPlaying = ""; recordedId = null
         if (play) recovery.start() else recovery.stop()
@@ -237,6 +255,12 @@ class PlaybackService : MediaSessionService() {
         if (desiredPlaying) recovery.onBuffering()
         resolveJob = scope.launch {
             try {
+                if (refreshPersonalBeforeRetry && channel.isPersonal) {
+                    refreshPersonalBeforeRetry = false
+                    try { repository.personal.refresh(channel.sourceId, true) }
+                    catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                    catch (_: Exception) { /* A source error does not discard the cached channel. */ }
+                }
                 val stream = resolver.resolve(channel)
                 if (request != generation || selected?.id != channel.id) return@launch
                 player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
@@ -249,6 +273,7 @@ class PlaybackService : MediaSessionService() {
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (exception: Exception) {
                 if (request == generation) {
+                    requestPersonalRefresh((exception as? it.lumetv.app.data.PlaylistFetchException)?.status)
                     val failure = PlaybackFailure.fromSource(exception)
                     if (desiredPlaying) recovery.onFailure(failure) else fail(failure.message)
                 }
@@ -256,9 +281,16 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private fun requestPersonalRefresh(status: Int?) {
+        if (selected?.isPersonal == true && !personalRefreshAttempted && status in setOf(401, 403, 404, 410)) {
+            personalRefreshAttempted = true; refreshPersonalBeforeRetry = true
+        }
+    }
+
     private fun source(stream: ResolvedStream, channel: Channel): androidx.media3.exoplayer.source.MediaSource {
+        val client = if (stream.personal) PersonalPlaylistNetwork.client(streamHttp, stream.url, stream.headers.keys) else streamHttp
         val factory = DefaultMediaSourceFactory(DefaultDataSource.Factory(this,
-            OkHttpDataSource.Factory(streamHttp).setUserAgent(HttpClient.USER_AGENT).setDefaultRequestProperties(stream.headers)))
+            OkHttpDataSource.Factory(client).setUserAgent(HttpClient.USER_AGENT).setDefaultRequestProperties(stream.headers)))
         val drm = DefaultDrmSessionManagerProvider().apply {
             setDrmHttpDataSourceFactory(OkHttpDataSource.Factory(http.client).setUserAgent(HttpClient.USER_AGENT))
         }
@@ -276,7 +308,7 @@ class PlaybackService : MediaSessionService() {
     private fun metadata(channel: Channel): MediaMetadata = MediaMetadata.Builder().setTitle(channel.name)
         .setArtist(nowPlaying.ifBlank { if (channel.isRadio) channel.group.ifBlank { "Radio in diretta" } else "TV in diretta" })
         .setMediaType(if (channel.isRadio) MediaMetadata.MEDIA_TYPE_RADIO_STATION else MediaMetadata.MEDIA_TYPE_TV_CHANNEL)
-        .apply { if (channel.logo.startsWith("https://")) setArtworkUri(android.net.Uri.parse(channel.logo)) }.build()
+        .apply { if (!channel.isPersonal && channel.logo.startsWith("https://")) setArtworkUri(android.net.Uri.parse(channel.logo)) }.build()
 
     private fun updateMetadata() {
         val channel = selected ?: return
@@ -322,7 +354,7 @@ class PlaybackService : MediaSessionService() {
         scope.launch {
             val catalog = repository.local()
             if (request != generation || selected?.id != channel.id) return@launch
-            repository.nextChannel(catalog, channel.id, direction)?.let { select(it, mobile) }
+            repository.nextChannel(catalog, channel.id, direction, channel)?.let { select(it, mobile) }
         }
     }
 

@@ -2,6 +2,7 @@
 // Broadcaster flows adapted from WorldLiveTV 1.2.14 + hotfix 121417 (WLTV Group).
 // Modified by the Lume TV project, 2026-10-25: Kotlin/Android port and Media3 integration.
 // Modified by the Lume TV project, 2026-11-07: delegate La7 to its La7 Play integration.
+// Modified by the Lume TV project, 2026-11-11: resolve personal channels through private playlist storage.
 package it.lumetv.app.data
 
 import it.lumetv.core.Channel
@@ -16,7 +17,9 @@ import java.io.StringReader
 import javax.xml.parsers.DocumentBuilderFactory
 import org.xml.sax.InputSource
 
-class StreamResolver(private val http: Transport) {
+class StreamResolver(private val http: Transport, private val personal: suspend (String) -> ResolvedStream = {
+    throw SourceException("Questo canale personale non è disponibile.")
+}) {
     private val rai = RaiResolver(http)
     private val mediaset = MediasetResolver(http)
     private val la7 = La7Resolver(http)
@@ -33,6 +36,7 @@ class StreamResolver(private val http: Transport) {
         "la7" -> la7.resolve(channel)
         "discovery" -> resolveDiscovery(channel)
         "direct" -> ResolvedStream(channel.source, headers = channel.headers)
+        "personal" -> personal(channel.id)
         else -> throw SourceException("Questa emittente non è ancora supportata.")
     } }
 

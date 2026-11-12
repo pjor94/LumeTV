@@ -15,9 +15,11 @@ import it.lumetv.app.R
 import it.lumetv.app.ui.TvStyle.dp
 
 enum class TvOption(val label: String, val description: String) {
+    PLAYLISTS("Le mie liste", "Aggiungi e gestisci liste personali M3U per TV e radio, tramite indirizzo HTTPS o file."),
     INTERFACE("Interfaccia", "Scegli la disposizione TV o smartphone, oppure lascia il riconoscimento automatico."),
     ZAPPING("CH+/CH−", "Scegli se i tasti di cambio canale scorrono tutte le emittenti o soltanto i preferiti."),
     AURA("Collegamento con AURA", "Gestisci la condivisione di canali, preferiti e guida con AURA su questa TV."),
+    HOME("Canali nella Home", "Scegli fino a 24 canali del catalogo integrato da mostrare nella Home dei launcher compatibili. Il consenso è separato da AURA."),
     UPDATES("Aggiornamenti", "Controlla le nuove versioni di Lume TV e gestisci gli aggiornamenti dell’app."),
     ABOUT("Informazioni", "Consulta la versione di Lume TV, lo stato del catalogo e della guida e i riferimenti del progetto."),
     LICENSES("Licenze e avvisi", "Leggi i crediti, le licenze del software e i riferimenti ai sorgenti."),
@@ -101,10 +103,11 @@ class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(
         showDescription(); linkFocus()
     }
 
-    fun bind(interfaceLabel: String, favoritesOnly: Boolean, auraAllowed: Boolean, version: String, availableVersion: String?) {
-        val values = mapOf(TvOption.INTERFACE to interfaceLabel,
+    fun bind(interfaceLabel: String, favoritesOnly: Boolean, auraAllowed: Boolean, version: String, availableVersion: String?, homeSummary: String) {
+        val values = mapOf(TvOption.PLAYLISTS to "Liste M3U sul dispositivo", TvOption.INTERFACE to interfaceLabel,
             TvOption.ZAPPING to if (favoritesOnly) "Solo preferiti" else "Tutti i canali",
             TvOption.AURA to if (auraAllowed) "Attivo" else "Non attivo",
+            TvOption.HOME to homeSummary,
             TvOption.UPDATES to (availableVersion?.let { "Lume TV $it è disponibile" } ?: "Versione installata: $version"),
             TvOption.ABOUT to "Lume TV $version", TvOption.LICENSES to "Crediti e sorgenti")
         rows.forEach { (option, row) ->
@@ -114,6 +117,7 @@ class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(
     }
 
     private fun showDescription() { detailTitle.text = selected.label; detailText.text = selected.description }
+    fun select(option: TvOption) { selected = option; showDescription(); linkFocus() }
 
     fun setPreview(view: View) {
         if (view.parent === previewSlot) return

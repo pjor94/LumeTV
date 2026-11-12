@@ -30,7 +30,7 @@ object IntegrationStore {
     }
 
     fun catalogChanged(context: Context, channels: List<Channel>, updated: Long) {
-        synchronized(cacheLock) { catalog = channels.toList(); catalogTime = updated.takeIf { it > 0 } }
+        synchronized(cacheLock) { catalog = channels.filter { !it.isPersonal && !it.isRadio }; catalogTime = updated.takeIf { it > 0 } }
         changed(context)
     }
 
@@ -42,11 +42,17 @@ object IntegrationStore {
     fun changed(context: Context) {
         context.contentResolver.notifyChange(Uri.parse("content://${IntegrationContract.AUTHORITY}/v1/snapshot"), null)
         context.contentResolver.notifyChange(Uri.parse("content://${IntegrationContract.AUTHORITY}/v1/capabilities"), null)
+        it.lumetv.app.home.HomeChannels.schedule(context)
     }
 
     fun snapshot(context: Context): String = synchronized(cacheLock) {
         if (!allowed(context)) return@synchronized IntegrationContract.snapshot(BuildConfig.VERSION_NAME, false,
             emptyList(), emptySet(), emptyMap(), null, null, null, null, System.currentTimeMillis())
+        IntegrationContract.snapshot(BuildConfig.VERSION_NAME, true, content(context))
+    }
+
+    /** Internal consumers have their own consent. This is never a public provider endpoint. */
+    internal fun content(context: Context, now: Long = System.currentTimeMillis()): SharedCatalog = synchronized(cacheLock) {
         val prefs = context.getSharedPreferences("lume", Context.MODE_PRIVATE)
         if (catalog == null) {
             val cached = runCatching { read(context, "channels.m3u", 2 * 1024 * 1024)?.let(CatalogValidator::parse) }.getOrNull()
@@ -65,10 +71,10 @@ object IntegrationStore {
             }.getOrDefault(emptyMap())
             guideTime = context.getSharedPreferences("guide", Context.MODE_PRIVATE).getLong("updated", 0).takeIf { it > 0 }
         }
-        IntegrationContract.snapshot(BuildConfig.VERSION_NAME, true, catalog.orEmpty(),
+        SharedCatalog.project(catalog.orEmpty(),
             prefs.getStringSet("favorites", emptySet()).orEmpty().toSet(), guide.orEmpty(), catalogTime, guideTime,
             prefs.getString("last_tv_channel", prefs.getString("last_channel", null)),
-            prefs.getLong("last_tv_played_at", prefs.getLong("last_played_at", 0)).takeIf { it > 0 }, System.currentTimeMillis())
+            prefs.getLong("last_tv_played_at", prefs.getLong("last_played_at", 0)).takeIf { it > 0 }, now)
     }
 
     private fun read(context: Context, name: String, maximum: Int): String? {

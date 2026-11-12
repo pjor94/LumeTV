@@ -1,7 +1,6 @@
 package it.lumetv.app.integration
 
 import it.lumetv.app.data.Programme
-import it.lumetv.app.data.ProgrammeWindow
 import it.lumetv.core.Channel
 import org.json.JSONArray
 import org.json.JSONObject
@@ -15,6 +14,7 @@ sealed interface LaunchRequest {
     data object Guide : LaunchRequest
     data object Discover : LaunchRequest
     data object Integration : LaunchRequest
+    data object Home : LaunchRequest
     data object Invalid : LaunchRequest
 
     companion object {
@@ -26,7 +26,7 @@ sealed interface LaunchRequest {
             else if (uri.rawPath.orEmpty().isNotEmpty()) Invalid
             else when (uri.host) {
                 "last" -> Last; "catalog" -> Catalog; "favorites" -> Favorites; "guide" -> Guide; "discover" -> Discover
-                "integration" -> Integration; else -> Invalid
+                "integration" -> Integration; "home" -> Home; else -> Invalid
             }
         } catch (_: Exception) { Invalid }
     }
@@ -64,28 +64,26 @@ internal object IntegrationContract {
 
     fun snapshot(version: String, allowed: Boolean, channels: List<Channel>, favoriteIds: Set<String>,
                  programmes: Map<String, List<Programme>>, catalogUpdatedAt: Long?, guideUpdatedAt: Long?,
-                 lastChannelId: String?, lastPlayedAt: Long?, now: Long): String {
+                 lastChannelId: String?, lastPlayedAt: Long?, now: Long): String = snapshot(version, allowed,
+        if (allowed) SharedCatalog.project(channels, favoriteIds, programmes, catalogUpdatedAt, guideUpdatedAt, lastChannelId, lastPlayedAt, now)
+        else SharedCatalog(emptyList(), null, null, null, null))
+
+    fun snapshot(version: String, allowed: Boolean, content: SharedCatalog): String {
+        val (channels, catalogUpdatedAt, guideUpdatedAt, lastChannelId, lastPlayedAt) = content
         val json = metadata(version, allowed)
             .put("catalogUpdatedAt", if (allowed) catalogUpdatedAt?.takeIf { it >= 0 } ?: JSONObject.NULL else JSONObject.NULL)
             .put("guideUpdatedAt", if (allowed) guideUpdatedAt?.takeIf { it >= 0 } ?: JSONObject.NULL else JSONObject.NULL)
         val rows = JSONArray()
         json.put("channels", rows).put("lastChannelId", JSONObject.NULL).put("lastPlayedAt", JSONObject.NULL)
         if (!allowed) return json.toString()
-        val selected = channels.distinctBy { it.id }.filter { Regex("[a-f0-9]{24}").matches(it.id) }
-            .mapNotNull { channel -> displayText(channel.name, 160)?.let { channel to it } }
-            .sortedByDescending { (channel, _) -> channel.id == lastChannelId || channel.id in favoriteIds }.take(MAX_CHANNELS)
+        val selected = channels.sortedByDescending { it.id == lastChannelId || it.favorite }.take(MAX_CHANNELS)
         var bytes = json.toString().toByteArray(Charsets.UTF_8).size + 128
         val included = mutableSetOf<String>()
-        selected.forEach { (channel, name) ->
-            val cleanProgrammes = programmes[channel.epgId].orEmpty().mapNotNull { programme ->
-                displayText(programme.title, 300)?.let { programme.copy(title = it) }
-            }
-            val window = ProgrammeWindow.at(cleanProgrammes, now)
-            val item = JSONObject().put("id", channel.id).put("name", name)
-                .put("number", channel.number.takeIf { it in 0..999_999 } ?: JSONObject.NULL)
-                .put("family", displayText(channel.family, 100) ?: JSONObject.NULL)
-                .put("logo", safeLogo(channel.logo) ?: JSONObject.NULL).put("favorite", channel.id in favoriteIds)
-                .put("now", programme(window.current)).put("next", programme(window.next))
+        selected.forEach { channel ->
+            val item = JSONObject().put("id", channel.id).put("name", channel.name)
+                .put("number", channel.number ?: JSONObject.NULL).put("family", channel.family ?: JSONObject.NULL)
+                .put("logo", channel.logo ?: JSONObject.NULL).put("favorite", channel.favorite)
+                .put("now", programme(channel.current)).put("next", programme(channel.next))
             val size = item.toString().toByteArray(Charsets.UTF_8).size + 1
             if (bytes + size <= MAX_BYTES) { rows.put(item); bytes += size; included += channel.id }
         }
@@ -100,7 +98,7 @@ internal object IntegrationContract {
     } ?: JSONObject.NULL
 
     /** The wire contract uses bounded, nonempty single-line text; malformed feed text must not reject the whole snapshot. */
-    private fun displayText(value: String, maximum: Int): String? {
+    internal fun displayText(value: String, maximum: Int): String? {
         val cleaned = value.map { if (it.isISOControl()) ' ' else it }.joinToString("").trim().take(maximum)
         // String limits are UTF-16 units on both Android clients. Never split a supplementary code point.
         return cleaned.dropLast(if (cleaned.lastOrNull()?.isHighSurrogate() == true) 1 else 0).trim().takeIf { it.isNotBlank() }

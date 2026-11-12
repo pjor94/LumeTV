@@ -2,12 +2,14 @@
 
 Lume TV offre l’integrazione sullo stesso dispositivo Android, senza server o bridge. In **Opzioni → Collegamento con AURA**, **Consenti collegamento** permette ad AURA di leggere catalogo, preferiti, guida e ultimo canale. **Revoca collegamento** interrompe la condivisione. I dati appartengono alla TV e sono comuni ai profili del launcher. La riproduzione resta in Lume TV.
 
+La pubblicazione standard nella Home dei launcher ha un consenso distinto e non amplia gli UID autorizzati da questo provider. Vedi [Integrazione con altri launcher](integration-launchers.md).
+
 ## Apertura delle schermate
 
 Le URI pubbliche accettate da MainActivity sono:
 
 - `lumetv://channel/<id>`: ID del catalogo, esattamente 24 caratteri esadecimali minuscoli.
-- `lumetv://last`: ultimo canale effettivamente riprodotto, oppure catalogo se assente.
+- `lumetv://last`: ultimo canale TV del catalogo integrato effettivamente riprodotto, oppure catalogo se assente. Le liste personali sono escluse dal contratto AURA; l’app conserva separatamente l’ultimo canale complessivo per il proprio ripristino.
 - `lumetv://catalog`, `lumetv://favorites`, `lumetv://guide`: schermate senza riproduzione automatica.
 - `lumetv://integration`: dialogo di consenso sopra il catalogo.
 

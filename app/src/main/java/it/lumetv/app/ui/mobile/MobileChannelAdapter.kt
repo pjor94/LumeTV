@@ -30,6 +30,7 @@ class MobileChannelAdapter(
     private val toggleFavorite: (Channel) -> Unit,
 ) : RecyclerView.Adapter<MobileChannelAdapter.Holder>() {
     var items = emptyList<MobileBrowseItem>()
+    var sourceNames = emptyMap<String, String>()
     init { setHasStableIds(true) }
 
     class Holder(val row: LinearLayout, val logo: ChannelLogoView, val title: TextView,
@@ -86,6 +87,7 @@ class MobileChannelAdapter(
         val number = channel.number.takeIf { it != 9999 }?.let { "$it · " }.orEmpty()
         holder.title.text = if (item.channelRow) number + channel.name else programme?.title.orEmpty()
         holder.subtitle.text = if (item.channelRow) programme?.title ?: if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "Guarda la diretta" else number + channel.name
+        if (item.channelRow && channel.isPersonal) holder.subtitle.text = listOfNotNull(sourceNames[channel.sourceId], holder.subtitle.text.toString()).joinToString(" · ")
         holder.timing.text = programme?.let { (if (live) "In onda · " else "") + time(it.start) + " – " + time(it.end) }.orEmpty()
         holder.timing.visibility = if (programme == null) View.GONE else View.VISIBLE
         holder.progress.visibility = if (live) View.VISIBLE else View.GONE

@@ -19,11 +19,13 @@ import it.lumetv.app.ui.TvStyle
 import it.lumetv.app.ui.TvStyle.dp
 
 enum class MobileOption(val label: String) {
+    PLAYLISTS("Le mie liste"),
     INTERFACE("Interfaccia"),
     ZAPPING("Cambio canale"),
     QUALITY("Qualità e consumo dati"),
     UPDATES("Aggiornamenti"),
     AURA("Collegamento con AURA"),
+    HOME("Canali nella Home"),
     ABOUT("Informazioni"),
     LICENSES("Licenze e avvisi"),
 }
@@ -99,24 +101,28 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
                 LayoutParams(-1, context.dp(1)).apply { leftMargin = context.dp(8); rightMargin = context.dp(8) })
         }
         heading("Preferenze", first = true)
+        row(MobileOption.PLAYLISTS)
         row(MobileOption.INTERFACE)
         row(MobileOption.ZAPPING)
         row(MobileOption.QUALITY, divider = false)
         heading("App e collegamenti")
         row(MobileOption.UPDATES)
         row(MobileOption.AURA)
+        if (it.lumetv.app.home.HomeChannels.television(context)) row(MobileOption.HOME)
         row(MobileOption.ABOUT)
         row(MobileOption.LICENSES, divider = false)
     }
 
     fun bind(interfaceLabel: String, favoritesOnly: Boolean, dataSaver: Boolean, auraAllowed: Boolean,
-             version: String, availableVersion: String?) {
+             version: String, availableVersion: String?, homeSummary: String) {
         val values = mapOf(
+            MobileOption.PLAYLISTS to "Aggiungi liste M3U da URL HTTPS o file",
             MobileOption.INTERFACE to interfaceLabel,
             MobileOption.ZAPPING to if (favoritesOnly) "Solo preferiti" else "Tutte le emittenti",
             MobileOption.QUALITY to if (dataSaver) "Risparmio dati" else "Automatica",
             MobileOption.UPDATES to (availableVersion?.let { "Lume TV $it è disponibile" } ?: "Versione installata: $version"),
             MobileOption.AURA to if (auraAllowed) "Attivo" else "Non attivo",
+            MobileOption.HOME to homeSummary,
             MobileOption.ABOUT to "Lume TV $version",
             MobileOption.LICENSES to "Crediti, sorgenti e licenze del software",
         )

@@ -35,6 +35,9 @@ class Device:
                               check=check, timeout=45).stdout
 
     def read(self, path):
+        exists = subprocess.run([self.adb, "-s", self.serial, "shell", "run-as", PACKAGE, "test", "-f", path], capture_output=True)
+        if exists.returncode != 0:
+            return None
         result = subprocess.run([self.adb, "-s", self.serial, "exec-out", "run-as", PACKAGE, "cat", path], capture_output=True)
         return result.stdout if result.returncode == 0 else None
 

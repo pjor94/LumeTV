@@ -59,6 +59,27 @@ class MobileBrowseView(
     var section = MobileSection.CHANNELS
         private set
     private var family = "Tutti"
+    private var sourceId = context.getSharedPreferences("lume", Context.MODE_PRIVATE).getString("catalog_source", "builtin") ?: "builtin"
+    private var sourceGroup: String? = null
+    private var sourceNames = emptyMap<String, String>()
+    var sourceChooser: ((String, it.lumetv.core.MediaKind?, (String) -> Unit) -> Unit)? = null
+    var trackModal: ((AlertDialog) -> Unit)? = null
+    private val sourceControls = LinearLayout(context)
+    private val sourceButton = MobileStyle.button(context, "Lista: Catalogo Lume") {
+        sourceChooser?.invoke(sourceId, if (section == MobileSection.RADIO) it.lumetv.core.MediaKind.RADIO else it.lumetv.core.MediaKind.TV) { selected ->
+            sourceId = selected; sourceGroup = null; family = "Tutti"; guideChannelId = null
+            context.getSharedPreferences("lume", Context.MODE_PRIVATE).edit().putString("catalog_source", selected).apply()
+            buildFilters(); renderRows(true)
+        }
+    }
+    private val groupButton = MobileStyle.button(context, "Tutti i gruppi") {
+        val groups = it.lumetv.core.CatalogSelection.channels(channels, sourceId).filter { it.isRadio == (section == MobileSection.RADIO) }.flatMap { it.groups }.distinct().sorted()
+        android.app.AlertDialog.Builder(context).setTitle("Scegli il gruppo")
+            .setSingleChoiceItems((listOf("Tutti i gruppi") + groups).toTypedArray(), sourceGroup?.let { groups.indexOf(it) + 1 } ?: 0) { dialog, index ->
+                sourceGroup = if (index == 0) null else groups[index - 1]; guideChannelId = null
+                dialog.dismiss(); renderRows(true)
+            }.setNegativeButton("Annulla", null).show().also { trackModal?.invoke(it) }
+    }
     private var radioFilter = "Tutte"
     private var recentIds = emptyList<String>()
     private var period = DiscoveryPeriod.NOW
@@ -151,6 +172,9 @@ class MobileBrowseView(
             addView(this@MobileBrowseView.filters)
         }
         content.addView(filterScroll, LayoutParams(-1, -2))
+        sourceControls.addView(sourceButton, LayoutParams(0, -2, 1f).apply { rightMargin = context.dp(8) })
+        sourceControls.addView(groupButton, LayoutParams(0, -2, 1f))
+        content.addView(sourceControls, LayoutParams(-1, -2).apply { topMargin = context.dp(8) })
         guideSelector.gravity = Gravity.CENTER_VERTICAL
         guideChannel.apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         guideSelector.addView(guideChannel, LayoutParams(0, -2, 1f))
@@ -193,6 +217,8 @@ class MobileBrowseView(
         if (loaded) pendingScroll?.let { list.layoutManager?.onRestoreInstanceState(it); pendingScroll = null }
     }
 
+    fun setSourceNames(names: Map<String, String>) { sourceNames = names; adapter.sourceNames = names }
+
     fun navigate(value: MobileSection) {
         hideKeyboard()
         if (value == MobileSection.CHANNELS && family in listOf("TV", "Radio")) family = "Tutti"
@@ -218,6 +244,7 @@ class MobileBrowseView(
     }
 
     fun saveState(out: Bundle) {
+        out.putString("mobile_source", sourceId); out.putString("mobile_source_group", sourceGroup)
         out.putString("mobile_radio_filter", radioFilter)
         out.putString("mobile_section", section.name); out.putString("mobile_family", family)
         out.putString("mobile_period", period.name); out.putString("mobile_query", search.text.toString())
@@ -229,6 +256,7 @@ class MobileBrowseView(
     @Suppress("DEPRECATION")
     fun restoreState(state: Bundle?) {
         if (state == null) return
+        sourceId = state.getString("mobile_source") ?: sourceId; sourceGroup = state.getString("mobile_source_group")
         section = MobileSection.entries.firstOrNull { it.name == state.getString("mobile_section") } ?: MobileSection.CHANNELS
         period = DiscoveryPeriod.entries.firstOrNull { it.name == state.getString("mobile_period") } ?: DiscoveryPeriod.NOW
         family = state.getString("mobile_family")?.takeIf { it in listOf("Tutti", "TV", "Radio", "Rai", "Mediaset", "Recenti") } ?: "Tutti"
@@ -283,7 +311,7 @@ class MobileBrowseView(
                 LayoutParams(-2, -2).apply { rightMargin = context.dp(6) })
         }
         when (section) {
-            MobileSection.CHANNELS, MobileSection.FAVORITES -> (if (section == MobileSection.FAVORITES) listOf("Tutti", "TV", "Radio") else listOf("Tutti", "Rai", "Mediaset", "Recenti")).forEach { name ->
+            MobileSection.CHANNELS, MobileSection.FAVORITES -> (if (section == MobileSection.FAVORITES) listOf("Tutti", "TV", "Radio") else if (sourceId == "builtin") listOf("Tutti", "Rai", "Mediaset", "Recenti") else listOf("Tutti", "Recenti")).forEach { name ->
                 chip(name, family == name) { family = name }
             }
             MobileSection.RADIO -> listOf("Tutte", "Preferite", "Recenti").forEach { name ->
@@ -303,18 +331,33 @@ class MobileBrowseView(
     }
 
     private fun renderRows(resetScroll: Boolean = false) {
+        if (loaded && sourceId != "builtin" && sourceId !in sourceNames) {
+            sourceId = "builtin"; sourceGroup = null
+            context.getSharedPreferences("lume", Context.MODE_PRIVATE).edit().putString("catalog_source", sourceId).apply()
+            buildFilters()
+        }
+        if (sourceGroup != null && it.lumetv.core.CatalogSelection.channels(channels, sourceId)
+                .none { it.isRadio == (section == MobileSection.RADIO) && sourceGroup in it.groups }) sourceGroup = null
+        val catalog = if (section == MobileSection.FAVORITES) channels else it.lumetv.core.CatalogSelection.channels(channels, sourceId, sourceGroup)
+        sourceControls.visibility = if (sourceNames.isEmpty() || section == MobileSection.FAVORITES) GONE else VISIBLE
+        sourceButton.text = "Lista: " + (sourceNames[sourceId] ?: "Catalogo Lume")
+        sourceButton.maxLines = 2; sourceButton.ellipsize = TextUtils.TruncateAt.END
+        groupButton.maxLines = 2; groupButton.ellipsize = TextUtils.TruncateAt.END
+        groupButton.text = sourceGroup ?: "Tutti i gruppi"
+        groupButton.visibility = if (sourceId == "builtin") GONE else VISIBLE
+        if (catalog.none { !it.isRadio && it.id == guideChannelId }) guideChannelId = catalog.firstOrNull { !it.isRadio }?.id
         val query = search.text.toString().trim()
         val now = System.currentTimeMillis()
-        val selectedChannel = channels.firstOrNull { it.id == guideChannelId }
+        val selectedChannel = catalog.firstOrNull { it.id == guideChannelId }
         val rows = when (section) {
-            MobileSection.CHANNELS, MobileSection.FAVORITES -> channels.filter { channel ->
+            MobileSection.CHANNELS, MobileSection.FAVORITES -> catalog.filter { channel ->
                 (section == MobileSection.FAVORITES || !channel.isRadio) &&
                     (section != MobileSection.FAVORITES || favorite(channel)) &&
                     (family == "Tutti" || family == "Recenti" && channel.id in recentIds || family == "TV" && !channel.isRadio || channel.family == family) &&
                     (query.isBlank() || channel.name.contains(query, true) || channel.number.toString() == query)
             }.let { rows -> if (family == "Recenti") rows.sortedBy { recentIds.indexOf(it.id) } else rows }
                 .map { MobileBrowseItem(it, ProgrammeWindow.at(programmes[it.epgId].orEmpty(), now).current, channelRow = true) }
-            MobileSection.RADIO -> channels.filter { it.isRadio &&
+            MobileSection.RADIO -> catalog.filter { it.isRadio &&
                 (radioFilter != "Preferite" || favorite(it)) && (radioFilter != "Recenti" || it.id in recentIds) &&
                 (query.isBlank() || RadioCatalog.matches(it, query))
             }.let { rows -> if (radioFilter == "Recenti") rows.sortedBy { recentIds.indexOf(it.id) } else rows }
@@ -325,7 +368,7 @@ class MobileBrowseView(
                     it.end > start && (query.isBlank() || it.title.contains(query, true) || it.description.contains(query, true))
                 }.map { MobileBrowseItem(channel, it) }
             }.orEmpty()
-            MobileSection.DISCOVER -> DiscoveryEngine.select(channels.filterNot(Channel::isRadio), programmes,
+            MobileSection.DISCOVER -> DiscoveryEngine.select(catalog.filterNot(Channel::isRadio), programmes,
                 channels.filter(favorite).map { it.id }.toSet(), period, discoveryFavorites, query, now)
                 .map { MobileBrowseItem(it.channel, it.programme) }
         }
@@ -358,16 +401,17 @@ class MobileBrowseView(
             recentMode -> "Le emittenti riprodotte compariranno qui."
             section == MobileSection.RADIO && radioFilter == "Preferite" -> "Tocca il cuore accanto a una radio per ritrovarla qui."
             section == MobileSection.FAVORITES -> "Tocca il cuore accanto a un canale per ritrovarlo nei preferiti."
+            sourceId != "builtin" && section in listOf(MobileSection.GUIDE, MobileSection.DISCOVER) -> "Questa lista personale non ha una guida programmi. La diretta resta accessibile dai Canali."
             section == MobileSection.GUIDE || section == MobileSection.DISCOVER -> guideStatus.ifBlank { "Il palinsesto può non essere disponibile per questa selezione. La diretta resta accessibile dai Canali." }
             else -> "Controlla la connessione e aggiorna il catalogo."
         }
         emptyAction.visibility = if (!loaded || query.isNotBlank() || recentMode || section == MobileSection.FAVORITES ||
-            section == MobileSection.RADIO && radioFilter == "Preferite") GONE else VISIBLE
+            section == MobileSection.RADIO && radioFilter == "Preferite" || sourceId != "builtin" && section == MobileSection.DISCOVER) GONE else VISIBLE
         emptyAction.text = if (section == MobileSection.GUIDE && selectedChannel != null) "Guarda ${selectedChannel.name}" else "Aggiorna"
     }
 
     private fun chooseGuideChannel() {
-        val channels = channels.filterNot(Channel::isRadio)
+        val channels = it.lumetv.core.CatalogSelection.channels(channels, sourceId, sourceGroup).filterNot(Channel::isRadio)
         if (channels.isEmpty()) return
         AlertDialog.Builder(context).setTitle("Guida del canale")
             .setSingleChoiceItems(channels.map { (if (it.number == 9999) "" else "${it.number} · ") + it.name }.toTypedArray(),
