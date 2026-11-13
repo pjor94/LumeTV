@@ -20,6 +20,11 @@ import it.lumetv.core.Channel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import it.lumetv.app.data.PersonalPlaylistRepository
+import it.lumetv.app.data.PersonalCatalogQuery
 
 /** A focus-contained channel browser above the existing, uninterrupted player. */
 @SuppressLint("ViewConstructor")
@@ -42,6 +47,13 @@ class LiveChannelPanel(
     private var favoritesOnly = false
     private var focusGeneration = 0
     private var pendingFocusId: String? = null
+    private var personal:PersonalPlaylistRepository?=null
+    private var playing:Channel?=null
+    private var personalScope:CoroutineScope?=null
+    private var personalFavorites:(()->Set<String>)?=null
+    private var personalCatalog:ContinuousCatalog<Channel>?=null
+    private var positionJob:Job?=null
+    private var pendingCatalogFocus:Int?=null
     private val allTab = filter("Tutti", false)
     private val favoritesTab = filter("★  Preferiti", true)
     private val layout get() = list.layoutManager as LinearLayoutManager
@@ -95,6 +107,9 @@ class LiveChannelPanel(
             isVerticalScrollBarEnabled = false
             isVerticalFadingEdgeEnabled = true
             setFadingEdgeLength(context.dp(16))
+            addOnScrollListener(object:RecyclerView.OnScrollListener(){override fun onScrolled(view:RecyclerView,dx:Int,dy:Int){
+                personalCatalog?.viewport(layout.findFirstVisibleItemPosition().coerceAtLeast(0),layout.findLastVisibleItemPosition().coerceAtLeast(0))
+            }})
         }
         body.addView(list, LayoutParams(-1, -1))
         empty.apply {
@@ -136,6 +151,7 @@ class LiveChannelPanel(
     }
 
     fun show(items: List<Channel>, programmes: Map<String, List<Programme>>, currentId: String?) {
+        clearPersonal()
         allChannels = items
         this.programmes = programmes
         this.currentId = currentId
@@ -152,6 +168,31 @@ class LiveChannelPanel(
         list.stopScroll()
         visibility = GONE
         clearFocus()
+        clearPersonal()
+    }
+
+    internal fun showPersonal(repository:PersonalPlaylistRepository,scope:CoroutineScope,current:Channel,programmes:Map<String,List<Programme>>,favorites:()->Set<String>) {
+        clearPersonal();personal=repository;personalScope=scope;playing=current;currentId=current.id;this.programmes=programmes
+        personalFavorites=favorites
+        favoritesOnly=false;visibility=VISIBLE;updateFilters()
+        personalCatalog=ContinuousCatalog(scope,50){change->list.post {
+            val model=personalCatalog
+            if(isOpen && model!=null) {
+                val scroll=layout.onSaveInstanceState()
+                if(change.sizeChanged)channels.notifyDataSetChanged() else if(change.start<model.size)channels.notifyItemRangeChanged(change.start,change.count.coerceAtMost(model.size-change.start))
+                if(!change.sizeChanged)layout.onRestoreInstanceState(scroll)
+                count.text=if(model.loading && model.size==0)"Carico…" else "${model.size} canali"
+                empty.visibility=if(model.size==0)VISIBLE else GONE;list.visibility=if(model.size==0)GONE else VISIBLE
+                empty.text=when {model.loading->"Carico i canali…";model.hasError->"Impossibile caricare. Premi OK per riprovare.";favoritesOnly->"Nessun preferito in questa lista.";else->"Nessun canale disponibile."}
+                empty.isFocusable=model.hasError;empty.isClickable=model.hasError;empty.setOnClickListener {model.retry()}
+                if(change.sizeChanged)pendingCatalogFocus?.let {focusPosition(it)}
+            }
+        }}
+        channels.catalog=personalCatalog;showChannels(focusRows=true);refreshProgrammes()
+    }
+    private fun clearPersonal() {
+        positionJob?.cancel();positionJob=null;personalCatalog?.close();personalCatalog=null;channels.catalog=null
+        personal=null;personalScope=null;personalFavorites=null;playing=null;pendingCatalogFocus=null
     }
 
     fun update(items: List<Channel>, programmes: Map<String, List<Programme>>, currentId: String?) {
@@ -163,6 +204,21 @@ class LiveChannelPanel(
     }
 
     private fun showChannels(focusRows: Boolean = false) {
+        val repository=personal;val model=personalCatalog;val current=playing
+        if(repository!=null && model!=null && current!=null) {
+            channels.submit(emptyList(),programmes,currentId)
+            val selected=if(favoritesOnly)personalFavorites?.invoke().orEmpty() else null
+            val query=PersonalCatalogQuery(source=current.sourceId,kind=current.kind,ids=selected,limit=50)
+            positionJob?.cancel()
+            positionJob=personalScope?.launch {
+                val position=if(focusRows)repository.catalogPosition(current,selected) else model.anchor
+                pendingCatalogFocus=position.takeIf {focusRows}
+                model.bind(query to repository.version.value,position){offset->repository.catalog(query.copy(offset=offset)).let {it.rows to it.total}}
+                channels.notifyDataSetChanged()
+                if(model.size>0 && focusRows)focusPosition(position)
+            }
+            return
+        }
         val focusedId = list.findFocus()?.let { list.findContainingViewHolder(it)?.bindingAdapterPosition }
             ?.takeIf { it != RecyclerView.NO_POSITION }?.let { channels.items.getOrNull(it)?.id }
         channels.submit(if (favoritesOnly) allChannels.filter(favorite) else allChannels, programmes, currentId)
@@ -174,6 +230,7 @@ class LiveChannelPanel(
     }
 
     private fun focusChannel(id: String?, anchor: Boolean = true) {
+        personalCatalog?.let {model->focusPosition(model.indexOf {it.id==id} ?: pendingCatalogFocus ?: model.anchor,anchor);return}
         val generation = ++focusGeneration
         pendingFocusId = null
         if (channels.items.isEmpty()) {
@@ -201,6 +258,20 @@ class LiveChannelPanel(
         else layout.scrollToPosition(position)
     }
 
+    private fun focusPosition(value:Int,anchor:Boolean=true) {
+        if(channels.itemCount==0){(if(favoritesOnly)favoritesTab else allTab).requestFocus();return}
+        val position=value.coerceIn(0,channels.itemCount-1)
+        personalCatalog?.ensure(position);pendingCatalogFocus=position
+        val generation=++focusGeneration
+        list.findViewHolderForAdapterPosition(position)?.takeIf {it.itemView.isShown && it.itemView.top>=list.paddingTop && it.itemView.bottom<=list.height-list.paddingBottom}?.let {
+            pendingCatalogFocus=null;it.itemView.requestFocus();return
+        }
+        list.doOnNextLayout {if(isOpen && generation==focusGeneration) {
+            list.findViewHolderForAdapterPosition(position)?.itemView?.let {pendingCatalogFocus=null;it.requestFocus()}
+        }}
+        if(anchor)layout.scrollToPositionWithOffset(position,context.dp(4)) else layout.scrollToPosition(position)
+    }
+
     fun refreshProgrammes() {
         if (!isOpen) return
         clock.text = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date())
@@ -210,7 +281,7 @@ class LiveChannelPanel(
     fun refreshLogos() { if (isOpen) channels.refreshLogos() }
 
     fun handleDirection(keyCode: Int): Boolean {
-        val pendingPosition = pendingFocusId?.let { id -> channels.items.indexOfFirst { it.id == id } }
+        val pendingPosition = pendingCatalogFocus ?: pendingFocusId?.let { id -> channels.items.indexOfFirst { it.id == id } }
             ?.takeIf { it >= 0 }
         val rowPosition = pendingPosition ?: list.findFocus()?.let { list.findContainingViewHolder(it)?.bindingAdapterPosition }
             ?.takeIf { it != RecyclerView.NO_POSITION }
@@ -218,17 +289,18 @@ class LiveChannelPanel(
         // RecyclerView has not created yet. Native focus search can stall at viewport edges.
         if (rowPosition != null && (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP && rowPosition == 0) {
-                focusGeneration++; pendingFocusId = null
+                focusGeneration++; pendingFocusId = null;pendingCatalogFocus=null
                 (if (favoritesOnly) favoritesTab else allTab).requestFocus()
             } else {
                 val direction = if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1
-                focusChannel(channels.items[(rowPosition + direction).coerceIn(0, channels.items.lastIndex)].id, anchor = false)
+                if(personalCatalog!=null)focusPosition((rowPosition+direction).coerceIn(0,channels.itemCount-1),false)
+                else focusChannel(channels.items[(rowPosition + direction).coerceIn(0, channels.items.lastIndex)].id, anchor = false)
             }
             return true
         }
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT -> {
-                focusGeneration++; pendingFocusId = null
+                focusGeneration++; pendingFocusId = null;pendingCatalogFocus=null
                 if (favoritesTab.hasFocus()) allTab.requestFocus()
                 else if (!allTab.hasFocus()) (if (favoritesOnly) favoritesTab else allTab).requestFocus()
                 true

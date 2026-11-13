@@ -73,6 +73,9 @@ class PersonalPlaylistsScreen(
         pages.onChanged=::updatePlaybackControls
         scope.launch {repository.state.collect {if(isShowing)pages.refresh()}}
         scope.launch {PersonalGuideRepository.get(activity).state.collect {if(isShowing)pages.refresh()}}
+        scope.launch {repository.classification.collect {state->
+            if(isShowing && state!=null)pages.current?.takeIf {it.busy && it.key=="reading"}?.message("Classifico i contenuti… ${state.processed} / ${state.total} voci")
+        }}
     }
     fun show() {
         showWindow();pages.reset();overview()
@@ -161,7 +164,8 @@ class PersonalPlaylistsScreen(
             if(item.revision>0) {
                 page.section("Preferenze",first=true)
                 page.row("Sorgente","Nome, attivazione e consenso HTTP"){general(id)}
-                page.row("Lettura e contenuti","Formato, codifica, gruppi e aggiornamento"){settings(id,page){config->PlaylistAdvancedEditor(pages).reading(config,currentName(id)){repository.setSettings(id,it)}}}
+                page.row("Lettura e contenuti","Formato, riconoscimento VOD, gruppi e aggiornamento"){settings(id,page){config->PlaylistAdvancedEditor(pages).reading(config,currentName(id),
+                    {query,offset->repository.groups(PersonalCatalogQuery(source=id,content=null,text=query,offset=offset,limit=50))}){repository.setSettings(id,it)}}}
                 page.row("Accesso ai server","Header, cookie e loghi per ogni funzione"){settings(id,page){config->PlaylistAdvancedEditor(pages).access(config,currentName(id)){repository.setSettings(id,it)}}}
                 page.section("Guida e gestione")
                 page.row("Guida e archivio","XMLTV, orari e associazioni dei canali"){repository.state.value.firstOrNull {it.id==id}?.let(guideEditor::show)}
@@ -209,13 +213,16 @@ class PersonalPlaylistsScreen(
     private fun report(id:String,parent:PlaylistPages.Page) {
         scope.launch {try {
             val item=repository.state.value.firstOrNull {it.id==id} ?: return@launch
-            val attributes=repository.descriptor(id).attributes;val result=repository.importReport(id)
+            val attributes=repository.descriptor(id).attributes;val result=repository.importReport(id);val pending=repository.classificationNeedsRefresh(id);val conflicts=repository.classificationConflicts(id)
             if(!pages.isCurrent(parent))return@launch
             pages.push("report","Stato e ultima importazione",item.name){page->
                 page.text("${item.count} voci · HTTP ${if(item.allowHttp)"consentito" else "disattivato"}")
                 page.text(if(item.checked>0)"Ultimo controllo: "+DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(item.checked)) else "Lista non ancora aggiornata")
                 if(item.nextRetry>System.currentTimeMillis())page.text("Prossimo tentativo: "+DateFormat.getDateTimeInstance().format(Date(item.nextRetry)))
                 if(item.error.isNotBlank())page.text(item.error,muted=false)
+                if(pending)page.text(if(item.location==PlaylistLocation.URL)"Per completare il riconoscimento dei contenuti, aggiorna la lista e rileggi le indicazioni originali."
+                    else "Per completare il riconoscimento dei contenuti, usa Sostituisci file e rileggi le indicazioni originali.")
+                if(conflicts>0 && conflicts!=result?.diagnosticCounts?.get(it.lumetv.core.PlaylistDiagnosticCode.CONTENT_CONFLICT))page.text("$conflicts voci con indicazioni di contenuto discordanti. Prevalgono i tipi espliciti o le regole manuali; tra gruppi discordanti prevale Dirette.")
                 fun clean(value:String)=value.filterNot {it.isISOControl() && it!='\n'}.take(1000)
                 attributes["billed-msg"]?.takeIf(String::isNotBlank)?.let {page.text(clean(it))}
                 attributes["billed-till"]?.takeIf(String::isNotBlank)?.let {page.text("Scadenza comunicata dal servizio: "+clean(it).take(100))}
@@ -281,7 +288,9 @@ class PersonalPlaylistsScreen(
                 if(checked!=null) {
                     saving=true;var committed=false
                     pages.run(page,"Importo la lista…") {try {
-                        val id=repository.save(title.text.toString(),checked,replacing)
+                        val id=repository.save(title.text.toString(),checked,replacing){phase->activity.runOnUiThread {
+                            if(page.alive)page.message(if(phase==it.lumetv.app.data.PlaylistSavePhase.PREPARING)"Organizzo i canali e conservo le associazioni…" else "Salvo la lista…")
+                        }}
                         committed=true;draft=null;checked.close();file?.delete()
                         if(pages.isCurrent(page)){if(replacing!=null && pages.current?.key=="import"){pages.backTo("source-$replacing");pages.current?.message("Lista sostituita.")}
                             else source(id,replace=true)}

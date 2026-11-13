@@ -110,6 +110,30 @@ internal fun PersonalPlaylistStore.containsId(source:String,id:String):Boolean =
         db.rawQuery("SELECT 1 FROM records WHERE id=?",arrayOf(id)).use {it.moveToFirst()}
     }
 
+/** Read only the indexed content column; availability must not depend on the 200-row preview. */
+internal fun PersonalPlaylistStore.contentKinds(stored:PlaylistStored):Set<PlaylistContentKind> {
+    if(stored.source.count==0)return emptySet()
+    stored.settings.contentOverride?.let {return setOf(it)}
+    return SQLiteDatabase.openDatabase(file(stored.source.id).path,null,SQLiteDatabase.OPEN_READONLY).use {db->
+        db.rawQuery("SELECT DISTINCT content FROM records WHERE active=1",null).use {cursor->
+            buildSet {while(cursor.moveToNext())add(PlaylistContentKind.valueOf(cursor.getString(0)))}
+        }
+    }
+}
+
+/** Locate a playing channel without materialising the preceding rows. */
+internal fun PersonalPlaylistStore.catalogPosition(stored:PlaylistStored,current:Channel,ids:Set<String>?):Int =
+    SQLiteDatabase.openDatabase(file(stored.source.id).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
+        if(ids!=null) {
+            db.execSQL("PRAGMA temp_store=FILE");db.execSQL("CREATE TEMP TABLE selected_ids(id TEXT PRIMARY KEY)")
+            db.compileStatement("INSERT OR IGNORE INTO selected_ids VALUES(?)").use {s->ids.forEach {s.bindString(1,it);s.executeInsert()}}
+        }
+        if(ids!=null && current.id !in ids)return@use 0
+        val (filter,args)=where(stored,PersonalCatalogQuery(kind=current.kind,content=current.contentKind,ids=ids))
+        db.rawQuery("SELECT COUNT(*) FROM records r WHERE $filter AND (r.position<? OR (r.position=? AND r.id<?))",
+            (args+current.position.toString()+current.position.toString()+current.id).toTypedArray()).use {it.moveToFirst();it.getInt(0)}
+    }
+
 internal fun PersonalPlaylistStore.nextChannel(stored:PlaylistStored,current:Channel,direction:Int,ids:Set<String>?):Channel? {
     val request=PersonalCatalogQuery(kind=current.kind,ids=ids,limit=200)
     // Indexed position windows wrap once; the number of channels never determines the allocation.

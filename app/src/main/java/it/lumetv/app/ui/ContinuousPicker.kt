@@ -31,14 +31,17 @@ internal class ContinuousPicker<T>(context:Context,scope:CoroutineScope,private 
         override fun onBindViewHolder(holder:Holder,position:Int) {
             catalog.ensure(position)
             val item=catalog.peek(position)
-            holder.row.bind(item?.let(label) ?: if(catalog.failedAt(position))"Riprova a caricare" else "Caricamento…")
+            val failed=catalog.failedAt(position)
+            holder.row.bind(item?.let(label) ?: if(failed)"Riprova a caricare" else "Caricamento…")
+            holder.row.contentDescription=item?.let(label) ?: "${if(failed)"Riprova a caricare" else "Caricamento"}, elemento ${position+1}"
             holder.row.setOnClickListener {
                 val current=holder.bindingAdapterPosition
                 if(current!=RecyclerView.NO_POSITION) {
                     val selected=catalog.peek(current)
-                    if(selected!=null){selectedPosition=current;choose(selected)} else catalog.retry(current)
+                    if(selected!=null){selectedPosition=current;choose(selected)} else if(catalog.failedAt(current))catalog.retry(current)
                 }
             }
+            holder.row.isClickable=item!=null || failed
         }
     }
     private class Holder(val row:OptionsRowView):RecyclerView.ViewHolder(row)
@@ -74,7 +77,7 @@ internal class ContinuousPicker<T>(context:Context,scope:CoroutineScope,private 
         view.addView(list,LinearLayout.LayoutParams(-1,0,1f))
     }
     fun bind(key:Any,position:Int=0,restoreFocus:Boolean=false,load:suspend(Int)->Pair<List<T>,Int>) {
-        if(catalog.bind(key,position,load)) {
+        if(catalog.bind(key,position,load=load)) {
             pendingPosition=position
             pendingFocus=selectedPosition.takeIf {restoreFocus && !mobile}
             count.text="Carico…";count.isClickable=false;count.isFocusable=false

@@ -43,6 +43,47 @@ class PersonalPlaylistRepositoryTest {
         assertEquals("https://example.com/list?password=secret", restored.address(id))
     }
 
+    @Test fun `Video availability reads past the preview and follows enabled sources and content overrides`() = runTest {
+        val repo=repository()
+        val mixed=buildString {
+            appendLine("#EXTM3U")
+            for(i in 1..230){appendLine("#EXTINF:${if(i==230)120 else -1},Canale $i");appendLine("https://example.com/item/$i")}
+        }
+        assertTrue(repo.videoSources.value.isEmpty())
+        val id=repo.save("Mista",repo.prepareFile(mixed.toByteArray()))
+        assertEquals(200,repo.cached().size);assertTrue(repo.cached().none {it.isVod})
+        assertEquals(setOf(id),repo.videoSources.value)
+        repo.setEnabled(id,false);assertTrue(repo.videoSources.value.isEmpty())
+        repo.rename(id,"Rinominata");assertTrue(repo.videoSources.value.isEmpty())
+        repo.setEnabled(id,true);assertEquals(setOf(id),repo.videoSources.value)
+        repo.setSettings(id,PlaylistSettings(contentOverride=it.lumetv.core.PlaylistContentKind.LIVE));assertTrue(repo.videoSources.value.isEmpty())
+        repo.setSettings(id,PlaylistSettings(contentOverride=it.lumetv.core.PlaylistContentKind.VOD));assertEquals(setOf(id),repo.videoSources.value)
+        val restored=repository();restored.local();assertEquals(setOf(id),restored.videoSources.value)
+        restored.delete(id);assertTrue(restored.videoSources.value.isEmpty())
+    }
+
+    @Test fun `the player picker locates a distant channel within its media kind and favorite filter`() = runTest {
+        val repo=repository()
+        val content=buildString {
+            appendLine("#EXTM3U")
+            for(i in 1..450){appendLine("#EXTINF:-1 radio=\"${if(i%2==0)"true" else "false"}\",Canale $i");appendLine("https://example.com/live/$i")}
+        }
+        val id=repo.save("Mista",repo.prepareFile(content.toByteArray()))
+        val distant=repo.catalog(PersonalCatalogQuery(source=id,kind=MediaKind.TV,offset=210,limit=1)).rows.single()
+        assertEquals("Canale 421",distant.name)
+        assertEquals(210,repo.catalogPosition(distant))
+        val first=repo.catalog(PersonalCatalogQuery(source=id,kind=MediaKind.TV,limit=1)).rows.single()
+        assertEquals(1,repo.catalogPosition(distant,setOf(first.id,distant.id)))
+        assertEquals(0,repo.catalogPosition(distant,emptySet()))
+    }
+
+    @Test fun `save progress describes actual preparation and commit phases`() = runTest {
+        val repo=repository();val phases=mutableListOf<PlaylistSavePhase>()
+        repo.prepareFile(text.toByteArray()).use {draft->repo.save("Casa",draft,progress=phases::add)}
+        assertEquals(listOf(PlaylistSavePhase.PREPARING,PlaylistSavePhase.SAVING),phases)
+        assertEquals("Uno",repo.local().single().name);assertTrue(repo.videoSources.value.isEmpty())
+    }
+
     @Test fun `a new URL and title preserve identity and disabled sources restore on enabling`() = runTest {
         val repo = repository()
         val id = repo.save("Prima", repo.prepareFile(text.toByteArray()))

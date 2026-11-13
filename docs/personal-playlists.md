@@ -1,16 +1,26 @@
 # Compatibilità delle liste personali
 
-Questo documento descrive le liste personali nel **codice in sviluppo dopo Lume TV 0.9.0**. La 0.9.0 pubblicata mantiene i limiti di 50.000 voci lette per sorgente, 100.000 importate complessive e 64 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti e impostazioni.
+Questo documento descrive le liste personali di **Lume TV 0.10.0**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
 
 ## Gestione tramite pagine
 
 La gestione riprende lo stile di **Opzioni**: su smartphone usa la stessa intestazione, le sezioni, le descrizioni e le frecce delle righe; su TV le pagine di scelta mostrano elenco e dettaglio affiancati, con lo stesso focus del telecomando. I moduli restano in una colonna per lasciare spazio all’inserimento.
 
-**Opzioni → Le mie liste → [lista]** apre una pagina dedicata. **Sorgente** contiene nome, attivazione, consenso HTTP e sostituzione; **Lettura e contenuti** raccoglie formato, codifica, gruppi e aggiornamento; **Accesso ai server** contiene gli header separati per funzione. **Guida e archivio** e **Stato e ultima importazione** completano la gestione.
+**Opzioni → Le mie liste → [lista]** apre una pagina dedicata. **Sorgente** contiene nome, attivazione, consenso HTTP e sostituzione; **Lettura e contenuti** raccoglie riconoscimento VOD, regole dei gruppi, formato, codifica e aggiornamento; **Accesso ai server** contiene gli header separati per funzione. **Guida e archivio** e **Stato e ultima importazione** completano la gestione.
 
 **Indietro** torna alla pagina precedente conservando campi, posizione e selezione. Le modifiche si applicano con **Salva modifiche**; se esci prima del salvataggio, **Continua a modificare** e **Scarta modifiche** compaiono nella pagina. Anche verifica, anteprima, errori ed eliminazione sono gestiti all’interno della finestra dell’app. Solo la selezione di un file usa il gestore documenti di Android.
 
 Nell’importazione, **Lettura e contenuti** e **Accesso ai server** preparano le opzioni della nuova lista. La verifica non salva la sorgente: controlla l’anteprima e premi **Importa lista** o **Sostituisci lista**. **Interrompi verifica** conserva il modulo; cambiare indirizzo o opzioni richiede una nuova verifica. Salva eventuali modifiche in **Sorgente** prima di cambiare URL o file.
+
+## Consultazione e filtri
+
+Su smartphone **Filtri** apre i controlli secondari all'interno del catalogo. Il riepilogo mantiene visibili lista, gruppo e ricerca attivi; **Azzera filtri** ripristina la vista della sorgente selezionata. In orizzontale i comandi si compattano e la navigazione conserva icone con descrizioni accessibili. I controlli touch mantengono un'area di almeno 48 dp.
+
+Su TV la ricerca si apre sotto i controlli del catalogo e la query attiva rimane riconoscibile. Dalla prima colonna della griglia, **Sinistra** raggiunge i filtri; **Giù** torna alla riga precedente. Canali e Radio conservano separatamente lista, query e posizione. La cache delle posizioni per query è limitata a dodici contesti; i dati dei canali mantengono i limiti dei blocchi descritti sotto.
+
+Gruppi e scelte della guida si aprono nella stessa finestra dell'app; **Indietro** ripristina il controllo di provenienza. Durante una diretta personale, l'elenco canali usa lo stesso pannello delle emittenti integrate, con scorrimento sull'intera sorgente e preferiti filtrati sul database.
+
+Il salvataggio distingue l'organizzazione dei canali dalla scrittura finale. Gli stati vuoti della guida distinguono aggiornamento, errore, guida disattivata, associazioni mancanti e assenza di programmi nella fascia. Una guida vuota non viene automaticamente interpretata come assenza di supporto EPG. Le righe in caricamento conservano il posto nell'elenco; **Riprova** diventa disponibile dopo un errore.
 
 ## Importazione e HTTP
 
@@ -112,7 +122,7 @@ Gli indirizzi della lista e degli stream, gli header, i token e le chiavi vengon
 
 ## Metadati e migrazione del formato 4
 
-Il formato persistito 4 conserva attributi del canale, durata, nome EPG distinto dal nome visualizzato, opzioni di riproduzione e riferimenti al documento di provenienza. Attributi globali e indirizzi finali dei documenti vengono salvati una sola volta per documento. La classificazione live/VOD è indicizzata nello snapshot. Le configurazioni EPG e catch-up alimentano le funzioni descritte sotto; lingua, paese, restrizioni e tracce restano conservati senza essere pubblicati nel catalogo condiviso.
+Il formato persistito 4 conserva attributi del canale, durata, nome EPG distinto dal nome visualizzato, opzioni di riproduzione e riferimenti al documento di provenienza. Attributi globali e indirizzi finali dei documenti vengono salvati una sola volta per documento. La classificazione live/VOD è indicizzata nello snapshot; i nuovi archivi conservano anche versione del riconoscimento, motivo e ambito del marcatore Kodi. Le configurazioni EPG e catch-up alimentano le funzioni descritte sotto; lingua, paese, restrizioni e tracce restano conservati senza essere pubblicati nel catalogo condiviso.
 
 Gli snapshot dei formati 2 e 3 vengono migrati in transazione. Il formato 3 recupera la classificazione dai metadati già conservati. Gli ID e i preferiti non cambiano. I metadati scartati dalla versione precedente richiedono un download completo, senza ETag, oppure **Sostituisci file** sulla stessa sorgente. La scelta HTTP dei loghi parte disattivata. Un errore di migrazione conserva lo snapshot sul disco e viene segnalato nella gestione.
 
@@ -175,7 +185,49 @@ Nella **Guida TV** puoi scegliere un giorno precedente o successivo e cercare ne
 
 ## Video on demand
 
-Il pulsante **Video** accanto alla scelta della lista apre **Video delle mie liste**, con ricerca per nome, scelta di lista/gruppo e scorrimento continuo con blocchi da 50 elementi letti da SQLite. Le voci VOD vengono riconosciute dalle indicazioni di contenuto e dalla durata positiva. **Lettura e contenuti → Tipo dei contenuti** permette di mantenere la scelta automatica o forzare una lista come dirette o video. La modifica conserva gli ID; può richiedere di riaprire il contenuto.
+La voce **Video** compare nella barra inferiore dello smartphone e nella barra superiore della TV, tra **Canali** e **Radio**, solo se almeno una lista personale abilitata contiene VOD. Il controllo considera l'intero database, anche quando i video sono oltre l'anteprima iniziale, e rispetta il tipo di contenuti forzato nelle impostazioni. Disattivando, eliminando o riclassificando come diretta l'ultima sorgente VOD la voce scompare; se Video è aperto, l'app torna a **Canali**. La pagina Canali non contiene più un collegamento Video separato.
+
+**Video** è una sezione della navigazione principale: logo e barra dell'app restano visibili e la voce Video risulta selezionata anche nelle raccolte e nelle schede dei titoli. Passando a un'altra sezione e riaprendo Video si ritrovano la pagina e i filtri precedenti. La home mostra **Continua a guardare**, **La mia lista**, **Film**, **Serie**, **Dalle tue liste** e un'anteprima delle categorie disponibili. Le raccolte vuote vengono omesse. **Mostra tutto** apre una griglia con scorrimento continuo, ricerca e blocchi da 50 titoli; il selettore **Categorie** permette di raggiungere tutti i gruppi, anche quelli fuori dalle anteprime della home.
+
+Selezionare una copertina apre la scheda del titolo. **Guarda** o **Riprendi** avvia il player esistente; **Dall’inizio** azzera la ripresa di quel video. Titolo, trama, anno, durata e genere vengono mostrati quando disponibili. Il ritorno dal player conserva la scheda e la griglia di provenienza. Le posizioni delle raccolte vengono ricordate anche riaprendo Video e ricreando l'attività. Sul telefono la home Video non mostra la freccia **Indietro**: la barra principale permette di cambiare sezione; nelle raccolte e nelle schede la freccia resta disponibile per tornare al livello precedente. Le colonne si adattano all'orientamento e alla dimensione del testo; in orizzontale i controlli secondari sono raggiungibili da **Filtri**.
+
+**Continua a guardare** usa lo storico privato già salvato: soltanto video non completati, iniziati da almeno cinque secondi e ancora disponibili in sorgenti abilitate. Gli episodi mantengono la propria identità e posizione. **La mia lista** riutilizza i preferiti dei video; le serie possono essere salvate come raccolte, separate per sorgente. Sono consentite fino a 5.000 serie salvate. La disattivazione della sorgente ne nasconde i contenuti; l'eliminazione rimuove anche storico, riferimenti della serie e immagini memorizzate per quella lista.
+
+La presentazione distingue film, episodi e video generici dai dati dichiarati, dai percorsi e dai gruppi, senza cambiare la classificazione diretta/VOD descritta sotto. `series-title`, `series-name`, `show-title`, `tvg-series` e nomi come `Titolo S01E02` o `Titolo 1x02` possono identificare una serie. `season` / `season-number` ed `episode` / `episode-number` specificano l'ordine. `series-id` / `show-id` ancorano il raggruppamento quando dichiarati. Le serie restano separate per sorgente. Una voce indicata come episodio ma senza il nome della serie resta consultabile singolarmente; i VOD generici restano disponibili in Tutti e Dalle tue liste.
+
+Le schede leggono `plot` / `description` / `tvg-description`, `genre` / `genres`, `year` / `release-year`. Per le copertine sono riconosciuti `poster`, `poster-url`, `tvg-poster`, `cover`, `cover-url`, con ripiego su `tvg-logo`; per gli sfondi `backdrop`, `backdrop-url`, `fanart`, `fanart-url`, `tvg-background`. Gli indirizzi relativi vengono risolti sul documento originale. Immagini assenti o non accessibili hanno un segnaposto leggibile, senza impedire la riproduzione. Le anteprime non aprono i flussi video.
+
+Le immagini VOD hanno una cache privata dedicata, condivisa tra le schermate: fino a 24 MiB in memoria e 64 MiB su disco, con decodifica alla dimensione in pixel del riquadro e limite di 1280 px sul lato maggiore. Cache disco e decodifica non aspettano i tre posti disponibili per i download. Un'immagine scaduta viene mostrata mentre si tenta l'aggiornamento; richieste contemporanee della stessa immagine condividono il download, anche per dimensioni diverse. La chiusura dell'ultimo osservatore annulla la richiesta di rete, mantenendo la cache limitata. Mantengono il consenso HTTP delle immagini e gli header/server autorizzati per i loghi, distinti da quelli di video e licenze. Trame e immagini dipendono dai dati forniti dalla lista; non viene interrogato un catalogo cinematografico esterno.
+
+Il primo accesso prepara un indice derivato a blocchi, in transazione e con avanzamento visibile. La preparazione è condivisa per sorgente: cambiare pagina non la fa ripartire; modificare o eliminare la sorgente interrompe quella superata. Titoli, rappresentanti delle serie, conteggi degli episodi e ordinamenti vengono preparati una volta. Metadati e gruppi sono conservati senza copie superflue; l'indice non cambia gli ID di riproduzione. Errori o limiti di spazio conservano la lista originale e i limiti di 1 GiB per database e 2 GiB complessivi restano applicati.
+
+Le griglie conservano al massimo tre blocchi da 50 metadati vicini. Il repository condivide una cache aggiuntiva limitata a 600 metadati, 40 pagine e 64 conteggi; modifica della sorgente e dei filtri invalida i dati interessati. Le anteprime della home sono limitate a 16 titoli per raccolta, non richiedono il conteggio completo e compaiono progressivamente; le categorie fuori schermo vengono lette quando servono. Il dettaglio mostra subito i dati selezionati e completa trama e informazioni estese in background. Tornare a una pagina valida riusa dati, immagini, focus e scorrimento; l'avanzamento non invalida le raccolte statiche. Query abbandonate vengono interrotte tramite `CancellationSignal`, con protezione delle letture per sorgente.
+
+Gli ordinamenti **Titolo A–Z** e **Aggiunti di recente** si applicano anche a tutte le liste insieme. La data di aggiunta viene conservata durante gli aggiornamenti; per gli archivi precedenti senza quella informazione non viene inventata una data recente. Le misure interne registrano soltanto nomi delle fasi, contatori e durate, senza testo delle query, URL, header o credenziali.
+
+**Lettura e contenuti → Tipo dei contenuti** permette di mantenere **Automatico** o forzare tutta la lista come dirette o video. Il tipo forzato ha precedenza sul riconoscimento e sulle regole dei gruppi; i riferimenti a liste incluse rimangono strutturali.
+
+Con **Automatico**, la modalità **Prudente** è predefinita. La classificazione segue questo ordine:
+
+| Indicazione | Comportamento |
+| --- | --- |
+| Regola manuale per un gruppo | Imposta Dirette o Video per le voci di quel gruppo, prima delle indicazioni del file |
+| Attributi `type` / `content-type` | VOD per `vod`, `movie`, `movies`, `film`, `films`, `video`, `series`, `episode`, `episodes`, `tvshow`; diretta per `live` e `linear` |
+| `media` | `true`, `1`, `yes` indicano VOD; `false`, `0`, `no` indicano diretta |
+| Direttiva Kodi `#EXT-X-PLAYLIST-TYPE:VOD` | VOD nel profilo gruppi **Kodi**; prima delle voci vale per il documento, dentro o tra le voci vale soltanto per la voce successiva al marcatore |
+| `media-dir` / `media-size` | VOD con cartella non vuota o dimensione positiva in byte |
+| Durata EXTINF positiva | VOD anche senza altri attributi |
+| Percorso strutturato del provider | VOD per `/movie/utente/password/123[.estensione]` o `/series/utente/password/123[.estensione]`, anche con un prefisso prima del percorso |
+
+Nomi e valori riconosciuti non distinguono maiuscole e minuscole. Un attributo della voce prevale sul valore predefinito del documento; tra due dichiarazioni riconosciute della voce prevale `type`. Un valore MIME come `content-type="video/mp4"` non dichiara VOD. Le dichiarazioni esplicite di diretta bloccano le deduzioni successive; conflitti tra dichiarazioni vengono segnalati nello stato della lista senza includere URL o credenziali.
+
+**Esteso** aggiunge una deduzione quando sono presenti **entrambi** un gruppo con parole come Film, Movies, Serie o VOD e un file con estensione `.mp4`, `.mkv`, `.avi`, `.mov`, `.m4v`, `.webm`, `.mpg` o `.mpeg`. Il solo gruppo o la sola estensione non bastano. Gruppi con Live, Diretta, Dirette o 24h, attributi di catch-up e percorsi live/timeshift/catchup/archive escludono questa deduzione. Per i percorsi dei provider si richiedono componenti distinti e un ID numerico finale: host, query e semplici sottostringhe non vengono usati. Il riconoscimento non contatta i flussi e non modifica gli indirizzi firmati.
+
+**Regole per i gruppi** consente fino a 100 regole per lista. Puoi scrivere il nome esatto del gruppo oppure sceglierlo dall'intera lista, con ricerca e scorrimento continuo. I nomi sono confrontati senza distinguere maiuscole e minuscole; non sono ammessi duplicati. Se una voce appartiene a più gruppi con regole diverse, prevale **Dirette** e viene segnalato il conflitto. Le regole restano in bozza finché salvi **Lettura e contenuti**.
+
+Riconoscimento e regole si applicano subito alle voci già salvate, senza un nuovo download quando i metadati conservati bastano. Il primo avvio aggiorna anche gli archivi precedenti: lettura a blocchi su disco, avanzamento visibile e salvataggio atomico di classificazione e impostazioni. ID, preferiti, guida associata e avanzamento dei video restano invariati. La riproduzione in corso conserva il proprio contesto; il nuovo tipo vale quando riapri il contenuto. Se manca spazio, l'aggiornamento automatico viene rinviato mantenendo consultabile la copia salvata.
+
+Gli archivi precedenti non conservavano l'ambito originale del marcatore Kodi. Se una vecchia voce VOD non ha altre indicazioni sufficienti, viene conservata come VOD e **Stato e ultima importazione** indica che serve rileggere l'originale. Per una lista URL, **Aggiorna ora** richiede il documento completo senza riutilizzare ETag/Last-Modified; per un file occorre **Sostituisci file**. La rilettura applica il corretto ambito delle direttive mantenendo gli ID riconciliabili.
 
 Live, video e archivio usano lo stesso player del servizio. I video offrono posizione, durata, barra di ricerca quando consentita, −10 secondi, +30 secondi e **Dall’inizio**. Su TV le frecce laterali cercano nel video quando il pannello non ha il focus; freccia giù porta ai comandi. I tasti media precedente/successivo cercano nel video e non cambiano canale. `seekable=0` impedisce la ricerca anche dai controlli di sistema.
 

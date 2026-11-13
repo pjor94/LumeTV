@@ -105,12 +105,14 @@ class ChannelAdapter(
             holder.name.text=if(failed)"Riprova a caricare" else "Caricamento…"
             holder.name.textSize=21f
             holder.card.background=TvStyle.focusBackground(holder.card.context)
-            holder.card.contentDescription=holder.name.text
-            holder.card.setOnClickListener {holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
+            holder.card.contentDescription="${holder.name.text}, canale ${position+1}"
+            holder.card.setOnClickListener {if(failed)holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
+            holder.card.isClickable=failed
             holder.card.setOnLongClickListener(null)
             return
         }
         holder.logo.visibility=View.VISIBLE
+        holder.card.isClickable=true
         val context = holder.card.context
         val sourceLabel = (if (channel.isPersonal) sourceNames[channel.sourceId] ?: "Lista personale" else channel.family).uppercase(Locale.ITALY)
         holder.number.text = if (channel.displayNumber == null) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)

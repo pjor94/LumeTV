@@ -54,7 +54,7 @@ def main():
         logs=d.run('logcat','-d').decode(errors='replace')
         (d.output/'logcat.txt').write_text(logs)
         # Private screenshots are exported through run-as, never through a physical-device surface.
-        for name in ['00-catalog','01-boundary','02-return','02-recreated','02-landscape','03-groups','04-videos','05-matching']:
+        for name in ['00-catalog','01-boundary','02-return','02-recreated','02-landscape','03-groups','04-videos','04-video-recreated','04-video-landscape','05-matching']:
             data=d.read(f'cache/continuous-catalog/{name}.png')
             if data:(d.output/f'{name}.png').write_bytes(data)
         match=re.search(r'^INSTRUMENTATION_RESULT: snapshot=(.+)$',run.stdout,re.M)
@@ -66,6 +66,8 @@ def main():
             raise RuntimeError((run.stdout+run.stderr)[-3000:])
         report=json.loads(match[1]);assert report['passed']
         assert 'FATAL EXCEPTION' not in logs
+        for name in ['continuous-progress.json','continuous-failure.png','failure.png']:
+            (d.output/name).unlink(missing_ok=True)
         report.update(font=args.font,apk_sha256=hashlib.sha256(apk.read_bytes()).hexdigest(),physical_devices=False)
         (d.output/'report.json').write_text(json.dumps(report,indent=2)+'\n')
         print(f'{d.serial}: PASS {len(report["checks"])} checks, font {args.font}',flush=True)

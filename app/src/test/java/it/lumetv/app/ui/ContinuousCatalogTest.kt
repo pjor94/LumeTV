@@ -71,4 +71,27 @@ class ContinuousCatalogTest {
         catalog.viewport(95,100);advanceUntilIdle()
         assertEquals(123,catalog.size);assertEquals(122,catalog.peek(122));assertTrue(catalog.cachedRows<=150)
     }
+    @Test fun `a cached window is immediately usable while neighbors load without a navigation debounce`()=runTest {
+        val reads=mutableListOf<Int>();val catalog=ContinuousCatalog<Int>(this,50,initialDelay=0,changed={})
+        catalog.bind("saved",100,(100 until 150).toList() to 400){o->reads+=o;(o until o+50).toList() to 400}
+        assertEquals(101,catalog.peek(101));assertTrue(reads.isEmpty());runCurrent()
+        assertEquals(setOf(50,150),reads.toSet());assertTrue(catalog.cachedRows<=150)
+        assertFalse(catalog.bind("saved",100){error("A valid binding must be reused")})
+        catalog.close()
+    }
+    @Test fun `hidden screens preserve their window and suspend speculative reads until resumed`()=runTest {
+        val reads=mutableListOf<Int>();val catalog=ContinuousCatalog<Int>(this,50,initialDelay=0,changed={})
+        catalog.bind("films"){o->reads+=o;(o until o+50).toList() to 1000};advanceUntilIdle()
+        catalog.pause();catalog.viewport(250,260);runCurrent();assertFalse(250 in reads)
+        catalog.resume();advanceUntilIdle();assertEquals(251,catalog.peek(251));assertTrue(catalog.cachedRows<=150)
+        catalog.close()
+    }
+    @Test fun `metadata refresh keeps absolute positions and cached results if one read fails`()=runTest {
+        var suffix="old";var fail=false;val changes=mutableListOf<ContinuousCatalog.Change>()
+        val catalog=ContinuousCatalog<String>(this,50,initialDelay=0,changed={changes+=it})
+        catalog.bind("films"){o->if(fail && o==50)error("unavailable");(o until o+50).map {"$it-$suffix"} to 1000};advanceUntilIdle()
+        changes.clear();suffix="updated";fail=true;catalog.refreshLoaded()
+        assertEquals("1-updated",catalog.peek(1));assertEquals("51-old",catalog.peek(51));assertEquals(1000,catalog.size)
+        assertTrue(changes.none {it.sizeChanged});assertFalse(catalog.hasError);catalog.close()
+    }
 }

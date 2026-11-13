@@ -4,13 +4,14 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Questa guida descrive l’interfaccia per telecomando. Se usi un telefono, consulta la [guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md).
 
-Questa guida descrive **Lume TV 0.9.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
+Questa guida descrive **Lume TV 0.10.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
 
 [Download e installazione](../README.md#distribuzione-e-installazione) · [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
 ## In questa guida
 
 - [Liste personali](#liste-personali)
+- [Video on demand](#video-on-demand)
 - [Canali nella Home](#canali-nella-home)
 - [Installazione e primo avvio](#installazione-e-primo-avvio)
 - [Scegliere l’interfaccia](#scegliere-linterfaccia)
@@ -47,19 +48,27 @@ La gestione usa pagine nello stile di **Opzioni**, con salvataggio esplicito ed 
 
 Nel catalogo, **Lista** seleziona la sorgente e **Tutti i gruppi** restringe l’elenco. Preferiti e cambio canale mantengono la distinzione tra TV, radio e sorgenti. Gli aggiornamenti conservano la riproduzione e l’ultima copia valida. Disattivare conserva i dati; eliminare rimuove anche preferiti, guida e avanzamenti associati e interrompe la relativa riproduzione.
 
-Limiti: **10 liste, 50.000 voci per lista, 100.000 complessive e 64 MiB per documento**. Sono disponibili M3U semplice o estesa, UTF-8/Windows-1252/Latin-1, liste incluse e le forme di header, KODIPROP e ClearKey DASH/CENC documentate. HTTP invia senza cifratura indirizzi e dati di accesso; i consensi di lista, loghi e guida restano separati.
+Limiti: **10 liste, 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento**. Il catalogo scorre in continuo; ricerca e gruppi considerano l’intera lista. Sono disponibili M3U semplice o estesa, UTF-8/Windows-1252/Latin-1, liste incluse e le forme di header, KODIPROP e ClearKey DASH/CENC documentate. HTTP invia senza cifratura indirizzi e dati di accesso; i consensi di lista, loghi e guida restano separati.
 
-**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. Il pulsante **Video** apre i contenuti on demand con ricerca e pagine; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
+**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. La voce **Video** nella barra principale compare solo con VOD in almeno una lista abilitata e apre la biblioteca con copertine, Film, Serie, ricerca e scorrimento continuo; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
 
 Gli archivi della 0.8.0 vengono migrati conservando ID, preferiti e impostazioni. Liste, guida personale e avanzamenti restano locali ed esclusi da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](personal-playlists.md).
 
 Se la TV non offre un selettore documenti, la pagina indica di usare un URL. L’apertura di un selettore esterno segue le normali regole della UI TV; i comandi di riproduzione nella gestione consentono di riaprire o interrompere il contenuto corrente.
 
+## Video on demand
+
+Se almeno una lista abilitata contiene video, nella barra principale compare **Video**, tra **Canali** e **Radio**. La home mostra copertine e raccolte Film, Serie, Continua a guardare e La mia lista. **Mostra tutto** apre la raccolta completa; **Cerca** e **Filtri** permettono di restringere i risultati per titolo, lista, categoria e ordine.
+
+Seleziona una copertina per aprire la scheda del titolo. **Guarda** o **Riprendi** avvia il player; **Dall’inizio** riparte da zero. Le serie riconosciute raggruppano stagioni ed episodi. Tornando dal player o passando tra le sezioni si conservano pagina e posizione. Copertine e informazioni dipendono dai dati presenti nella lista.
+
+Il menu superiore resta disponibile. Usa le frecce del telecomando per scorrere copertine e raccolte; **Indietro** torna al livello precedente e conserva il focus.
+
 ## Installazione e primo avvio
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Scarica [LumeTV-0.9.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.9.0/LumeTV-0.9.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
+1. Scarica [LumeTV-0.10.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.10.0/LumeTV-0.10.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
@@ -82,7 +91,7 @@ La scelta rimane salvata sul dispositivo. Cambiare interfaccia conserva catalogo
 
 ![Catalogo dei canali](screenshots/catalog.png)
 
-Nel catalogo trovi numero, nome e logo dei canali. Il menu superiore contiene **Canali**, **Radio**, **Cosa guardare**, **Guida TV**, **Opzioni** ed **Esci**, e rimane disponibile nella pagina Opzioni. All’interno di Canali, i filtri **Tutti**, **Rai**, **Mediaset**, **Preferiti** e **Recenti** permettono di restringere l’elenco.
+Nel catalogo trovi numero, nome e logo dei canali. Il menu superiore contiene **Canali**, **Radio**, **Cosa guardare**, **Guida TV**, **Opzioni** ed **Esci**, e rimane disponibile nella pagina Opzioni. **Video** si aggiunge tra Canali e Radio quando almeno una lista abilitata contiene VOD. All’interno di Canali, i filtri **Tutti**, **Rai**, **Mediaset**, **Preferiti** e **Recenti** permettono di restringere l’elenco.
 
 - Usa le **frecce** per spostare la selezione: la scheda evidenziata è quella che aprirai.
 - Premi **OK** per guardare il canale a tutto schermo.

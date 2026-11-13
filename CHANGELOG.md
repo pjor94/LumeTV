@@ -1,12 +1,31 @@
 # Changelog
 
-## In sviluppo · Capienza delle liste personali
+## 0.10.0 · Biblioteca Video e liste estese — 2026-11-13
 
-- Fino a 500.000 voci lette per sorgente e un milione di voci importate complessive. Limite dei documenti portato a 256 MiB; snapshot SQLite fino a 1 GiB per sorgente e 2 GiB complessivi.
-- Catalogo TV e smartphone con scorrimento continuo e righe riciclate, senza comandi di pagina: caricamento automatico di blocchi da 200 elementi dal database, fino a tre blocchi vicini in memoria, con ricerca e gruppi sull'intera lista. Anche Video e selettori di gruppi, canali e guida scorrono in continuo con blocchi da 50. Video, preferiti, selezione del canale, zapping e ripristino non richiedono il caricamento di tutti i metadati in memoria.
-- Controllo dei duplicati su SQLite durante l'importazione, condiviso con le liste incluse. Conservati gli snapshot atomici e gli identificativi durante gli aggiornamenti; gli archivi precedenti ricevono un indice derivato per la navigazione.
+### Video nella navigazione principale
 
-Verifiche locali: 290 test JVM e 30 test Python superati; tre controlli live facoltativi esclusi. Build Debug/Release e Lint senza errori. Superati 168 controlli dello scorrimento continuo sui simulatori TV e smartphone, con testo normale e al 130%, avanti/indietro, focus, riproduzione, ritorno dal player, ricreazione, rotazione e selettori. Il precedente collaudo della capienza comprende 48 controlli con 500.000 voci per sorgente, un milione complessive e aggiornamento completo con ID e preferiti conservati.
+- Voce **Video** nella barra inferiore dello smartphone e nella barra superiore della TV, tra Canali e Radio, solo quando almeno una lista abilitata contiene VOD. La disponibilità considera tutta la lista e le regole di classificazione, anche oltre l'anteprima iniziale.
+- Biblioteca con copertine, raccolte **Film**, **Serie**, **Continua a guardare**, **La mia lista** e categorie delle sorgenti. Schede dei titoli con informazioni disponibili, stagioni ed episodi, ripresa e riavvio nello stesso player dell'app.
+- Raccolte complete con griglie a scorrimento continuo, ricerca e ordinamenti globali. Pagina, filtri e posizione conservati tornando dal player, cambiando sezione, ruotando il telefono e ricreando l'attività.
+- Home Video smartphone senza freccia Indietro; il comando rimane nelle raccolte e nelle schede. Se scompare l'ultima sorgente VOD abilitata mentre Video è aperto, ritorno a Canali e ripristino del focus TV.
+
+### Prestazioni e riconoscimento VOD
+
+- Anteprime della home progressive, categorie caricate quando diventano visibili, indice video compatto e riutilizzo di pagine e conteggi. Apertura delle schede dai dati selezionati e completamento dei dettagli in background, con focus e scorrimento conservati.
+- Cache immagini condivisa tra schermate, download simultanei riutilizzati e decodifica adeguata ai riquadri. Copertine su disco disponibili anche con rete occupata e cancellazione delle richieste senza osservatori.
+- Riconoscimento VOD anche con durata `-1`, tramite attributi `type` e `content-type`, convenzioni `media`, direttive Kodi e percorsi strutturati dei provider. Le dichiarazioni esplicite di diretta prevalgono sulle deduzioni automatiche.
+- In **Lettura e contenuti**, modalità **Prudente** predefinita, modalità **Esteso** e regole manuali per i gruppi. Il tipo forzato dell'intera lista prevale sulle regole. Riclassificazione locale conservando ID, preferiti, avanzamento e accesso ai flussi.
+- Corretto l'ambito delle direttive Kodi VOD per singola voce; gli archivi precedenti segnalano quando serve rileggere il file o aggiornare l'URL per recuperare le informazioni mancanti.
+
+### Liste grandi e consultazione
+
+- Fino a **500.000 voci lette per sorgente**, **un milione di voci importate complessive** e **256 MiB per documento**, con un massimo di 10 liste. Snapshot SQLite fino a 1 GiB per sorgente e 2 GiB complessivi.
+- Catalogo con scorrimento continuo e righe riciclate su TV e smartphone, senza comandi di pagina. Ricerca, gruppi e selettori consultano il database completo mantenendo blocchi limitati in memoria; anche preferiti, zapping e ripristino evitano il caricamento di tutti i metadati.
+- Filtri espandibili sul telefono, riepilogo di lista, gruppo e ricerca attivi, azzeramento dei filtri e memoria separata delle sezioni. Sulla TV, Sinistra dalla prima colonna raggiunge i controlli e Giù torna alla riga precedente.
+- Selettori di gruppi e guida nella finestra dell'app, con ritorno al controllo di provenienza. Pannelli canali personali integrati con la navigazione esistente; salvataggio con fasi riconoscibili e messaggi della guida vuota legati allo stato disponibile.
+- Copie valide conservate in caso di errori, interruzioni o limiti di spazio. Liste personali, guida e avanzamenti restano sul dispositivo, esclusi da AURA e dalla Home dei launcher.
+
+Verifiche: 362 test JVM e 30 test Python superati, con tre controlli live facoltativi esclusi; compilazioni Debug/Release, Android Lint senza errori e controllo dei sorgenti delle dipendenze. Collaudi funzionali su simulatori TV e smartphone con dati sintetici locali, testo normale e al 130%, focus del telecomando, ricerca, preferiti, riproduzione, ricreazione e rotazione. Provati cataloghi fino a 500.000 voci per sorgente e un milione complessive. La compatibilità con i singoli servizi, codec e DRM dipende dal fornitore e dal dispositivo. Build di sviluppo delle stesse funzionalità installate anche sullo smartphone Android con la stessa firma, conservando i dati; i collaudi funzionali restano sui simulatori.
 
 ## 0.9.0 · Liste personali, guida e video — 2026-11-12
 

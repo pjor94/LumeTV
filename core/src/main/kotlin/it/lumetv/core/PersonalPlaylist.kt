@@ -74,7 +74,9 @@ object PersonalM3uParser {
         var mime: String? = null
         var duration: Double? = null
         var seekable: Boolean? = null
-        var vodHint = false
+        var documentVod = false
+        var entryVod = false
+        val classifier=PlaylistContentClassifier(options)
         var defaults = inheritedDefaults
         var lineNumber = 0
         val documents = linkedMapOf(document to defaults)
@@ -136,7 +138,9 @@ object PersonalM3uParser {
                 if (options.format != PlaylistFormat.PLAIN) throw PlaylistFormatException("Seleziona una lista M3U estesa oppure scegli M3U semplice nelle impostazioni avanzate.")
             }
             when {
-                line.equals("#EXT-X-PLAYLIST-TYPE:VOD", true) && options.groups == PlaylistGroupProfile.KODI -> vodHint = true
+                line.equals("#EXT-X-PLAYLIST-TYPE:VOD", true) && options.groups == PlaylistGroupProfile.KODI -> {
+                    if(!pending && count==0)documentVod=true else entryVod=true
+                }
                 line.startsWith("#EXT-X-", true) -> throw PlaylistFormatException("Questo indirizzo contiene un singolo flusso HLS. Seleziona una lista di canali.")
                 line.startsWith("#EXTINF:", true) -> {
                     if (pending) throw PlaylistFormatException("La lista è incompleta: manca l’indirizzo di un canale.")
@@ -208,11 +212,10 @@ object PersonalM3uParser {
                             val effective = defaults + metadata
                             val kind = when (effective["radio"]?.lowercase(Locale.ROOT)) { "true", "1" -> MediaKind.RADIO; "false", "0" -> MediaKind.TV; else -> defaultKind }
                             val entryGroups = metadata["group-title"]?.let(::groups) ?: inheritedGroups
-                            val content = when {
-                                (metadata["type"] ?: metadata["content-type"]).equals("playlist", true) -> PlaylistContentKind.PLAYLIST
-                                vodHint || metadata["media"]?.lowercase(Locale.ROOT) in setOf("true", "1") || (duration ?: 0.0) > 0 -> PlaylistContentKind.VOD
-                                else -> PlaylistContentKind.LIVE
-                            }
+                            val marker=when {entryVod->PlaylistVodMarker.ENTRY;documentVod->PlaylistVodMarker.DOCUMENT;else->PlaylistVodMarker.NONE}
+                            val classification=classifier.classify(metadata,defaults,duration,uri,entryGroups,marker)
+                            val content=classification.kind
+                            if(classification.conflicting)diagnostic(PlaylistDiagnosticCode.CONTENT_CONFLICT)
                             if (metadata.keys.any { it in PlaylistCapabilities.storedAttributes && it != "url-logo" } || content == PlaylistContentKind.VOD)
                                 diagnostic(PlaylistDiagnosticCode.STORED_METADATA)
                             if (metadata.keys.any { it !in PlaylistCapabilities.activeAttributes && it !in PlaylistCapabilities.storedAttributes && it !in PlaylistCapabilities.sourceAttributes && it !in PlaylistCapabilities.informativeAttributes })
@@ -221,7 +224,7 @@ object PersonalM3uParser {
                                 PlaylistCapabilities.logo(effective["tvg-logo"].orEmpty(), effective, baseUrl),
                                 (metadata["tvg-chno"] ?: metadata["ch-number"])?.toIntOrNull()?.takeIf { it in 1..999_999 }, entryGroups,
                                 kind, headers.toMap(), mime ?: properties["mimetype"], count - 1, properties.toMap(),
-                                PlaylistMetadata(metadata, defaults, duration, document, seekable, content,baseUrl))
+                                PlaylistMetadata(metadata, defaults, duration, document, seekable, content,baseUrl,marker,classification.reason,PlaylistContentClassifier.VERSION))
                             val policyChannel = Channel("", entry.name, entry.number ?: 9999, entry.tvgId, entry.groups.joinToString(";"), entry.logo, entry.url, "direct", "", numberKnown = entry.number != null)
                             if (content == PlaylistContentKind.PLAYLIST) {
                                 val loader = include ?: throw PlaylistFormatException("La lista contiene documenti inclusi; importa da URL per caricarli.")
@@ -262,7 +265,7 @@ object PersonalM3uParser {
                         }
                     }
                     if (options.groups == PlaylistGroupProfile.OTT || options.groups == PlaylistGroupProfile.KODI && "group-title" in metadata) inheritedGroups = emptyList()
-                    headers.clear(); properties.clear(); metadata = emptyMap(); name = ""
+                    headers.clear(); properties.clear(); metadata = emptyMap(); name = "";entryVod=false
                 }
             }
         } } finally { if (pathKey != null) budget.path.remove(pathKey) }

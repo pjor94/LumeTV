@@ -45,13 +45,14 @@ internal class LogoFetcher(
                     etag?.let { header("If-None-Match", it) }
                     modified?.let { header("If-Modified-Since", it) }
                 }.build()
-            response(request).use { response ->
+            val result=response(request) { response ->
                 if (response.code in setOf(301, 302, 303, 307, 308)) {
                     val next = response.header("Location")?.let(target::resolve) ?: throw LogoDownloadException()
                     if (!allowed(next) || !redirectAllowed(target, next)) throw LogoDownloadException()
                     target = next
+                    null
                 } else {
-                    if (response.code == 304) return@withTimeout LogoDownload(null, response.header("ETag") ?: etag, response.header("Last-Modified") ?: modified)
+                    if (response.code == 304) return@response LogoDownload(null, response.header("ETag") ?: etag, response.header("Last-Modified") ?: modified)
                     if (!response.isSuccessful) throw LogoDownloadException(response.code)
                     val body = response.body ?: throw LogoDownloadException()
                     if (body.contentLength() > LogoPolicy.MAX_BYTES) throw LogoDownloadException()
@@ -67,14 +68,17 @@ internal class LogoFetcher(
                         output.toByteArray()
                     }
                     if (!imageSignature(bytes)) throw LogoDownloadException()
-                    return@withTimeout LogoDownload(bytes, response.header("ETag"), response.header("Last-Modified"))
+                    LogoDownload(bytes, response.header("ETag"), response.header("Last-Modified"))
                 }
             }
+            if(result!=null)return@withTimeout result
         }
         throw LogoDownloadException()
     }
 
-    private suspend fun response(request: Request): Response = suspendCancellableCoroutine { continuation ->
+    // Consume the bounded body while the call is still attached to cancellation. A screen leaving
+    // during a slow body must free its download slot as promptly as during the response headers.
+    private suspend fun <T> response(request: Request,consume:(Response)->T): T = suspendCancellableCoroutine { continuation ->
         val call = client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
@@ -82,7 +86,13 @@ internal class LogoFetcher(
                 if (continuation.isActive) continuation.resumeWithException(e)
             }
             override fun onResponse(call: Call, response: Response) {
-                continuation.resume(response) { _, value, _ -> value.close() }
+                response.use {
+                    if(!continuation.isActive)return
+                    try {
+                        val result=consume(response)
+                        if(continuation.isActive)continuation.resumeWith(Result.success(result))
+                    }catch(error:Exception){if(continuation.isActive)continuation.resumeWithException(error)}
+                }
             }
         })
     }

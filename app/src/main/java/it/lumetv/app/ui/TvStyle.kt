@@ -70,8 +70,15 @@ object TvStyle {
         background = focusBackground(context, selected)
         setOnClickListener { action() }
         setOnFocusChangeListener { view, focused ->
-            setTextColor(if (focused) TvStyle.background else if (selected) white else muted)
+            setTextColor(if (focused) TvStyle.background else if (isSelected) white else muted)
             focusMotion(view, focused, 1.035f)
         }
+    }
+    fun setButtonSelected(button:TextView,selected:Boolean) {
+        if(button.isSelected==selected)return
+        button.isSelected=selected
+        button.typeface=Typeface.create(if(selected)"sans-serif-medium" else "sans-serif",Typeface.NORMAL)
+        button.background=focusBackground(button.context,selected)
+        button.setTextColor(if(button.isFocused)background else if(selected)white else muted)
     }
 }

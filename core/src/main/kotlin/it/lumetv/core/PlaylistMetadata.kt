@@ -9,12 +9,28 @@ enum class PlaylistFormat { EXTENDED, PLAIN }
 enum class PlaylistEncoding(val charset: String) { UTF8("UTF-8"), WINDOWS_1252("windows-1252"), LATIN1("ISO-8859-1") }
 enum class PlaylistGroupProfile { CURRENT, KODI, OTT }
 enum class PlaylistContentKind { LIVE, VOD, PLAYLIST }
+enum class PlaylistVodDetection { PRUDENT, EXTENDED }
+enum class PlaylistVodMarker { NONE, DOCUMENT, ENTRY }
+enum class PlaylistClassificationReason { TYPE, MEDIA, KODI, MEDIA_DIRECTORY, MEDIA_SIZE, DURATION, PROVIDER_PATH, GROUP_FILE, GROUP_RULE, LEGACY_VOD, DEFAULT_LIVE }
 
 data class PlaylistReadOptions(
     val format: PlaylistFormat = PlaylistFormat.EXTENDED,
     val encoding: PlaylistEncoding = PlaylistEncoding.UTF8,
     val groups: PlaylistGroupProfile = PlaylistGroupProfile.CURRENT,
-)
+    val vodDetection:PlaylistVodDetection=PlaylistVodDetection.PRUDENT,
+    val groupContent:Map<String,PlaylistContentKind> = emptyMap(),
+) {
+    fun validated():PlaylistReadOptions {
+        if(groupContent.size>100)throw PlaylistFormatException("Puoi configurare fino a 100 regole per i gruppi.")
+        val normalized=hashSetOf<String>()
+        groupContent.forEach {(name,kind)->
+            if(name.isBlank() || name!=name.trim() || name.length>100 || '\n' in name || '\r' in name || kind==PlaylistContentKind.PLAYLIST)
+                throw PlaylistFormatException("Ogni regola richiede un gruppo valido e la scelta Dirette o Video.")
+            if(!normalized.add(name.lowercase(Locale.ROOT)))throw PlaylistFormatException("Esiste già una regola per questo gruppo.")
+        }
+        return copy(groupContent=groupContent.toMap())
+    }
+}
 
 /** Values may contain credentials. Only the bounded diagnostics belong in presentation state. */
 class PlaylistMetadata(
@@ -25,6 +41,10 @@ class PlaylistMetadata(
     val seekable: Boolean? = null,
     val contentKind: PlaylistContentKind = PlaylistContentKind.LIVE,
     val baseUrl: String? = null,
+    val vodMarker:PlaylistVodMarker=PlaylistVodMarker.NONE,
+    val classificationReason:PlaylistClassificationReason?=null,
+    val classificationVersion:Int=0,
+    val legacyVod:Boolean=false,
 ) {
     operator fun get(key: String): String? = attributes[key] ?: defaults[key]
     val tvgName get() = get("tvg-name").orEmpty()
@@ -76,6 +96,7 @@ enum class PlaylistDiagnosticCode(val message: String) {
     INVALID_REFRESH("aggiornamento della lista non interpretabile; usa un intervallo nelle impostazioni"),
     PLAYER_OPTION("opzione del player non supportata"),
     SERVICE_INFO("informazioni del servizio disponibili nello stato della lista"),
+    CONTENT_CONFLICT("indicazioni live e video discordanti; applicata la precedenza dei tipi espliciti o delle regole dei gruppi"),
 }
 
 data class PlaylistDiagnostic(val code: PlaylistDiagnosticCode, val line: Int, val entry: Int, val excluded: Boolean = false) {
@@ -99,7 +120,7 @@ class PlaylistDocument(val reader: java.io.Reader, val baseUrl: String, val rele
 }
 
 object PlaylistCapabilities {
-    val activeAttributes = setOf("tvg-id", "tvg-name", "tvg-logo", "group-title", "tvg-chno", "ch-number", "radio", "http-user-agent", "http-referrer", "type", "content-type", "media")
+    val activeAttributes = setOf("tvg-id", "tvg-name", "tvg-logo", "group-title", "tvg-chno", "ch-number", "radio", "http-user-agent", "http-referrer", "type", "content-type", "media", "media-dir", "media-size", "poster", "poster-url", "tvg-poster", "cover", "cover-url", "backdrop", "backdrop-url", "fanart", "fanart-url", "tvg-background", "plot", "description", "tvg-description", "genre", "genres", "year", "release-year", "series-title", "series-name", "show-title", "tvg-series", "series-id", "show-id", "season", "season-number", "episode", "episode-number")
     val storedAttributes = setOf("url-tvg", "x-tvg-url", "url-logo", "tvg-shift", "catchup", "catchup-type", "catchup-source", "catchup-days", "catchup-correction", "catchup-time", "timeshift", "tvg-rec", "tvg-language", "tvg-country", "parent-code", "adult", "audio-track", "video-track", "m3uautoload")
     val informativeAttributes = setOf("max-conn","billed-till","billed-msg")
     val sourceAttributes = setOf("refresh", "refresh_at")

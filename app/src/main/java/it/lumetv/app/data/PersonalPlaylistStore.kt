@@ -16,6 +16,9 @@ import it.lumetv.core.PlaylistContentKind
 import it.lumetv.core.PlaylistDiagnostic
 import it.lumetv.core.PlaylistDiagnosticCode
 import it.lumetv.core.PlaylistDocument
+import it.lumetv.core.PlaylistContentClassifier
+import it.lumetv.core.PlaylistClassificationReason
+import it.lumetv.core.PlaylistVodMarker
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -28,7 +31,8 @@ internal data class PlaylistStored(val source: PersonalPlaylistSource, val addre
     val etag: String? = null, val modified: String? = null, val attempted: Long = 0,
     val retryAt: Long = 0, val failures: Int = 0, val serverRetryAt: Long = 0,
     val settings: PlaylistSettings = PlaylistSettings(), val descriptor: PlaylistDescriptor = PlaylistDescriptor(),
-    val report: PlaylistPreview? = null)
+    val report: PlaylistPreview? = null,val classificationVersion:Int=PlaylistContentClassifier.VERSION,
+    val classificationNeedsRefresh:Boolean=false,val classificationConflicts:Int=0)
 
 internal data class PlaylistStageResult(val file: File, val preview: PlaylistPreview, val descriptor: PlaylistDescriptor)
 
@@ -38,6 +42,7 @@ internal class PersonalPlaylistStore(val directory: File) {
         const val MAX_DATABASE = 1024L * 1024 * 1024
         const val MAX_DISK = 2L * 1024 * 1024 * 1024
         const val MAX_ARCHIVED = 5_000
+        private const val CLASSIFICATION_DEFERRED = "Riconoscimento VOD non aggiornato. La copia salvata resta disponibile. Libera spazio e riapri l’app, oppure verifica di nuovo la lista."
         fun validId(id: String) = Regex("user_[a-f0-9]{32}").matches(id)
     }
     fun file(id: String): File { require(validId(id)); return File(directory, "$id.sqlite") }
@@ -133,6 +138,7 @@ internal class PersonalPlaylistStore(val directory: File) {
                             SELECT id,payload,name,number,logo,kind,groups_json,position,0,seen,identity1,identity2,identity3,content
                             FROM prior.records WHERE id IN (SELECT id FROM work.archived_ids)""")
                     }
+                    VideoCatalogIndex.recordAdded(db,previous!=null,now)
                     writeMetadata(db, stored)
                     db.setTransactionSuccessful()
                 } finally { db.endTransaction() }
@@ -156,12 +162,14 @@ internal class PersonalPlaylistStore(val directory: File) {
         sidecars(draft)
     }
 
-    fun read(id: String): PlaylistStored? {
+    fun read(id: String,checkActive:()->Unit={},progress:(String,Int,Int)->Unit={_,_,_->}): PlaylistStored? {
         val source = file(id)
         if (!source.exists()) migrate(id)
         if (!source.exists()) return null
         var oldFormat = false
-        val result = readDb(source).use { db ->
+        // Startup must allow SQLite to recover a hot rollback journal left by a killed index build.
+        // Ordinary catalog reads stay read-only after this short recovery/metadata check.
+        val result = SQLiteDatabase.openDatabase(source.absolutePath,null,SQLiteDatabase.OPEN_READWRITE).use { db ->
             val stored = db.rawQuery("SELECT value FROM metadata WHERE key='source'", null).use { cursor ->
                 if (!cursor.moveToFirst()) throw IOException("Archivio della lista incompleto.")
                 val root = JSONObject(cursor.getString(0)); oldFormat = root.getInt("version") < 4
@@ -173,14 +181,69 @@ internal class PersonalPlaylistStore(val directory: File) {
             stored
         }
         // V2 remains readable if there is temporarily no room for the metadata-only upgrade.
-        if (oldFormat) upgradeContent(result)
+        val compatible=if(oldFormat)result.copy(classificationVersion=0).also {upgradeContent(it)} else result
         ensureCatalogIndex(id)
-        return result
+        if(compatible.classificationVersion>=PlaylistContentClassifier.VERSION)return compatible
+        return try {change(compatible,true,checkActive,progress)}
+        catch(_:IOException){classificationDeferred(compatible)}
+        catch(_:android.database.sqlite.SQLiteException){classificationDeferred(compatible)}
     }
 
-    fun change(stored: PlaylistStored) = writeDb(file(stored.source.id)).use { db ->
+    // An optional local upgrade must never make an otherwise readable saved list disappear.
+    private fun classificationDeferred(stored:PlaylistStored)=stored.copy(source=stored.source.copy(error=CLASSIFICATION_DEFERRED))
+
+    fun change(stored: PlaylistStored,reclassify:Boolean=false,checkActive:()->Unit={},progress:(String,Int,Int)->Unit={_,_,_->}):PlaylistStored = writeDb(file(stored.source.id)).use { db ->
+        if(reclassify)checkSpace(8L*1024*1024)
         db.beginTransaction()
-        try { writeMetadata(db, stored); db.setTransactionSuccessful() } finally { db.endTransaction() }
+        try {
+            val next=if(reclassify)classify(db,stored,checkActive,progress) else stored
+            checkActive();writeMetadata(db,next)
+            if(reclassify) {
+                db.execSQL("DELETE FROM metadata WHERE key='video-index'")
+                val bytes=db.rawQuery("PRAGMA page_count",null).use {it.moveToFirst();it.getLong(0)}*db.pageSize
+                val others=directory.listFiles().orEmpty().filter {it.name.endsWith(".sqlite") && !it.name.startsWith(".") && it!=file(stored.source.id)}.sumOf(File::length)
+                if(bytes>MAX_DATABASE || bytes+others>MAX_DISK)throw IOException("La classificazione supera il limite di spazio delle liste (1 GiB per lista, 2 GiB complessivi). La copia precedente è stata conservata.")
+            }
+            db.setTransactionSuccessful();next
+        } finally { db.endTransaction() }
+    }
+
+    /** Keyset batches bound memory; source settings and both classification representations commit together. */
+    private fun classify(db:SQLiteDatabase,stored:PlaylistStored,checkActive:()->Unit,progress:(String,Int,Int)->Unit):PlaylistStored {
+        val classifier=PlaylistContentClassifier(stored.settings.reading)
+        val total=db.rawQuery("SELECT COUNT(*) FROM records",null).use {it.moveToFirst();it.getInt(0)}
+        var last=0L;var processed=0;var legacy=false;var notified=0L;var conflicts=0
+        fun notify(force:Boolean=false) {val time=System.nanoTime();if(force || time-notified>200_000_000){notified=time;progress(stored.source.name,processed,total)}}
+        notify(true)
+        db.compileStatement("UPDATE records SET payload=?,content=? WHERE rowid=?").use {update->
+            while(processed<total) {
+                checkActive()
+                var read=0
+                db.rawQuery("SELECT rowid,payload,active FROM records WHERE rowid>? ORDER BY rowid LIMIT 200",arrayOf(last.toString())).use {cursor->
+                    while(cursor.moveToNext()) {
+                        checkActive();last=cursor.getLong(0);val root=JSONObject(cursor.getString(1));val entry=decodeEntry(root,stored.descriptor)
+                        val retained=entry.metadata.legacyVod || entry.metadata.classificationVersion==0 && entry.metadata.contentKind==PlaylistContentKind.VOD
+                        val result=classifier.classify(entry.metadata.attributes,entry.metadata.defaults,entry.metadata.duration,
+                            runCatching {java.net.URI(entry.url)}.getOrNull(),entry.groups,entry.metadata.vodMarker,retained)
+                        val metadata=root.optJSONObject("metadata") ?: JSONObject().also {root.put("metadata",it)}
+                        val structural=result.kind==PlaylistContentKind.PLAYLIST
+                        val kind=if(structural)entry.metadata.contentKind.takeUnless {it==PlaylistContentKind.PLAYLIST} ?: PlaylistContentKind.LIVE else result.kind
+                        metadata.put("content",kind.name).put("vodMarker",entry.metadata.vodMarker.name)
+                            .put("classificationReason",result.reason.name).put("classificationVersion",PlaylistContentClassifier.VERSION).put("legacyVod",retained)
+                        update.bindString(1,root.toString());update.bindString(2,kind.name);update.bindLong(3,last);update.executeUpdateDelete()
+                        if(cursor.getInt(2)==1) {
+                            if(result.reason==PlaylistClassificationReason.LEGACY_VOD || structural)legacy=true
+                            if(result.conflicting)conflicts++
+                        }
+                        processed++;read++;notify()
+                    }
+                }
+                if(read==0)throw IOException("Impossibile completare la classificazione. La copia precedente è stata conservata.")
+            }
+        }
+        notify(true)
+        return stored.copy(source=if(stored.source.error==CLASSIFICATION_DEFERRED)stored.source.copy(error="") else stored.source,
+            classificationVersion=PlaylistContentClassifier.VERSION,classificationNeedsRefresh=legacy,classificationConflicts=conflicts)
     }
 
     fun channels(id: String,override:PlaylistContentKind?=null): List<Channel> = readDb(file(id)).use { db ->
@@ -264,7 +327,7 @@ internal class PersonalPlaylistStore(val directory: File) {
                         root.getBoolean("enabled") && !insecure, count, root.getLong("updated"), root.getLong("checked"), root.getLong("revision"),
                         MediaKind.valueOf(root.getString("kind")), root.optString("error"), metadataComplete = false)
                     writeMetadata(db, PlaylistStored(source, root.optString("address"), optional(root,"etag"), optional(root,"modified"),
-                        root.optLong("attempted"), root.optLong("retryAt"), root.optInt("failures").coerceIn(0, 10)))
+                        root.optLong("attempted"), root.optLong("retryAt"), root.optInt("failures").coerceIn(0, 10),classificationVersion=0))
                     db.setTransactionSuccessful()
                 } finally { db.endTransaction() }
             }
@@ -334,8 +397,10 @@ internal class PersonalPlaylistStore(val directory: File) {
         .put("number",e.number).put("groups",JSONArray(e.groups)).put("kind",e.kind.name).put("headers",JSONObject(e.headers))
         .put("mime",e.mimeType).put("position",e.position).put("properties",JSONObject(e.properties))
         .put("metadata",JSONObject().put("attributes",JSONObject(e.metadata.attributes)).put("duration",e.metadata.duration)
-            .put("document",e.metadata.document).put("seekable",e.metadata.seekable).put("content",e.metadata.contentKind.name))
-    private fun decodeEntry(root: JSONObject, descriptor: PlaylistDescriptor = PlaylistDescriptor()): PlaylistEntry {
+            .put("document",e.metadata.document).put("seekable",e.metadata.seekable).put("content",e.metadata.contentKind.name)
+            .put("vodMarker",e.metadata.vodMarker.name).put("classificationReason",e.metadata.classificationReason?.name)
+            .put("classificationVersion",e.metadata.classificationVersion).put("legacyVod",e.metadata.legacyVod))
+    internal fun decodeEntry(root: JSONObject, descriptor: PlaylistDescriptor = PlaylistDescriptor()): PlaylistEntry {
         fun map(name: String): Map<String,String> = root.optJSONObject(name)?.let { obj ->
             require(obj.length() <= 32)
             obj.keys().asSequence().associateWith { obj.getString(it) }
@@ -347,7 +412,9 @@ internal class PersonalPlaylistStore(val directory: File) {
             map("headers"),optional(root,"mime"),root.getInt("position"),map("properties"),
             PlaylistMetadata(readAttributes(m.optJSONObject("attributes")),descriptor.documents[document].orEmpty(),
                 if (m.isNull("duration")) null else m.getDouble("duration"),document,
-                if (m.isNull("seekable")) null else m.getBoolean("seekable"), PlaylistContentKind.valueOf(m.optString("content", "LIVE")),descriptor.bases[document]))
+                if (m.isNull("seekable")) null else m.getBoolean("seekable"), PlaylistContentKind.valueOf(m.optString("content", "LIVE")),descriptor.bases[document],
+                PlaylistVodMarker.valueOf(m.optString("vodMarker","NONE")),optional(m,"classificationReason")?.let(PlaylistClassificationReason::valueOf),
+                m.optInt("classificationVersion"),m.optBoolean("legacyVod")))
     }
     private fun groups(array: JSONArray): List<String> = (0 until minOf(array.length(),20)).map { array.getString(it).take(100) }
     private fun optional(obj: JSONObject, key: String) = obj.optString(key).takeIf { it.isNotBlank() && it != "null" }
@@ -358,6 +425,7 @@ internal class PersonalPlaylistStore(val directory: File) {
             .put("allowHttp",s.allowHttp).put("error",s.error).put("address",stored.address).put("etag",stored.etag).put("modified",stored.modified)
             .put("attempted",stored.attempted).put("retryAt",stored.retryAt).put("failures",stored.failures).put("serverRetryAt",stored.serverRetryAt)
             .put("complete",s.metadataComplete).put("settings",stored.settings.json())
+            .put("classificationVersion",stored.classificationVersion).put("classificationNeedsRefresh",stored.classificationNeedsRefresh).put("classificationConflicts",stored.classificationConflicts)
             .put("documents",JSONObject().apply { stored.descriptor.documents.forEach { (id, attrs) -> put(id,JSONObject(attrs)) } })
             .put("bases",JSONObject(stored.descriptor.bases))
             .put("report",stored.report?.let(::encodeReport))
@@ -370,7 +438,8 @@ internal class PersonalPlaylistStore(val directory: File) {
             root.getInt("count"),root.getLong("updated"),root.getLong("checked"),root.getLong("revision"),MediaKind.valueOf(root.getString("kind")),
             root.optString("error"),allowHttp=root.optBoolean("allowHttp"),metadataComplete=root.optBoolean("complete",false))
         return PlaylistStored(source,root.optString("address"),optional(root,"etag"),optional(root,"modified"),root.optLong("attempted"),root.optLong("retryAt"),root.optInt("failures"),root.optLong("serverRetryAt"),
-            PlaylistSettings.read(root.optJSONObject("settings")),readDescriptor(root.optJSONObject("documents"),root.optJSONObject("bases")),root.optJSONObject("report")?.let(::decodeReport))
+            PlaylistSettings.read(root.optJSONObject("settings")),readDescriptor(root.optJSONObject("documents"),root.optJSONObject("bases")),root.optJSONObject("report")?.let(::decodeReport),
+            root.optInt("classificationVersion"),root.optBoolean("classificationNeedsRefresh"),root.optInt("classificationConflicts"))
     }
 
     private fun readAttributes(value: JSONObject?): Map<String,String> {

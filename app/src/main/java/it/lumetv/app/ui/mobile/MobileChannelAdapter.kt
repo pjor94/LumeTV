@@ -91,12 +91,14 @@ class MobileChannelAdapter(
             holder.logo.unbind();holder.logo.visibility=View.INVISIBLE;holder.favorite.visibility=View.INVISIBLE
             holder.title.text=if(failed)"Riprova a caricare" else "Caricamento…"
             holder.subtitle.text="";holder.timing.visibility=View.GONE;holder.progress.visibility=View.GONE
-            holder.row.contentDescription=holder.title.text
-            holder.row.setOnClickListener {holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
+            holder.row.contentDescription="${holder.title.text}, elemento ${position+1}"
+            holder.row.setOnClickListener {if(failed)holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
+            holder.row.isClickable=failed
             holder.row.setOnLongClickListener(null)
             return
         }
         holder.logo.visibility=View.VISIBLE;holder.favorite.visibility=View.VISIBLE
+        holder.row.isClickable=true
         val channel = item.channel
         val programme = item.programme
         val now = System.currentTimeMillis()

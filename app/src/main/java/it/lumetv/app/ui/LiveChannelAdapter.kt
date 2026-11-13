@@ -31,6 +31,8 @@ class LiveChannelAdapter(
     var currentId: String? = null
         private set
     private var favoriteIds = emptySet<String>()
+    internal var catalog:ContinuousCatalog<Channel>?=null
+    fun channelAt(position:Int)=if(catalog!=null)catalog?.peek(position) else items.getOrNull(position)
 
     init { setHasStableIds(true) }
 
@@ -44,10 +46,13 @@ class LiveChannelAdapter(
         val progress: ProgressBar,
     ) : RecyclerView.ViewHolder(row)
 
-    override fun getItemCount() = items.size
-    override fun getItemId(position: Int) = items[position].id.take(15).toLong(16)
+    override fun getItemCount() = catalog?.size ?: items.size
+    override fun getItemId(position: Int) = if(catalog!=null)Long.MIN_VALUE+position else items[position].id.take(15).toLong(16)
 
     fun submit(newItems: List<Channel>, newProgrammes: Map<String, List<Programme>>, newCurrentId: String?) {
+        if(catalog!=null) {
+            items=emptyList();programmes=newProgrammes;currentId=newCurrentId;notifyDataSetChanged();return
+        }
         val oldItems = items
         val oldCurrentId = currentId
         val oldFavorites = favoriteIds
@@ -122,13 +127,24 @@ class LiveChannelAdapter(
         }
         row.setOnClickListener {
             val position = holder.bindingAdapterPosition
-            if (position != RecyclerView.NO_POSITION) choose(items[position])
+            if (position != RecyclerView.NO_POSITION) channelAt(position)?.let(choose) ?: run {
+                if(catalog?.failedAt(position)==true)catalog?.retry(position)
+            }
         }
         return holder
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
-        val channel = items[position]
+        catalog?.ensure(position)
+        val channel = channelAt(position)
+        if(channel==null) {
+            val failed=catalog?.failedAt(position)==true
+            holder.logo.unbind();holder.logo.visibility=View.INVISIBLE;holder.number.text="";holder.badge.text=""
+            holder.name.text=if(failed)"Riprova a caricare" else "Caricamento…";holder.programme.text="";holder.progress.visibility=View.INVISIBLE
+            holder.row.isClickable=failed;holder.row.contentDescription="${holder.name.text}, canale ${position+1}"
+            holder.row.background=TvStyle.focusBackground(holder.row.context);updateColors(holder);return
+        }
+        holder.row.isClickable=true;holder.logo.visibility=View.VISIBLE;holder.progress.visibility=View.VISIBLE
         val context = holder.row.context
         val current = channel.id == currentId
         holder.number.text = channel.displayNumber?.let { String.format(Locale.ITALY, "%d", it) }.orEmpty()
@@ -182,8 +198,10 @@ class LiveChannelAdapter(
 
     override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
         if (payloads.isEmpty()) return super.onBindViewHolder(holder, position, payloads)
-        if (payloads.any { it == "logo" }) holder.logo.bind(items[position])
-        if (payloads.any { it == "programme" }) bindProgramme(holder, items[position])
+        channelAt(position)?.let {channel->
+            if (payloads.any { it == "logo" }) holder.logo.bind(channel)
+            if (payloads.any { it == "programme" }) bindProgramme(holder, channel)
+        }
     }
 
     override fun onViewRecycled(holder: Holder) {

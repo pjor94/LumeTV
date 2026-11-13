@@ -22,6 +22,10 @@ class HomeInspection : Instrumentation() {
             if(arguments.getString("operation").orEmpty().startsWith("playlist-")) {
                 val result=if(arguments.getString("operation")=="playlist-large")it.lumetv.app.playlists.LargePlaylistInspection.run(context,arguments)
                 else if(arguments.getString("operation")=="playlist-continuous")it.lumetv.app.playlists.ContinuousCatalogInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-vod-detection")it.lumetv.app.playlists.VodDetectionInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-video-library")it.lumetv.app.playlists.VideoLibraryInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-video-navigation")it.lumetv.app.playlists.VideoNavigationInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-video-performance")it.lumetv.app.playlists.VideoPerformanceInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-pages")it.lumetv.app.playlists.PlaylistPagesInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-def")kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                     it.lumetv.app.playlists.OnDemandInspection.run(context,requireNotNull(arguments.getString("fixtureRoot")),arguments.getString("mode")=="phone")

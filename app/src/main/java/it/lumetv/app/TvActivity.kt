@@ -31,7 +31,6 @@ import androidx.recyclerview.widget.RecyclerView
 import it.lumetv.app.data.*
 import it.lumetv.app.playback.PlaybackSnapshot
 import it.lumetv.app.ui.AudioPlaybackView
-import android.widget.EditText
 import it.lumetv.app.playback.TvPlayer
 import it.lumetv.app.ui.ChannelAdapter
 import it.lumetv.app.ui.CatalogBackdrop
@@ -73,6 +72,11 @@ class TvActivity : ComponentActivity() {
     private lateinit var previewStop: TextView
     private lateinit var options: TvOptionsView
     private lateinit var playlists: it.lumetv.app.ui.PersonalPlaylistsScreen
+    private lateinit var catalogPanels:it.lumetv.app.ui.PersonalCatalogPanels
+    private lateinit var videoContainer:FrameLayout
+    private lateinit var liveCatalogContent:LinearLayout
+    private var videoAvailable=false
+    private var showingVideo=false
     private lateinit var homeSettings: it.lumetv.app.home.HomeChannelSettings
     private lateinit var sourceRow: LinearLayout
     private lateinit var sourceButton: TextView
@@ -129,6 +133,11 @@ class TvActivity : ComponentActivity() {
     private var pendingCatalogFocus:Int?=null
     private var personalQuery=""
     private lateinit var personalSearch:android.widget.TextView
+    private lateinit var catalogSearchRow:LinearLayout
+    private lateinit var catalogSearchField:android.widget.EditText
+    private lateinit var resetFilters:TextView
+    private lateinit var catalogControls:android.widget.HorizontalScrollView
+    private val sectionContexts=linkedMapOf<String,Bundle>()
     private var programmes = emptyMap<String, List<Programme>>()
     private var current: Channel? = null
     private var currentFilter = "Tutti"
@@ -212,10 +221,33 @@ class TvActivity : ComponentActivity() {
         tvPlayer = TvPlayer(this, http)
         radioFilter = savedInstanceState?.getString("radio_filter") ?: "Tutte"
         radioQuery = savedInstanceState?.getString("radio_query").orEmpty()
+        savedInstanceState?.getBundle("tv_sections")?.let {states->states.keySet().forEach {key->states.getBundle(key)?.let {sectionContexts[key]=it}}}
         currentFilter = savedInstanceState?.getString("filter") ?: "Tutti"
         lastChannelFilter = savedInstanceState?.getString("channel_filter")?.takeIf { it in channelSections } ?: "Tutti"
         showingOptions = savedInstanceState?.getBoolean("tv_options", false) ?: false
         buildUi()
+        catalogPanels=it.lumetv.app.ui.PersonalCatalogPanels(this,lifecycleScope)
+        catalogPanels.attachVideo(videoContainer){active->
+            showingVideo=active;liveCatalogContent.visibility=if(active)View.GONE else View.VISIBLE
+            updateTabSelection()
+        }
+        catalogPanels.restartCurrent={channel->if(tvPlayer.snapshot.channel?.id==channel.id)tvPlayer.restart()}
+        catalogPanels.restoreState(savedInstanceState)
+        lifecycleScope.launch {repository.personal.classification.collect {state->if(!catalogLoaded){
+            status.text=state?.let {"Classifico ${it.name}… ${it.processed} / ${it.total} voci"} ?: "Carico i tuoi canali…"
+            empty.text=status.text;empty.visibility=if(state!=null)View.VISIBLE else View.GONE
+        }}}
+        lifecycleScope.launch {repository.personal.videoSources.collect {sources->
+            val available=sources.isNotEmpty()
+            if(videoAvailable!=available) {
+                val returnToChannels=showingVideo && !available
+                videoAvailable=available
+                if(returnToChannels){catalogPanels.dismiss();rememberCatalogContext();restoreCatalogContext("Canali")}
+                buildTabs()
+                if(returnToChannels){updateCatalog(restoreFocus=false);tabs.findViewWithTag<View>("Canali")?.requestFocus()}
+            }
+            if(catalogLoaded)restoreVideoPanel()
+        }}
         playlists = it.lumetv.app.ui.PersonalPlaylistsScreen(this, lifecycleScope, repository.personal, false,
             { if (showingOptions) focusOptions() }, ::openPlayback, { tvPlayer.stop() })
         root.addView(playlists, FrameLayout.LayoutParams(-1, -1))
@@ -264,7 +296,7 @@ class TvActivity : ComponentActivity() {
         updates = UpdateController(this, savedInstanceState, {
             catalogLoaded && showingCatalog && !showingOptions && digits.isEmpty() && reminderDialog?.isShowing != true &&
                 exitDialog?.isShowing != true && integrationDialog?.isShowing != true &&
-                catalogDialogs.none { it.isShowing } && !guideView.hasDetails && !discoveryView.hasDetails &&
+                catalogDialogs.none { it.isShowing } && !catalogPanels.isShowing && !guideView.hasDetails && !discoveryView.hasDetails &&
                 !(currentFilter == "Cosa guardare" && discoveryView.isEditing)
         }, { previous ->
             if (previous != null && previous !== root && previous !== grid && previous.isAttachedToWindow && previous.isShown)
@@ -291,11 +323,16 @@ class TvActivity : ComponentActivity() {
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (playlists.handleBack()) Unit
+                val wasVideo=showingVideo
+                if (catalogPanels.handleBack()) {
+                    if(wasVideo && !showingVideo)tabs.findViewWithTag<View>("Video")?.requestFocus()
+                }
+                else if (catalogSearchRow.visibility==View.VISIBLE) closeCatalogSearch()
+                else if (playlists.handleBack()) Unit
                 else if (showingOptions) closeOptions()
                 else if (liveChannels.isOpen) closeLiveChannels()
                 else if (showingCatalog && currentFilter == "Cosa guardare" && discoveryView.handleBack()) Unit
-                else if (!showingCatalog) showCatalog()
+                else if (!showingCatalog) {showCatalog();catalogPanels.resume()}
                 else if (currentFilter == "Guida TV" || currentFilter == "Cosa guardare") {
                     currentFilter = "Tutti"; buildTabs(); updateCatalog(); focusFirstChannel()
                 } else showExitConfirmation()
@@ -307,6 +344,7 @@ class TvActivity : ComponentActivity() {
             programmes = guide.local()
             if (isFinishing || isDestroyed) return@launch
             catalogLoaded = true
+            restoreVideoPanel()
             updateCatalog()
             if (launchQueue.pending != null) {
                 consumeLaunchRequest()
@@ -369,6 +407,9 @@ class TvActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        catalogPanels.saveState(outState)
+        rememberCatalogContext()
+        outState.putBundle("tv_sections",Bundle().apply {sectionContexts.forEach {(key,value)->putBundle(key,value)}})
         outState.putInt("personal_page_offset",personalPager.offset)
         outState.putInt("personal_catalog_focus",grid.findContainingViewHolder(currentFocus ?: grid)?.bindingAdapterPosition?.takeIf {it>=0} ?: catalogFocusPosition)
         outState.putParcelable("personal_catalog_scroll",grid.layoutManager?.onSaveInstanceState())
@@ -410,6 +451,7 @@ class TvActivity : ComponentActivity() {
     private fun consumeLaunchRequest(): Boolean {
         val request = launchQueue.consume(catalogLoaded && playerReady) ?: return false
         val generation=++launchGeneration
+        catalogPanels.dismiss()
         catalogDialogs.toList().forEach { it.dismiss() }
         if (playlists.isShowing) playlists.hide()
         when (request) {
@@ -496,6 +538,7 @@ class TvActivity : ComponentActivity() {
         top.addView(brand, LinearLayout.LayoutParams(dp(112), dp(44)))
         top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         tabs = LinearLayout(this).apply {
+            tag="tv_navigation"
             orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false
             setPadding(dp(4), dp(4), dp(4), dp(4))
             background = TvStyle.rounded(0xB21C2028.toInt(), dp(28).toFloat(), 0x14FFFFFF, dp(1))
@@ -507,26 +550,38 @@ class TvActivity : ComponentActivity() {
         clock = TvStyle.text(this, "", 16f, TvStyle.muted).apply { fontFeatureSettings = "tnum"; gravity = Gravity.END }
         top.addView(clock, LinearLayout.LayoutParams(dp(62), -2))
         content.addView(top)
-        heading = TvStyle.text(this, "La TV, fatta semplice.", 35f, bold = true)
-        content.addView(heading, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(23) })
+        val titleRow=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL}
+        heading = TvStyle.text(this, "La TV, fatta semplice.", 26f, bold = true)
+        titleRow.addView(heading,LinearLayout.LayoutParams(-2,-2))
         status = TvStyle.text(this, "Carico i tuoi canali…", 13f, TvStyle.muted)
-        content.addView(status, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7); bottomMargin = dp(16) })
-        content.addView(channelFilters, LinearLayout.LayoutParams(-1, dp(36)).apply { bottomMargin = dp(9) })
+        status.maxLines=2;status.ellipsize=android.text.TextUtils.TruncateAt.END;status.gravity=Gravity.END
+        titleRow.addView(status,LinearLayout.LayoutParams(0,-2,1f).apply {leftMargin=dp(20)})
+        content.addView(titleRow,LinearLayout.LayoutParams(-1,-2).apply {topMargin=dp(8);bottomMargin=dp(6)})
+        val controls=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL;clipChildren=false}
+        controls.addView(channelFilters,LinearLayout.LayoutParams(-2,dp(48)))
         sourceRow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         sourceButton = TvStyle.button(this, "Lista: Catalogo Lume") { chooseCatalogSource() }.apply { minimumHeight = dp(48) }
         groupButton = TvStyle.button(this, "Tutti i gruppi") { chooseCatalogGroup() }.apply { minimumHeight = dp(48) }
         sourceButton.maxLines = 1; sourceButton.ellipsize = android.text.TextUtils.TruncateAt.END
         groupButton.maxLines = 1; groupButton.ellipsize = android.text.TextUtils.TruncateAt.END
-        sourceRow.addView(sourceButton, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(12) })
-        sourceRow.addView(groupButton, LinearLayout.LayoutParams(0, -2, 1f))
-        sourceRow.addView(TvStyle.button(this,"Video") {it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).library(repository.personal,::selectChannel)},LinearLayout.LayoutParams(-2,-2))
-        content.addView(sourceRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
-        sourceRow.addView(TvStyle.button(this,"Cerca") {
-            val field=android.widget.EditText(this).apply {setText(personalQuery);setSingleLine();filters=arrayOf(android.text.InputFilter.LengthFilter(300))}
-            trackDialog(android.app.AlertDialog.Builder(this).setTitle("Cerca nella lista").setView(field)
-                .setPositiveButton("Cerca"){_,_->personalQuery=field.text.toString().trim();updateCatalog()}
-                .setNeutralButton("Cancella ricerca"){_,_->personalQuery="";updateCatalog()}.setNegativeButton("Annulla",null).show())
-        }.also {personalSearch=it},LinearLayout.LayoutParams(-2,-2))
+        sourceButton.maxWidth=dp(230);groupButton.maxWidth=dp(190)
+        sourceRow.addView(sourceButton, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(6) })
+        sourceRow.addView(groupButton, LinearLayout.LayoutParams(-2, -2))
+        controls.addView(sourceRow,LinearLayout.LayoutParams(-2,dp(48)))
+        personalSearch=TvStyle.button(this,"Cerca",action=::openCatalogSearch).apply {maxLines=1;maxWidth=dp(240);ellipsize=android.text.TextUtils.TruncateAt.END;minimumHeight=dp(48)}
+        controls.addView(personalSearch,LinearLayout.LayoutParams(-2,dp(48)))
+        resetFilters=TvStyle.button(this,"Azzera filtri",action=::clearCatalogFilters).apply {minimumHeight=dp(48)}
+        controls.addView(resetFilters,LinearLayout.LayoutParams(-2,dp(48)))
+        catalogControls=android.widget.HorizontalScrollView(this).apply {isHorizontalScrollBarEnabled=false;clipChildren=false;addView(controls)}
+        content.addView(catalogControls,LinearLayout.LayoutParams(-1,dp(48)).apply {bottomMargin=dp(6)})
+        catalogSearchRow=LinearLayout(this).apply {gravity=Gravity.CENTER_VERTICAL;visibility=View.GONE}
+        catalogSearchField=it.lumetv.app.ui.CatalogPanelStyle.search(this,"Cerca per nome o numero"){}.apply {
+            setOnEditorActionListener {_,action,_->if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH){applyCatalogSearch();true}else false}
+        }
+        catalogSearchRow.addView(catalogSearchField,LinearLayout.LayoutParams(0,dp(48),1f))
+        catalogSearchRow.addView(TvStyle.button(this,"Cerca",action=::applyCatalogSearch),LinearLayout.LayoutParams(-2,dp(48)))
+        catalogSearchRow.addView(TvStyle.button(this,"Annulla",action=::closeCatalogSearch),LinearLayout.LayoutParams(-2,dp(48)))
+        content.addView(catalogSearchRow,LinearLayout.LayoutParams(-1,-2).apply {bottomMargin=dp(6)})
         personalPager=it.lumetv.app.ui.PersonalCatalog(lifecycleScope,repository.personal){change->grid.post {updateCatalog(false,change)}}
         val gridArea = FrameLayout(this)
         adapter = ChannelAdapter(logos, repository::isFavorite, ::selectChannel) { channel ->
@@ -558,7 +613,7 @@ class TvActivity : ComponentActivity() {
             guideView.showMessage(channel.name + if (added) " aggiunto ai preferiti" else " rimosso dai preferiti")
         }, { tabs.findViewWithTag<View>("Guida TV")?.requestFocus() }).apply { visibility = View.GONE }
         guideView.onReplay={channel,p->selectTarget(channel,p.eventId)}
-        guideView.onSearch={channel->if(channel.isPersonal)it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).paged("Cerca nella guida di ${channel.name}",
+        guideView.onSearch={channel->if(channel.isPersonal)it.lumetv.app.ui.PersonalCatalogPanels(this,lifecycleScope).paged("Cerca nella guida di ${channel.name}",
             load={q,o->guide.personal.search(channel,q,o)},label={it.title+" · "+java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(java.util.Date(it.start))}) {guideView.showProgramme(channel,it)}}
         guideView.onWindowChanged=::loadPersonalGuideWindow
         lifecycleScope.launch {guide.personal.state.collect {if(catalogLoaded){personalGuideWindowKey="";guideView.reloadWindow();requestVisibleProgrammes()}}}
@@ -591,12 +646,16 @@ class TvActivity : ComponentActivity() {
         content.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         val footer = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         catalogFooter = footer
-        footer.addView(TvStyle.text(this, "OK  Guarda     /     OK prolungato  Preferiti     /     CH +/−  Cambia", 12f, TvStyle.muted), LinearLayout.LayoutParams(0, -2, 1f))
+        footer.addView(TvStyle.text(this, "← Filtri     /     OK Guarda     /     OK prolungato Preferiti     /     CH +/− Cambia", 12f, TvStyle.muted), LinearLayout.LayoutParams(0, -2, 1f))
         updateNotice = TvStyle.button(this, "Aggiorna Lume TV") { updates.show() }.apply { visibility = View.GONE }
         footer.addView(updateNotice, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(16) })
         syncStatus = TvStyle.text(this, "Catalogo automatico", 12f, TvStyle.muted)
         footer.addView(syncStatus)
         content.addView(footer, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+        liveCatalogContent=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
+        while(content.childCount>1){val child=content.getChildAt(1);val params=child.layoutParams;content.removeViewAt(1);liveCatalogContent.addView(child,params)}
+        videoContainer=FrameLayout(this).apply {addView(liveCatalogContent,FrameLayout.LayoutParams(-1,-1))}
+        content.addView(videoContainer,LinearLayout.LayoutParams(-1,0,1f))
         catalog.addView(content, FrameLayout.LayoutParams(-1, -1))
         root.addView(catalog, FrameLayout.LayoutParams(-1, -1))
 
@@ -640,17 +699,23 @@ class TvActivity : ComponentActivity() {
     }
 
     private fun buildTabs() {
+        val focused=tabs.findFocus()?.tag as? String
         tabs.removeAllViews()
         if (currentFilter in channelSections) lastChannelFilter = currentFilter
-        listOf("Canali", "Radio", "Cosa guardare", "Guida TV").forEach { label ->
-            val selected = !showingOptions && (if (label == "Canali") currentFilter in channelSections else currentFilter == label)
+        val destinations=buildList {add("Canali");if(videoAvailable)add("Video");addAll(listOf("Radio","Cosa guardare","Guida TV"))}
+        val tabPadding=dp(if(videoAvailable && resources.configuration.fontScale>1.1f)12 else 18)
+        destinations.forEach { label ->
+            val selected = tabSelected(label)
             val tab = TvStyle.button(this, label, selected) {
+                if(label=="Video"){openVideoLibrary();return@button}
+                if(::catalogPanels.isInitialized)catalogPanels.dismiss()
                 dismissOptions()
                 launchMessage = null
-                currentFilter = if (label == "Canali") lastChannelFilter else label
+                rememberCatalogContext()
+                restoreCatalogContext(label)
                 buildTabs(); updateCatalog(); focusFirstChannel()
                 if (label == "Guida TV" || label == "Cosa guardare") refreshGuide()
-            }.apply { tag = label }
+            }.apply { tag = label;setPadding(tabPadding,paddingTop,tabPadding,paddingBottom) }
             tabs.addView(tab, LinearLayout.LayoutParams(-2, -1).apply { rightMargin = dp(2) })
         }
         channelFilters.removeAllViews()
@@ -660,7 +725,6 @@ class TvActivity : ComponentActivity() {
                     radioFilter = label; buildTabs(); updateCatalog(); focusFirstChannel()
                 }, LinearLayout.LayoutParams(-2, -1).apply { rightMargin = dp(6) })
             }
-            channelFilters.addView(TvStyle.button(this, if (radioQuery.isBlank()) "Cerca radio" else "Cerca: $radioQuery") { searchRadio() }, LinearLayout.LayoutParams(-2, -1))
         } else channelSections.filter { catalogSource == "builtin" || it !in listOf("Rai", "Mediaset") }.forEach { label ->
             channelFilters.addView(TvStyle.button(this, label, currentFilter == label) {
                 launchMessage = null; currentFilter = label
@@ -678,6 +742,16 @@ class TvActivity : ComponentActivity() {
             setPadding(dp(13), dp(8), dp(13), dp(8))
         }, LinearLayout.LayoutParams(-2, -1))
         linkOptionsNavigation()
+        focused?.let {tabs.findViewWithTag<View>(it)?.requestFocus()}
+    }
+
+    private fun tabSelected(label:String)=!showingOptions && if(label=="Video")showingVideo else !showingVideo &&
+        (if(label=="Canali")currentFilter in channelSections else currentFilter==label)
+
+    private fun updateTabSelection() {
+        listOf("Canali","Video","Radio","Cosa guardare","Guida TV").forEach {label->
+            tabs.findViewWithTag<TextView>(label)?.let {TvStyle.setButtonSelected(it,tabSelected(label))}
+        }
     }
 
     private fun linkOptionsNavigation() {
@@ -711,6 +785,7 @@ class TvActivity : ComponentActivity() {
     }
 
     private fun showOptions() {
+        if(::catalogPanels.isInitialized)catalogPanels.dismiss()
         if (showingOptions) { focusOptions(); return }
         initialPlaybackCancelled = true
         launchQueue.consume(true)
@@ -847,7 +922,7 @@ class TvActivity : ComponentActivity() {
         else {personalPager.hide();false}
         if(showingOptions)personalPager.hide()
         val scoped = if(paged)(if(favorites)channels.filterNot {it.isPersonal} else emptyList())+personalPager.rows else channelsForCatalog()
-        val television = scoped.filter {!it.isRadio && !it.isVod}
+        val television = scoped.filter {!it.isRadio && !it.isVod && (personalQuery.isBlank() || it.name.contains(personalQuery,true) || it.displayNumber?.toString()==personalQuery)}
         val visible = when (currentFilter) {
             "Radio" -> scoped.filter { it.isRadio && (radioFilter != "Preferite" || repository.isFavorite(it)) &&
                 (radioFilter != "Recenti" || it.id in repository.recentIds) &&
@@ -881,17 +956,25 @@ class TvActivity : ComponentActivity() {
             val focus=pendingCatalogFocus ?: catalogFocusPosition
             pendingCatalogFocus=null
             pendingCatalogScroll=null;grid.layoutManager?.onRestoreInstanceState(scroll)
-            grid.post {if(showingCatalog && !showingOptions && adapter.itemCount>0)grid.findViewHolderForAdapterPosition(focus.coerceIn(0,adapter.itemCount-1))?.itemView?.requestFocus()}
+            grid.post {if(showingCatalog && !showingOptions && !tabs.hasFocus() && adapter.itemCount>0)grid.findViewHolderForAdapterPosition(focus.coerceIn(0,adapter.itemCount-1))?.itemView?.requestFocus()}
         }
         grid.post {requestVisibleProgrammes()}
         grid.visibility = if (programmeMode) View.GONE else View.VISIBLE
         heading.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
         status.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
         channelFilters.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
-        sourceRow.visibility = if (showingOptions || repository.personal.state.value.isEmpty() || currentFilter == "Preferiti" || currentFilter == "Radio" && radioFilter == "Preferite") View.GONE else View.VISIBLE
+        catalogControls.visibility=if(showingOptions)View.GONE else View.VISIBLE
+        videoContainer.visibility=if(showingOptions)View.GONE else View.VISIBLE
+        sourceRow.visibility = if (repository.personal.state.value.isEmpty() || favorites) View.GONE else View.VISIBLE
         sourceButton.text = "Lista: " + (repository.personal.state.value.firstOrNull { it.id == catalogSource }?.name ?: "Catalogo Lume")
-        personalSearch.visibility=if(catalogSource=="builtin")View.GONE else View.VISIBLE
+        sourceButton.contentDescription=sourceButton.text
+        val activeQuery=if(currentFilter=="Radio")radioQuery else personalQuery
+        personalSearch.text=if(activeQuery.isBlank())"Cerca" else "Cerca: $activeQuery"
+        personalSearch.contentDescription=if(activeQuery.isBlank())"Cerca nella lista" else "Ricerca attiva: $activeQuery"
+        personalSearch.visibility=if(!programmeMode)View.VISIBLE else View.GONE
+        resetFilters.visibility=if(!programmeMode && (activeQuery.isNotBlank() || catalogGroup!=null || currentFilter in setOf("Rai","Mediaset") || currentFilter=="Radio" && radioFilter!="Tutte"))View.VISIBLE else View.GONE
         groupButton.text = catalogGroup ?: "Tutti i gruppi"
+        groupButton.contentDescription="Gruppo: ${groupButton.text}"
         groupButton.visibility = if (catalogSource == "builtin") View.GONE else View.VISIBLE
         catalogFooter.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
         previewParent.visibility = if (showingOptions) View.GONE else View.VISIBLE
@@ -903,7 +986,9 @@ class TvActivity : ComponentActivity() {
         else discoveryView.deactivate()
         heading.text = when (currentFilter) { "Radio" -> "Radio, in diretta."; "Recenti" -> "Le ultime dirette."; "Guida TV" -> "Ora. E tra poco."; "Preferiti" -> "I tuoi preferiti."; "Rai" -> "Il mondo Rai."; "Mediaset" -> "Il mondo Mediaset."; else -> "La TV, fatta semplice." }
         val count=adapter.itemCount
-        status.text = if (paged && personalPager.loading && count==0)"Carico i canali…" else if (currentFilter == "Radio") "$count radio · Cerca per nome o città" else "$count canali  ·  ${if (currentFilter in setOf("Rai", "Mediaset")) "Tutti i canali $currentFilter della lista WLTV" else "Scegli un canale. Mettiti comodo."}"
+        status.text = if (paged && personalPager.loading && count==0)"Carico i canali…" else listOfNotNull("$count ${if(currentFilter=="Radio")"radio" else "canali"}",
+            repository.personal.state.value.firstOrNull {it.id==catalogSource}?.name,catalogGroup,activeQuery.takeIf {it.isNotBlank()}?.let {"Ricerca: $it"}).joinToString(" · ")
+        status.contentDescription=status.text
         updateGuideStatus()
         launchMessage?.let { status.text = it }
         syncStatus.text = if (repository.lastUpdated > 0) "●  Catalogo aggiornato" else "Catalogo automatico"
@@ -926,6 +1011,49 @@ class TvActivity : ComponentActivity() {
 
     private fun channelsForPlayback(): List<Channel> = (current?.let { playing -> channels.filter { it.sourceId == playing.sourceId && it.kind == playing.kind } } ?: channels).filterNot {it.isVod}
 
+    private fun contextSection()=if(currentFilter in channelSections)"Canali" else currentFilter
+    private fun rememberCatalogContext() {
+        if(!::grid.isInitialized)return
+        sectionContexts[contextSection()]=Bundle().apply {
+            putString("source",catalogSource);putString("group",catalogGroup);putString("filter",currentFilter)
+            putString("query",personalQuery);putString("radio_query",radioQuery);putString("radio_filter",radioFilter)
+            putParcelable("scroll",grid.layoutManager?.onSaveInstanceState());putInt("focus",catalogFocusPosition)
+        }
+    }
+    private fun restoreCatalogContext(section:String) {
+        closeCatalogSearch()
+        val state=sectionContexts[section]
+        currentFilter=state?.getString("filter") ?: if(section=="Canali")lastChannelFilter else section
+        if(state!=null) {
+            catalogSource=state.getString("source") ?: "builtin";catalogGroup=state.getString("group")
+            personalQuery=state.getString("query").orEmpty();radioQuery=state.getString("radio_query").orEmpty();radioFilter=state.getString("radio_filter") ?: "Tutte"
+            @Suppress("DEPRECATION") val scroll:android.os.Parcelable?=state.getParcelable("scroll")
+            pendingCatalogScroll=scroll;pendingCatalogFocus=state.getInt("focus");catalogFocusPosition=state.getInt("focus")
+        }
+    }
+    private fun openCatalogSearch() {
+        catalogSearchRow.visibility=View.VISIBLE
+        catalogSearchField.hint=if(currentFilter=="Radio")"Cerca per nome o città" else "Cerca per nome o numero"
+        catalogSearchField.setText(if(currentFilter=="Radio")radioQuery else personalQuery)
+        catalogSearchField.setSelection(catalogSearchField.length());catalogSearchField.requestFocus()
+    }
+    private fun closeCatalogSearch() {
+        if(!::catalogSearchRow.isInitialized || catalogSearchRow.visibility!=View.VISIBLE)return
+        (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(catalogSearchField.windowToken,0)
+        catalogSearchRow.visibility=View.GONE;personalSearch.requestFocus()
+    }
+    private fun applyCatalogSearch() {
+        val query=catalogSearchField.text.toString().trim()
+        if(currentFilter=="Radio")radioQuery=query else personalQuery=query
+        closeCatalogSearch();updateCatalog(false)
+    }
+    private fun clearCatalogFilters() {
+        personalQuery="";radioQuery="";catalogGroup=null;radioFilter="Tutte"
+        if(currentFilter in setOf("Rai","Mediaset"))currentFilter="Tutti"
+        personalPager.resetPosition();pendingCatalogScroll=null;pendingCatalogFocus=null;catalogFocusPosition=0
+        closeCatalogSearch();buildTabs();updateCatalog(false);personalSearch.requestFocus()
+    }
+
     private fun chooseCatalogSource() {
         playlists.chooseSource(catalogSource, false, if (currentFilter == "Radio") it.lumetv.core.MediaKind.RADIO else it.lumetv.core.MediaKind.TV) { id ->
             handler.removeCallbacks(numberAction); digits = ""
@@ -936,9 +1064,19 @@ class TvActivity : ComponentActivity() {
         }
     }
 
+    private fun toggleVideoFavorite(channel:Channel){repository.toggleFavorite(channel);updateCatalog(false)}
+    private fun openVideoLibrary(){
+        if(repository.personal.videoSources.value.isEmpty())return
+        val fromOptions=showingOptions;dismissOptions();launchMessage=null
+        if(fromOptions){updateCatalog(restoreFocus=false);tabs.findViewWithTag<View>("Video")?.requestFocus()}
+        initialPlaybackCancelled=true;launchGeneration++;launchQueue.consume(true)
+        catalogPanels.library(repository.personal,logos,repository::isFavorite,::toggleVideoFavorite,::selectChannel)
+    }
+    private fun restoreVideoPanel(){catalogPanels.restorePending(repository.personal,logos,repository::isFavorite,::toggleVideoFavorite,::selectChannel)}
+
     private fun chooseCatalogGroup() {
         if(catalogSource!="builtin") {
-            it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).group(repository.personal,
+            it.lumetv.app.ui.PersonalCatalogPanels(this,lifecycleScope).group(repository.personal,
                 it.lumetv.app.data.PersonalCatalogQuery(source=catalogSource,kind=if(currentFilter=="Radio")it.lumetv.core.MediaKind.RADIO else it.lumetv.core.MediaKind.TV)) {
                 catalogGroup=it.takeUnless {it=="Tutti i gruppi"};updateCatalog()
             }
@@ -1079,18 +1217,6 @@ class TvActivity : ComponentActivity() {
         root.post { updates.maybePrompt() }
     }
 
-    private fun searchRadio() {
-        val field = EditText(this).apply {
-            setSingleLine(true); hint = "Nome della radio o città"; setText(radioQuery)
-            filters = arrayOf(android.text.InputFilter.LengthFilter(120))
-            setSelectAllOnFocus(true)
-        }
-        trackDialog(android.app.AlertDialog.Builder(this).setTitle("Cerca radio").setView(field)
-            .setPositiveButton("Cerca") { _, _ -> radioQuery = field.text.toString().trim(); buildTabs(); updateCatalog(); focusFirstChannel() }
-            .setNeutralButton("Cancella ricerca") { _, _ -> radioQuery = ""; buildTabs(); updateCatalog(); focusFirstChannel() }
-            .setNegativeButton("Annulla", null).show())
-    }
-
     private fun showError(message: String) {
         failed = true; loading.visibility = View.GONE; banner.visibility = View.GONE
         errorBox.removeAllViews()
@@ -1107,16 +1233,13 @@ class TvActivity : ComponentActivity() {
 
     private fun showLiveChannels() {
         if (showingCatalog || current == null || channels.isEmpty()) return
-        current?.takeIf {it.isPersonal}?.let {playing->
-            it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog)
-                .channels(repository.personal,playing.sourceId,playing.kind,repository::favorites,::selectChannel)
-            return
-        }
         handler.removeCallbacks(numberAction); digits = ""
         handler.removeCallbacks(hideBanner); handler.removeCallbacks(bannerTick)
         banner.visibility = View.GONE
         liveChannelsReturnFocus = currentFocus
-        liveChannels.show(channelsForPlayback(), programmes, current?.id)
+        val playing=current
+        if(playing?.isPersonal==true)liveChannels.showPersonal(repository.personal,lifecycleScope,playing,programmes,repository::favorites)
+        else liveChannels.show(channelsForPlayback(), programmes, current?.id)
     }
 
     private fun closeLiveChannels(restoreFocus: Boolean = true) {
@@ -1166,7 +1289,7 @@ class TvActivity : ComponentActivity() {
     private var reminderQuery:Job?=null
     private fun checkProgrammeReminders() {
         if(reminderQuery?.isActive==true || reminders.channelIds.isEmpty())return
-        if (playlists.isShowing || catalogDialogs.any { it.isShowing }) return
+        if (playlists.isShowing || catalogPanels.isShowing || catalogDialogs.any { it.isShowing }) return
         if (!catalogLoaded || !hasWindowFocus() || reminderDialog?.isShowing == true || exitDialog?.isShowing == true ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
         reminderQuery=lifecycleScope.launch {
@@ -1209,6 +1332,8 @@ class TvActivity : ComponentActivity() {
         adapter.guidePlaceholder = if (guideLoading && covered == 0) "Carico la guida…" else "Guida assente per questo canale · OK per la diretta"
         if (currentFilter != "Guida TV" && currentFilter != "Cosa guardare") return
         val message = when {
+            catalogSource!="builtin"->if(channels.filter {it.sourceId==catalogSource}.any {programmes[it.epgId].orEmpty().any {p->p.end>now}})"" else
+                it.lumetv.app.ui.PersonalGuideFeedback.message(guide.personal.state.value.firstOrNull {it.sourceId==catalogSource},repository.personal.requestContext(catalogSource)?.settings?.guide?.enabled!=false)
             guideLoading -> "Aggiorno la guida TV…"
             covered > 0 -> ""
             guide.failure == "rate_limit" && guide.nextRetry > now -> "Il servizio richiede una pausa  ·  Nuovo tentativo alle ${SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(guide.nextRetry))}"
@@ -1287,7 +1412,21 @@ class TvActivity : ComponentActivity() {
     }
 
     private fun handleRemoteKey(event: KeyEvent): Boolean {
+        if(::catalogPanels.isInitialized && catalogPanels.isShowing)return false
         if (::playlists.isInitialized && playlists.isShowing) return false
+        if(event.action==KeyEvent.ACTION_DOWN && showingCatalog && !showingOptions && grid.visibility==View.VISIBLE) {
+            val position=grid.findContainingViewHolder(currentFocus ?: grid)?.bindingAdapterPosition ?: -1
+            if(event.keyCode==KeyEvent.KEYCODE_DPAD_LEFT && position>=0 && position%(grid.layoutManager as GridLayoutManager).spanCount==0) {
+                catalogFocusPosition=position
+                (if(sourceRow.visibility==View.VISIBLE)sourceButton else channelFilters.getChildAt(0) ?: tabs.getChildAt(0)).requestFocus()
+                return true
+            }
+            if(event.keyCode==KeyEvent.KEYCODE_DPAD_DOWN && position<0 && catalogControls.hasFocus() && adapter.itemCount>0) {
+                grid.scrollToPosition(catalogFocusPosition.coerceIn(0,adapter.itemCount-1))
+                grid.post {grid.findViewHolderForAdapterPosition(catalogFocusPosition.coerceIn(0,adapter.itemCount-1))?.itemView?.requestFocus()}
+                return true
+            }
+        }
         if (showingOptions) {
             if (event.action != KeyEvent.ACTION_DOWN) return false
             return when (event.keyCode) {

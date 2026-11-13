@@ -7,6 +7,7 @@ import it.lumetv.core.PlaylistGroupProfile
 import it.lumetv.core.PlaylistHeaders
 import it.lumetv.core.PlaylistReadOptions
 import it.lumetv.core.PlaylistContentKind
+import it.lumetv.core.PlaylistVodDetection
 import okhttp3.Call
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -43,13 +44,15 @@ data class PlaylistSettings(
     fun validated(): PlaylistSettings {
         if (refreshMinutes != null && refreshMinutes !in 15..10_080) throw PlaylistFormatException("Scegli un intervallo fra 15 e 10.080 minuti.")
         if(contentOverride==PlaylistContentKind.PLAYLIST)throw PlaylistFormatException("Scegli dirette o video come tipo dei contenuti.")
-        return copy(guide=guide.validated(),access = access.mapValues { (_, rule) ->
+        return copy(reading=reading.validated(),guide=guide.validated(),access = access.mapValues { (_, rule) ->
             if (rule.origins.size > 16) throw PlaylistFormatException("Puoi autorizzare fino a 16 server per funzione.")
             PlaylistAccessRule(PlaylistHeaders.merge(rule.headers), rule.origins.map(::canonicalOrigin).toSet())
         }.filterValues { it.headers.isNotEmpty() || it.origins.isNotEmpty() })
     }
     internal fun json(): JSONObject = JSONObject().put("format", reading.format.name).put("encoding", reading.encoding.name)
-        .put("groups", reading.groups.name).put("cookies", sessionCookies).put("artworkHttp", artworkHttp)
+        .put("groups", reading.groups.name).put("vodDetection",reading.vodDetection.name)
+        .put("groupContent",JSONObject().apply {reading.groupContent.forEach {(name,kind)->put(name,kind.name)}})
+        .put("cookies", sessionCookies).put("artworkHttp", artworkHttp)
         .put("refreshMinutes", refreshMinutes).put("guide",guide.json()).put("contentOverride",contentOverride?.name).put("access", JSONObject().apply {
             access.forEach { (role, rule) -> put(role.name, JSONObject().put("headers", JSONObject(rule.headers)).put("origins", JSONArray(rule.origins.toList()))) }
         })
@@ -69,8 +72,12 @@ data class PlaylistSettings(
                 PlaylistResource.valueOf(name) to PlaylistAccessRule(headers.keys().asSequence().associateWith { headers.getString(it) },
                     (0 until origins.length()).map { origins.getString(it) }.toSet())
             }
+            val groupContent=value.optJSONObject("groupContent") ?: JSONObject()
+            require(groupContent.length()<=100)
             return PlaylistSettings(PlaylistReadOptions(PlaylistFormat.valueOf(value.optString("format", "EXTENDED")),
-                PlaylistEncoding.valueOf(value.optString("encoding", "UTF8")), PlaylistGroupProfile.valueOf(value.optString("groups", "CURRENT"))),
+                PlaylistEncoding.valueOf(value.optString("encoding", "UTF8")), PlaylistGroupProfile.valueOf(value.optString("groups", "CURRENT")),
+                PlaylistVodDetection.valueOf(value.optString("vodDetection","PRUDENT")),
+                groupContent.keys().asSequence().associateWith {PlaylistContentKind.valueOf(groupContent.getString(it))}),
                 rules, value.optBoolean("cookies"), value.optBoolean("artworkHttp"),
                 if (value.isNull("refreshMinutes")) null else value.getInt("refreshMinutes"),PersonalGuideSettings.read(value.optJSONObject("guide")),
                 if(value.isNull("contentOverride"))null else PlaylistContentKind.valueOf(value.getString("contentOverride"))).validated()
@@ -120,7 +127,9 @@ class PersonalRequestContext internal constructor(
         guideToken=UUID.randomUUID().toString();guideCalls.forEach(Call::cancel);jars.getValue(PlaylistResource.EPG).clear()
     }
     internal fun updateGuideOnly(next:PlaylistSettings):Boolean = synchronized(policyLock) {
-        val comparable=settings.copy(guide=next.guide,access=settings.access.filterKeys {it!=PlaylistResource.EPG}+next.access.filterKeys {it==PlaylistResource.EPG})
+        // Reading/classification changes update the catalog without interrupting an active network session.
+        val comparable=settings.copy(reading=next.reading,contentOverride=next.contentOverride,guide=next.guide,
+            access=settings.access.filterKeys {it!=PlaylistResource.EPG}+next.access.filterKeys {it==PlaylistResource.EPG})
         if(comparable!=next)return@synchronized false
         if(settings!=next) {guideToken=UUID.randomUUID().toString();guideCalls.forEach(Call::cancel);jars.getValue(PlaylistResource.EPG).clear();settings=next}
         true

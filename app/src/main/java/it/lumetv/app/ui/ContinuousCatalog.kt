@@ -7,7 +7,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** A virtual list: positions are permanent, but only three nearby blocks own display data. */
-class ContinuousCatalog<T>(private val scope:CoroutineScope,val blockSize:Int=200,
+class ContinuousCatalog<T>(private val scope:CoroutineScope,val blockSize:Int=200,private val initialDelay:Long=120,
     private val changed:(Change)->Unit) {
     data class Change(val start:Int,val count:Int,val sizeChanged:Boolean)
     private val blocks=mutableMapOf<Int,List<T>>()
@@ -17,6 +17,7 @@ class ContinuousCatalog<T>(private val scope:CoroutineScope,val blockSize:Int=20
     private var key:Any?=null
     private var task:Job?=null
     private var generation=0
+    private var paused=false
     var size=0;private set
     var anchor=0;private set
     var loading=false;private set
@@ -24,10 +25,12 @@ class ContinuousCatalog<T>(private val scope:CoroutineScope,val blockSize:Int=20
     val cachedRows get()=blocks.values.sumOf {it.size}
     val cached get()=blocks.toSortedMap().values.flatten()
 
-    fun bind(value:Any,position:Int=0,load:suspend (Int)->Pair<List<T>,Int>):Boolean {
+    fun bind(value:Any,position:Int=0,seed:Pair<List<T>,Int>?=null,load:suspend (Int)->Pair<List<T>,Int>):Boolean {
         if(key==value)return false
         close();key=value;loader=load;anchor=position.coerceAtLeast(0)
-        wanted=listOf(anchor/blockSize);loading=true;pump(120)
+        wanted=listOf(anchor/blockSize);loading=true
+        if(seed!=null){size=seed.second;blocks[anchor/blockSize]=seed.first.take(blockSize);changed(Change(anchor/blockSize*blockSize,seed.first.size,true));if(size>0)window(anchor,anchor)}
+        pump(if(seed==null)initialDelay else 0)
         return true
     }
     fun peek(position:Int):T?=if(position in 0 until size)blocks[position/blockSize]?.getOrNull(position%blockSize) else null
@@ -56,7 +59,7 @@ class ContinuousCatalog<T>(private val scope:CoroutineScope,val blockSize:Int=20
         pump()
     }
     private fun pump(debounce:Long=0) {
-        if(task?.isActive==true || loader==null)return
+        if(paused || task?.isActive==true || loader==null)return
         val epoch=generation
         val load=loader!!
         task=scope.launch {
@@ -84,7 +87,18 @@ class ContinuousCatalog<T>(private val scope:CoroutineScope,val blockSize:Int=20
         }
     }
     fun close() {
-        generation++;task?.cancel();task=null;key=null;loader=null
+        generation++;task?.cancel();task=null;key=null;loader=null;paused=false
         blocks.clear();failed.clear();wanted=emptyList();size=0;loading=false
+    }
+    fun pause(){paused=true;generation++;task?.cancel();task=null;loading=false}
+    fun resume(){paused=false;pump()}
+    suspend fun refreshLoaded() {
+        val epoch=generation;val load=loader ?: return
+        for(block in blocks.keys.toList()) {
+            val result=try {load(block*blockSize)}catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){continue}
+            val (rows,total)=result
+            if(epoch!=generation)return
+            if(block in blocks && total==size){blocks[block]=rows.take(blockSize);changed(Change(block*blockSize,rows.size,false))}
+        }
     }
 }

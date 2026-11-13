@@ -12,6 +12,7 @@ import it.lumetv.core.PlaylistDiagnosticCode
 import it.lumetv.core.PlaylistDocument
 import it.lumetv.core.PlaylistEntry
 import it.lumetv.core.PlaylistContentKind
+import it.lumetv.core.PlaylistContentClassifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,8 @@ data class PlaylistPreview(val count: Int, val sample: List<String>, val exclude
     val warnings: List<String>, val httpEntries: Int, val drmEntries: Int,
     val diagnostics: List<PlaylistDiagnostic> = emptyList(), val diagnosticCounts: Map<PlaylistDiagnosticCode,Int> = emptyMap())
 data class PlaylistImportProgress(val bytes: Long, val entries: Int)
+data class PlaylistClassificationProgress(val name:String,val processed:Int,val total:Int)
+enum class PlaylistSavePhase { PREPARING, SAVING }
 
 class PlaylistDraft internal constructor(internal val location: PlaylistLocation, internal val address: String,
     internal val defaultKind: MediaKind, val report: PlaylistPreview, internal val file: File,
@@ -81,11 +84,29 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     private val sources = linkedMapOf<String, PlaylistStored>()
     private val registered = linkedSetOf<String>()
     private val catalogs = linkedMapOf<String,List<Channel>>()
+    private val contentKinds=mutableMapOf<String,Set<PlaylistContentKind>>()
     private val busy = hashSetOf<String>()
     private val _state = MutableStateFlow<List<PersonalPlaylistSource>>(emptyList())
     val state: StateFlow<List<PersonalPlaylistSource>> = _state.asStateFlow()
     private val _version = MutableStateFlow(0L)
     val version: StateFlow<Long> = _version.asStateFlow()
+    private val _videoSources=MutableStateFlow<Set<String>>(emptySet())
+    val videoSources:StateFlow<Set<String>> = _videoSources.asStateFlow()
+    private val _classification=MutableStateFlow<PlaylistClassificationProgress?>(null)
+    val classification:StateFlow<PlaylistClassificationProgress?> = _classification.asStateFlow()
+    private val _videoProgress=MutableStateFlow<PlaylistClassificationProgress?>(null)
+    val videoProgress=_videoProgress.asStateFlow()
+    private val videoData=VideoLibraryData(store,PersonalPlaybackStore.get(app),app.getSharedPreferences("lume",Context.MODE_PRIVATE)) {name,done,total->_videoProgress.value=PlaylistClassificationProgress(name,done,total)}
+    val videoCatalogVersion=videoData.version
+    val videoFavoritesVersion=videoData.favoritesVersion
+    fun videoCacheKey(query:VideoQuery):Any=videoData.key(query)
+    internal fun clearVideoReadCache()=videoData.clearReadCache()
+    internal fun videoReadCacheState()=videoData.cacheState()
+    fun cachedVideos(query:VideoQuery,preview:Boolean=false):VideoPage?=videoData.cached(if(preview)query.copy(offset=0,limit=16) else query,preview)
+    internal fun videoPositions(page:VideoPage)=videoData.positions(page)
+    internal fun videoArtworkEpoch(source:String):String?=videoData.epoch(source)?.let {epoch->requestContext(source)?.let {"$epoch:${it.token}"}}
+
+    private fun classificationProgress(name:String,processed:Int,total:Int){_classification.value=PlaylistClassificationProgress(name,processed,total)}
     @Volatile private var loaded = false
     @Volatile private var visibleChannels = emptyList<Channel>()
     @Volatile private var contexts = emptyMap<String,PersonalRequestContext>()
@@ -100,8 +121,56 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     suspend fun settings(id:String):PlaylistSettings { load();return mutex.withLock { sources[id]?.settings ?: throw IOException("La lista non è più disponibile.") } }
     suspend fun descriptor(id:String):PlaylistDescriptor { load();return mutex.withLock { sources[id]?.descriptor ?: PlaylistDescriptor() } }
     suspend fun importReport(id:String):PlaylistPreview? { load();return mutex.withLock { sources[id]?.report } }
+    suspend fun classificationNeedsRefresh(id:String):Boolean {load();return mutex.withLock {sources[id]?.classificationNeedsRefresh==true}}
+    suspend fun classificationConflicts(id:String):Int {load();return mutex.withLock {sources[id]?.classificationConflicts ?: 0}}
     suspend fun library(source:String?,query:String,group:String?,offset:Int=0):PersonalLibraryPage {
         return catalog(PersonalCatalogQuery(source=source,content=PlaylistContentKind.VOD,text=query,group=group,offset=offset,limit=50))
+    }
+    suspend fun videos(query:VideoQuery=VideoQuery()):VideoPage {load();return try {videoData.page(query)}finally {_videoProgress.value=null}}
+    suspend fun videoPreview(query:VideoQuery):VideoPage {load();return try {videoData.page(query.copy(offset=0,limit=16),true)}finally {_videoProgress.value=null}}
+    suspend fun videoGroups(query:VideoQuery):List<String> {load();return videoData.groups(query)}
+    suspend fun videoDetails(item:VideoItem):VideoItem? = videos(if(item.isSeries)VideoQuery(source=item.source,series=item.series,limit=1) else VideoQuery(source=item.source,id=item.id,collapseSeries=false,limit=1)).rows.firstOrNull()
+    suspend fun videoSeasons(item:VideoItem,query:String="",offset:Int=0):Pair<List<Int>,Int> {
+        load();return videoData.readSource(item.source){stored,signal->
+            android.database.sqlite.SQLiteDatabase.openDatabase(store.file(item.source).path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db->
+                val filter="series_key=?"+if(stored.settings.contentOverride==null)" AND content='VOD'" else ""
+                val sql="SELECT DISTINCT COALESCE(season,0) AS season FROM video_items WHERE $filter"
+                val all=db.rawQuery("SELECT season FROM ($sql) WHERE CAST(season AS TEXT) LIKE ? ORDER BY season",arrayOf(item.series,"%${query.take(20)}%"),signal).use {c->buildList {while(c.moveToNext())add(c.getInt(0))}}
+                all.drop(offset.coerceAtLeast(0)).take(50) to all.size
+            }
+        } ?: (emptyList<Int>() to 0)
+    }
+    suspend fun toggleSavedSeries(item:VideoItem) {
+        require(item.isSeries);load();withContext(Dispatchers.IO){mutex.withLock {
+            val prefs=app.getSharedPreferences("lume",Context.MODE_PRIVATE)
+            val values=prefs.getStringSet("video_saved_series",emptySet()).orEmpty().toMutableSet()
+            val favorites=prefs.getStringSet("favorites",emptySet()).orEmpty().toMutableSet()
+            if(item.saved) {
+                values.remove(item.key)
+                android.database.sqlite.SQLiteDatabase.openDatabase(store.file(item.source).path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db->
+                    db.rawQuery("SELECT id FROM video_metadata WHERE series_key=?",arrayOf(item.series)).use {c->while(c.moveToNext())favorites.remove(c.getString(0))}
+                }
+            }else {if(values.size>=5000)throw IOException("La mia lista contiene già 5.000 serie. Rimuovine una prima di aggiungerne altre.");values+=item.key}
+            prefs.edit().putStringSet("video_saved_series",values).putStringSet("favorites",favorites).commit();_version.value++
+        }}
+    }
+    internal suspend fun videoArtwork(item:VideoItem,backdrop:Boolean):PersonalArtwork? {
+        load();return videoData.readSource(item.source){stored,signal->
+            val context=requestContext(item.source) ?: return@readSource null
+            VideoPerformance.measure("art_lookup") {
+                android.database.sqlite.SQLiteDatabase.openDatabase(store.file(item.source).path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db->
+                    db.rawQuery("SELECT d.${if(backdrop)"backdrop" else "poster"},r.payload FROM video_metadata d JOIN records r ON r.id=d.id WHERE d.id=? AND r.active=1",arrayOf(item.id),signal).use cursor@ {c->
+                        if(!c.moveToFirst())return@cursor null
+                        val url=PersonalLogoPolicy.url(c.getString(0),context.settings.artworkHttp) ?: return@cursor null
+                        val entry=store.decodeEntry(JSONObject(c.getString(1)),stored.descriptor)
+                        val headers=it.lumetv.core.PlaylistHeaders.merge(entry.headers.filterKeys {it.equals("User-Agent",true)},context.settings.rule(PlaylistResource.LOGO).headers)
+                        val identity=item.source+"|"+context.root+"|"+context.allowHttp+"|"+context.settings.json().toString()+"|"+url+"|"+JSONObject(headers).toString()
+                        val key=java.security.MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString(""){"%02x".format(it)}
+                        PersonalArtwork(url.toString(),key,headers,context)
+                    }
+                }
+            }
+        }
     }
     suspend fun catalog(query:PersonalCatalogQuery):PersonalLibraryPage {
         load();return withContext(Dispatchers.IO){mutex.withLock {
@@ -132,6 +201,13 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     suspend fun next(current:Channel,direction:Int,ids:Set<String>?=null):Channel? {
         load();return withContext(Dispatchers.IO){mutex.withLock {
             sources[current.sourceId]?.takeIf {it.source.enabled}?.let {store.nextChannel(it,store.displayChannel(it,current.id) ?: current,direction,ids)}
+        }}
+    }
+    suspend fun catalogPosition(current:Channel,ids:Set<String>?=null):Int {
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            sources[current.sourceId]?.takeIf {it.source.enabled}?.let {stored->
+                store.displayChannel(stored,current.id)?.let {store.catalogPosition(stored,it,ids)}
+            } ?: 0
         }}
     }
     internal suspend fun guideInputs(only:String?=null):List<PersonalGuideInput> {
@@ -168,9 +244,10 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         }}
     }
 
-    private suspend fun load() = withContext(Dispatchers.IO) { mutex.withLock {
+    private suspend fun load():Unit { if(loaded)return;withContext(Dispatchers.IO) { mutex.withLock {
         if (loaded) return@withLock
         directory.mkdirs()
+        val operation=kotlin.coroutines.coroutineContext
         try {
             if (index.baseFile.exists() || File(index.baseFile.path+".bak").exists()) {
                 val root=index.openRead().use { input ->
@@ -181,9 +258,10 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 val ids=root.getJSONArray("ids"); require(ids.length()<=MAX_SOURCES)
                 for(i in 0 until ids.length()) {
                     val id=ids.getString(i);require(PersonalPlaylistStore.validId(id));registered+=id
-                    runCatching {
-                        store.read(id)?.let {it to if(it.source.enabled)preview(it) else emptyList()}
-                    }.getOrNull()?.let { (stored,rows) ->
+                    val recovered:Pair<PlaylistStored,List<Channel>>?=try {
+                        store.read(id,{operation.ensureActive()},::classificationProgress)?.let {it to if(it.source.enabled)preview(it) else emptyList()}
+                    }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){null}
+                    recovered?.let { (stored,rows) ->
                         if (sources.values.sumOf { it.source.count }+stored.source.count<=MAX_TOTAL) {
                             sources[id]=stored
                             if(stored.source.enabled)catalogs[id]=rows
@@ -191,12 +269,14 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                     }
                 }
             }
-        } catch (_: Exception) { storageError="L’archivio delle liste non è leggibile. I dati sono stati conservati." }
+        } catch(cancelled:CancellationException) {registered.clear();sources.clear();catalogs.clear();throw cancelled}
+        catch (_: Exception) { storageError="L’archivio delle liste non è leggibile. I dati sono stati conservati." }
+        finally {_classification.value=null}
         if (storageError==null) store.cleanup(registered)
         File(app.cacheDir,"personal-imports").listFiles()?.filter { System.currentTimeMillis()-it.lastModified()>86_400_000 }?.forEach(File::delete)
-        loaded=true
         publish(emptySet())
-    } }
+        loaded=true
+    } }}
 
     suspend fun prepareUrl(address: String, defaultKind: MediaKind = MediaKind.TV, allowHttp: Boolean = false,
                            settings: PlaylistSettings = PlaylistSettings(),
@@ -275,7 +355,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 else "Inserisci un indirizzo HTTP o HTTPS valido, senza credenziali prima del nome del server.")
     }
 
-    suspend fun save(name:String,draft:PlaylistDraft,replacing:String?=null):String {
+    suspend fun save(name:String,draft:PlaylistDraft,replacing:String?=null,progress:(PlaylistSavePhase)->Unit={}):String {
         load()
         return withContext(Dispatchers.IO) { mutex.withLock {
             writable();val title=title(name,replacing)
@@ -286,8 +366,12 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             val id=replacing ?: "user_"+UUID.randomUUID().toString().replace("-","")
             val source=PersonalPlaylistSource(id,title,draft.location,old?.source?.enabled ?: true,draft.report.count,now(),now(),
                 (old?.source?.revision ?: 0)+1,draft.defaultKind,allowHttp=draft.allowHttp)
-            val stored=PlaylistStored(source,draft.address,draft.etag,draft.modified,settings=draft.settings,descriptor=draft.descriptor,report=draft.report)
+            val stored=PlaylistStored(source,draft.address,draft.etag,draft.modified,settings=draft.settings,descriptor=draft.descriptor,report=draft.report,
+                classificationConflicts=draft.report.diagnosticCounts[PlaylistDiagnosticCode.CONTENT_CONFLICT] ?: 0)
+            videoData.write(id) {
+            progress(PlaylistSavePhase.PREPARING)
             store.prepareCommit(draft.file,stored,old?.let { store.file(id) },now())
+            progress(PlaylistSavePhase.SAVING)
             store.commit(draft.file,id)
             if(old==null) {
                 try { writeIndex(registered+id) } catch(error:Exception) { store.delete(id);throw error }
@@ -296,6 +380,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             sources[id]=stored
             draft.context?.let { prepared -> contexts[id]?.let {it.invalidate();clearArtworkFiles(id)};contexts=contexts+(id to prepared);draft.context=null }
             publish(setOf(id));id
+            }
         } }
     }
     suspend fun rename(id:String,name:String)=change(id) { old -> old.copy(source=old.source.copy(name=title(name,id),revision=old.source.revision+1)) }
@@ -311,14 +396,22 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     private suspend fun change(id:String,action:(PlaylistStored)->PlaylistStored) {
         load();withContext(Dispatchers.IO) { mutex.withLock {
             writable();val old=sources[id] ?: throw IOException("La lista non è più disponibile.")
-            val next=action(old);store.change(next);sources[id]=next
-            publish(if(next.source.enabled!=old.source.enabled || next.settings.contentOverride!=old.settings.contentOverride) setOf(id) else emptySet())
+            val prepared=action(old)
+            val reclassify=prepared.settings.reading.vodDetection!=old.settings.reading.vodDetection || prepared.settings.reading.groupContent!=old.settings.reading.groupContent ||
+                prepared.settings!=old.settings && old.classificationVersion<PlaylistContentClassifier.VERSION
+            val operation=kotlin.coroutines.coroutineContext
+            videoData.write(id) {
+            val next=try {store.change(prepared,reclassify,{operation.ensureActive()},::classificationProgress)} finally {_classification.value=null}
+            sources[id]=next
+            publish(if(reclassify || next.source.enabled!=old.source.enabled || next.settings.contentOverride!=old.settings.contentOverride) setOf(id) else emptySet())
+            }
         } }
     }
     suspend fun address(id:String):String { load();return mutex.withLock { sources[id]?.address.orEmpty() } }
     suspend fun delete(id:String) {
         load();withContext(Dispatchers.IO) { mutex.withLock {
             writable();if(id !in registered)return@withLock
+            videoData.write(id) {
             writeIndex(registered-id)
             val prefs=app.getSharedPreferences("lume",Context.MODE_PRIVATE)
             val references=buildSet {addAll(prefs.getStringSet("favorites",emptySet()).orEmpty())
@@ -330,7 +423,10 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             sources.remove(id);registered-=id;store.delete(id);catalogs.remove(id)
             PersonalGuideRepository.removeFiles(app,id)
             PersonalPlaybackStore.get(app).removeSource(id)
+            clearArtworkFiles(id)
+            prefs.edit().putStringSet("video_saved_series",prefs.getStringSet("video_saved_series",emptySet()).orEmpty().filterNot {it.startsWith("$id:")}.toSet()).commit()
             clearReferences(removed);publish(emptySet())
+            }
         } }
     }
     suspend fun refreshAll(force:Boolean=false):Boolean {
@@ -343,7 +439,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             writable();val old=sources[id] ?: throw IOException("La lista non è più disponibile.")
             if(id in busy || old.source.location!=PlaylistLocation.URL || old.retryAt>now() && old.retryAt-now()<=86_400_000 ||
                 recent(old.attempted,30_000) || !force && !refreshDue(old)) return@withLock null
-            val next=old.copy(attempted=now());store.change(next);sources[id]=next;busy+=id;publish(emptySet(),false);next
+            val next=old.copy(attempted=now());videoData.write(id) {store.change(next);sources[id]=next;busy+=id;publish(emptySet(),false)};next
         } } ?: return false
         var draft:PlaylistDraft?=null
         var etag:String?=null;var modified:String?=null
@@ -352,8 +448,9 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 // A source can be disabled, deleted or changed while waiting for another large import.
                 if(state.value.none { it.id==id && it.revision==previous.source.revision })return@withPermit
                 val context=requestContext(id) ?: return@withPermit
-                var downloaded=download(previous.address,previous.etag.takeIf {previous.source.metadataComplete},previous.modified.takeIf {previous.source.metadataComplete},previous.source.allowHttp,id,context)
-                if(downloaded.unchanged && (previous.source.count==0 || !previous.source.metadataComplete)) {
+                val complete=previous.source.metadataComplete && !previous.classificationNeedsRefresh && previous.classificationVersion>=PlaylistContentClassifier.VERSION
+                var downloaded=download(previous.address,previous.etag.takeIf {complete},previous.modified.takeIf {complete},previous.source.allowHttp,id,context)
+                if(downloaded.unchanged && (previous.source.count==0 || !complete)) {
                     downloaded.close();downloaded=download(previous.address,null,null,previous.source.allowHttp,id,context)
                     if(downloaded.unchanged) {downloaded.close();throw IOException("Il servizio non ha restituito i metadati della lista. La copia salvata resta disponibile.")}
                 }
@@ -367,11 +464,16 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 val count=draft?.report?.count ?: current.source.count;total(count,id)
                 val next=current.copy(source=current.source.copy(count=count,checked=now(),updated=if(draft!=null)now() else current.source.updated,error="",metadataComplete=if(draft!=null)true else current.source.metadataComplete),
                     etag=etag ?: current.etag,modified=modified ?: current.modified,retryAt=0,failures=0,serverRetryAt=0,
-                    descriptor=draft?.descriptor ?: current.descriptor,report=draft?.report ?: current.report)
+                    descriptor=draft?.descriptor ?: current.descriptor,report=draft?.report ?: current.report,
+                    classificationVersion=if(draft!=null)PlaylistContentClassifier.VERSION else current.classificationVersion,
+                    classificationNeedsRefresh=if(draft!=null)false else current.classificationNeedsRefresh,
+                    classificationConflicts=draft?.report?.diagnosticCounts?.get(PlaylistDiagnosticCode.CONTENT_CONFLICT) ?: if(draft!=null)0 else current.classificationConflicts)
+                videoData.write(id) {
                 if(draft==null) store.change(next) else {
                     store.prepareCommit(draft.file,next,store.file(id),now());store.commit(draft.file,id)
                 }
                 sources[id]=next;publish(if(draft==null)emptySet() else setOf(id));true
+                }
             } }
         } catch(c:CancellationException) { throw c }
         catch(error:Exception) {
@@ -383,7 +485,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 val retry=if(server>now())server else now()+delay
                 val serverPause=if(server>now() || (error as? PlaylistFetchException)?.status==429)retry else 0
                 val next=current.copy(source=current.source.copy(error=message),failures=(current.failures+1).coerceAtMost(10),retryAt=retry,serverRetryAt=serverPause)
-                store.change(next);sources[id]=next;publish(emptySet(),false)
+                videoData.write(id) {store.change(next);sources[id]=next;publish(emptySet(),false)}
             } } }
             throw error
         } finally {
@@ -405,6 +507,11 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         return stream.copy(mimeType=mime)
     }
     private fun publish(changed:Set<String>,increment:Boolean=true) {
+        contentKinds.keys.retainAll(sources.keys)
+        sources.forEach {(id,stored)->if(id !in contentKinds || id in changed) {
+            contentKinds[id]=runCatching {store.contentKinds(stored)}.getOrDefault(emptySet())
+        }}
+        _videoSources.value=sources.values.filter {it.source.enabled && PlaylistContentKind.VOD in contentKinds[it.source.id].orEmpty()}.map {it.source.id}.toSet()
         val nextContexts=linkedMapOf<String,PersonalRequestContext>()
         sources.forEach { (id,stored) ->
             val old=contexts[id]
@@ -423,6 +530,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         }
         _state.value=registered.map { id -> sources[id]?.let { it.source.copy(refreshing=id in busy,nextRetry=it.retryAt) }
             ?: PersonalPlaylistSource(id,"Lista non leggibile",PlaylistLocation.FILE,false,0,0,0,0,MediaKind.TV,"L’archivio salvato non è leggibile. Puoi eliminare questa voce e importare di nuovo la lista.") }
+        videoData.update(sources.values,_videoSources.value,changed)
         if(increment)_version.value++
     }
     private fun total(count:Int,replacing:String?) {
@@ -438,7 +546,8 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         return (rows+extra).distinctBy {it.id}
     }
     private fun clearArtworkFiles(id:String) {
-        File(app.filesDir,"channel-artwork").listFiles().orEmpty().filter {it.name.startsWith("$id-")}.forEach(File::delete)
+        VideoArtworkRepository.invalidateSource(this,id)
+        listOf("channel-artwork","video-artwork").forEach {folder->File(app.filesDir,folder).listFiles().orEmpty().filter {it.name.startsWith("$id-")}.forEach(File::delete)}
     }
     private fun title(name:String,replacing:String?):String {
         val value=name.trim().take(100)
