@@ -83,6 +83,7 @@ class MobileActivity : ComponentActivity() {
     private lateinit var homeSettings: it.lumetv.app.home.HomeChannelSettings
     private lateinit var playback: MobilePlaybackView
     private var channels = emptyList<Channel>()
+    private var launchGeneration=0
     private var programmes = emptyMap<String, List<Programme>>()
     private var current: Channel? = null
     private var showingCatalog = true
@@ -166,6 +167,13 @@ class MobileActivity : ComponentActivity() {
         }
         browse.sourceChooser = { selected, kind, choose -> playlists.chooseSource(selected, false, kind, choose) }
         browse.trackModal = ::trackDialog
+        browse.favoriteIds=repository::favorites
+        browse.catalogPager=it.lumetv.app.ui.PersonalCatalog(lifecycleScope,repository.personal,browse::catalogChanged)
+        browse.catalogPager?.restore(savedInstanceState?.getInt("personal_page_offset") ?: 0)
+        browse.choosePersonalGroup={source,kind,choose->it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog)
+            .group(repository.personal,it.lumetv.app.data.PersonalCatalogQuery(source=source,kind=kind),choose)}
+        browse.choosePersonalChannel={source,choose->it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog)
+            .paged("Scegli un canale",load={q,o->repository.personal.catalog(it.lumetv.app.data.PersonalCatalogQuery(source=source,kind=it.lumetv.core.MediaKind.TV,text=q,offset=o,limit=50)).let {it.rows to it.total}},label={it.name},choose=choose)}
         browse.openVideoLibrary={it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).library(repository.personal){selectChannel(it)}}
         browse.onGuideWindow=::loadPersonalGuideWindow
         browse.onProgrammeSearch={channel->it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).paged("Cerca nella guida di ${channel.name}",
@@ -237,7 +245,7 @@ class MobileActivity : ComponentActivity() {
             if (isFinishing || isDestroyed) return@launch
             catalogLoaded = true
             val previous = savedInstanceState?.getString("mobile_channel") ?: repository.lastChannelId
-            current = player.snapshot.channel ?: channels.firstOrNull { it.id == previous }
+            current = player.snapshot.channel ?: repository.find(previous)
             renderData()
             if (!consumeLaunchRequest()) {
                 if (player.snapshot.channel != null) {
@@ -298,6 +306,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("personal_page_offset",browse.catalogPager?.offset ?: 0)
         playlists.saveState(outState)
         outState.putString("mobile_channel", current?.id)
         outState.putBoolean("mobile_catalog", showingCatalog)
@@ -331,11 +340,14 @@ class MobileActivity : ComponentActivity() {
 
     private fun consumeLaunchRequest(): Boolean {
         val request = launchQueue.consume(catalogLoaded && playerReady) ?: return false
+        val generation=++launchGeneration
         catalogDialogs.toList().forEach { it.dismiss() }
         if (playlists.isShowing) playlists.hide()
         when (request) {
-            is LaunchRequest.ChannelId -> channels.firstOrNull { it.id == request.id }?.let { selectChannel(it) }
-                ?: run { showCatalog(MobileSection.CHANNELS); message("Canale non più disponibile") }
+            is LaunchRequest.ChannelId -> lifecycleScope.launch {val found=repository.find(request.id)
+                if(generation!=launchGeneration)return@launch
+                found?.let {selectChannel(it)}
+                ?: run {showCatalog(MobileSection.CHANNELS);message("Canale non più disponibile")}}
             LaunchRequest.Last -> channels.firstOrNull { !it.isPersonal && it.id == repository.lastIntegratedChannelId }?.let { selectChannel(it) }
                 ?: run { showCatalog(MobileSection.CHANNELS); message("Nessun ultimo canale disponibile") }
             LaunchRequest.Catalog -> showCatalog(MobileSection.CHANNELS)
@@ -355,6 +367,7 @@ class MobileActivity : ComponentActivity() {
     }
 
     private fun selectChannel(channel: Channel, restorePause: Boolean = false,archiveEvent:String?=null) {
+        launchGeneration++
         dismissOptions()
         programmeDialog?.dismiss(); channelsDialog?.dismiss()
         browse.hideKeyboard()
@@ -495,8 +508,9 @@ class MobileActivity : ComponentActivity() {
 
     private fun zap(direction: Int) {
         if(player.snapshot.mode!=it.lumetv.core.PlaybackMode.LIVE){player.seekBy(if(direction>0)30_000 else -10_000);return}
-        repository.nextChannel(channels, current?.id, direction, current)?.let { selectChannel(it) }
-            ?: message("Nessun preferito. Aggiungi un canale ai preferiti o cambia la modalità nelle Opzioni.")
+        val before=current
+        lifecycleScope.launch {val next=repository.nextChannel(channels,before?.id,direction,before)
+            if(current?.id==before?.id)next?.let {selectChannel(it)} ?: message("Nessun preferito. Aggiungi un canale ai preferiti o cambia la modalità nelle Opzioni.")}
     }
 
     private fun updateLiveInfo() {
@@ -584,6 +598,11 @@ class MobileActivity : ComponentActivity() {
 
     private fun showChannels() {
         if (showingCatalog || channels.isEmpty()) return
+        current?.takeIf {it.isPersonal}?.let {playing->
+            it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog)
+                .channels(repository.personal,playing.sourceId,playing.kind,repository::favorites,::selectChannel)
+            return
+        }
         channelsDialog?.dismiss()
         var favoritesOnly = false
         val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(16), dp(12), dp(12)) }
@@ -671,19 +690,24 @@ class MobileActivity : ComponentActivity() {
         }
     }
 
+    private var reminderQuery:Job?=null
     private fun checkReminders() {
+        if(reminderQuery?.isActive==true || reminders.channelIds.isEmpty())return
         if (playlists.isShowing || catalogDialogs.any { it.isShowing }) return
         if (!catalogLoaded || !hasWindowFocus() || reminderDialog?.isShowing == true || programmeDialog?.isShowing == true ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
-        val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
-        val channel = channels.firstOrNull { it.id == due.channelId } ?: return
-        reminderDialog = AlertDialog.Builder(this).setTitle(R.string.discovery_reminder_title)
+        reminderQuery=lifecycleScope.launch {
+        val available=reminders.channelIds.mapNotNull {repository.find(it)}.associateBy {it.id}
+        val due = reminders.takeDue(available.keys, System.currentTimeMillis()) ?: return@launch
+        val channel = available[due.channelId] ?: return@launch
+        reminderDialog = AlertDialog.Builder(this@MobileActivity).setTitle(R.string.discovery_reminder_title)
             .setMessage(getString(R.string.discovery_reminder_message, due.title, channel.name, time(due.start)))
             .setPositiveButton(R.string.discovery_watch) { _, _ -> selectChannel(channel) }
             .setNegativeButton(R.string.discovery_later, null).create().also { dialog ->
                 dialog.setOnDismissListener { reminderDialog = null }
                 dialog.show()
             }
+        }
     }
 
     private fun showOptions() {

@@ -99,8 +99,7 @@ internal class PersonalGuideEditor(private val pages:PlaylistPages,private val r
     }
     private fun mappings(source:PersonalPlaylistSource) {
         pages.paged("Associa canali",source.name,"mapping-channels",load={q,o->
-            val rows=repository.local().filter {it.sourceId==source.id && !it.isVod && it.name.contains(q,true)}
-            rows.drop(o).take(50) to rows.size
+            repository.catalog(it.lumetv.app.data.PersonalCatalogQuery(source=source.id,text=q,offset=o,limit=50)).let {it.rows to it.total}
         },label={it.name}){channel->mapping(source,channel)}
     }
     private fun mapping(source:PersonalPlaylistSource,channel:Channel) {

@@ -122,6 +122,13 @@ class TvActivity : ComponentActivity() {
     private var catalogLoaded = false
     private var guideLoading = false
     private var channels = emptyList<Channel>()
+    private var launchGeneration=0
+    private lateinit var personalPager:it.lumetv.app.ui.PersonalCatalog
+    private var catalogFocusPosition=0
+    private var pendingCatalogScroll:android.os.Parcelable?=null
+    private var pendingCatalogFocus:Int?=null
+    private var personalQuery=""
+    private lateinit var personalSearch:android.widget.TextView
     private var programmes = emptyMap<String, List<Programme>>()
     private var current: Channel? = null
     private var currentFilter = "Tutti"
@@ -143,7 +150,13 @@ class TvActivity : ComponentActivity() {
     private val numberAction = Runnable {
         val number = digits.toIntOrNull()
         digits = ""
-        val candidates = (if (showingCatalog) channelsForCatalog() else channelsForPlayback()).filter { !it.isRadio && it.displayNumber == number }
+        if(number!=null)lifecycleScope.launch {selectNumber(number)}
+    }
+    private suspend fun selectNumber(number:Int) {
+        val source=if(showingCatalog)catalogSource else current?.sourceId ?: "builtin"
+        val candidates=if(source!="builtin" && source.startsWith("user_"))repository.personal.catalog(
+            it.lumetv.app.data.PersonalCatalogQuery(source=source,kind=it.lumetv.core.MediaKind.TV,number=number)).rows
+            else (if(showingCatalog)channelsForCatalog() else channelsForPlayback()).filter {!it.isRadio && it.displayNumber==number}
         if (candidates.size > 1) {
             trackDialog(android.app.AlertDialog.Builder(this).setTitle("Scegli il canale $number")
                 .setItems(candidates.map { candidate ->
@@ -153,7 +166,7 @@ class TvActivity : ComponentActivity() {
                     else if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.selectChannel(candidates[index].id)
                     else selectChannel(candidates[index])
                 }.setNegativeButton("Annulla", null).show())
-            return@Runnable
+            return
         }
         val channel = candidates.singleOrNull()
         if (channel != null) {
@@ -192,6 +205,7 @@ class TvActivity : ComponentActivity() {
         catalogSource = savedInstanceState?.getString("catalog_source")
             ?: getSharedPreferences("lume", MODE_PRIVATE).getString("catalog_source", "builtin") ?: "builtin"
         catalogGroup = savedInstanceState?.getString("catalog_group")
+        personalQuery=savedInstanceState?.getString("personal_search").orEmpty()
         reminders = ProgrammeReminders(this)
         logos = ChannelLogoRepository(this, http, lifecycleScope)
         guide = GuideRepository(this, http, logos::updateSources)
@@ -223,6 +237,13 @@ class TvActivity : ComponentActivity() {
             }
         }
         options.restoreState(savedInstanceState)
+        personalQuery=savedInstanceState?.getString("personal_search").orEmpty()
+        personalPager.restore(savedInstanceState?.getInt("personal_page_offset") ?: 0)
+        catalogFocusPosition=savedInstanceState?.getInt("personal_catalog_focus") ?: 0
+        @Suppress("DEPRECATION")
+        val savedCatalogScroll:android.os.Parcelable?=savedInstanceState?.getParcelable("personal_catalog_scroll")
+        pendingCatalogScroll=savedCatalogScroll
+        pendingCatalogFocus=savedCatalogScroll?.let {catalogFocusPosition}
         if (showingOptions) {
             options.visibility = View.VISIBLE; options.setPreview(previewColumn)
             updateCatalog(restoreFocus = false)
@@ -292,7 +313,7 @@ class TvActivity : ComponentActivity() {
             } else if (!explicitRequestSeen || savedInstanceState != null) {
                 val previous = savedInstanceState?.getString("channel") ?: repository.lastChannelId
                 val active=tvPlayer.snapshot.channel
-                current = active ?: channels.firstOrNull { it.id == previous }
+                current = active ?: repository.find(previous)
                 showingCatalog = showingOptions || initialPlaybackCancelled || (savedInstanceState?.getBoolean("catalog") ?: (current == null))
                 if (current != null && !showingCatalog && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) && playerReady) {
                     if(active!=null)openPlayback() else selectChannel(current!!)
@@ -348,6 +369,10 @@ class TvActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("personal_page_offset",personalPager.offset)
+        outState.putInt("personal_catalog_focus",grid.findContainingViewHolder(currentFocus ?: grid)?.bindingAdapterPosition?.takeIf {it>=0} ?: catalogFocusPosition)
+        outState.putParcelable("personal_catalog_scroll",grid.layoutManager?.onSaveInstanceState())
+        outState.putString("personal_search",personalQuery)
         playlists.saveState(outState)
         outState.putString("catalog_source", catalogSource)
         outState.putString("catalog_group", catalogGroup)
@@ -384,11 +409,13 @@ class TvActivity : ComponentActivity() {
 
     private fun consumeLaunchRequest(): Boolean {
         val request = launchQueue.consume(catalogLoaded && playerReady) ?: return false
+        val generation=++launchGeneration
         catalogDialogs.toList().forEach { it.dismiss() }
         if (playlists.isShowing) playlists.hide()
         when (request) {
-            is LaunchRequest.ChannelId -> {
-                val channel = channels.firstOrNull { it.id == request.id }
+            is LaunchRequest.ChannelId -> lifecycleScope.launch {
+                val channel = repository.find(request.id)
+                if(generation!=launchGeneration)return@launch
                 if (channel != null) selectChannel(channel)
                 else showRequestedCatalog("Tutti", "Canale non più disponibile · Scegli un canale dal catalogo")
             }
@@ -494,6 +521,13 @@ class TvActivity : ComponentActivity() {
         sourceRow.addView(groupButton, LinearLayout.LayoutParams(0, -2, 1f))
         sourceRow.addView(TvStyle.button(this,"Video") {it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).library(repository.personal,::selectChannel)},LinearLayout.LayoutParams(-2,-2))
         content.addView(sourceRow, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        sourceRow.addView(TvStyle.button(this,"Cerca") {
+            val field=android.widget.EditText(this).apply {setText(personalQuery);setSingleLine();filters=arrayOf(android.text.InputFilter.LengthFilter(300))}
+            trackDialog(android.app.AlertDialog.Builder(this).setTitle("Cerca nella lista").setView(field)
+                .setPositiveButton("Cerca"){_,_->personalQuery=field.text.toString().trim();updateCatalog()}
+                .setNeutralButton("Cancella ricerca"){_,_->personalQuery="";updateCatalog()}.setNegativeButton("Annulla",null).show())
+        }.also {personalSearch=it},LinearLayout.LayoutParams(-2,-2))
+        personalPager=it.lumetv.app.ui.PersonalCatalog(lifecycleScope,repository.personal){change->grid.post {updateCatalog(false,change)}}
         val gridArea = FrameLayout(this)
         adapter = ChannelAdapter(logos, repository::isFavorite, ::selectChannel) { channel ->
             val added = repository.toggleFavorite(channel)
@@ -506,7 +540,14 @@ class TvActivity : ComponentActivity() {
             clipToPadding = false; clipChildren = false
             setPadding(0, dp(5), 0, dp(8))
             itemAnimator = null
-            addOnScrollListener(object:RecyclerView.OnScrollListener(){override fun onScrolled(view:RecyclerView,dx:Int,dy:Int){requestVisibleProgrammes()}})
+            addOnScrollListener(object:RecyclerView.OnScrollListener(){override fun onScrolled(view:RecyclerView,dx:Int,dy:Int){
+                val manager=layoutManager as GridLayoutManager
+                if(showingCatalog)catalogFocusPosition=findContainingViewHolder(currentFocus ?: this@apply)?.bindingAdapterPosition?.takeIf {it>=0}
+                    ?: manager.findFirstVisibleItemPosition().coerceAtLeast(0)
+                this@TvActivity.adapter.catalog?.viewport((manager.findFirstVisibleItemPosition()-this@TvActivity.adapter.items.size).coerceAtLeast(0),
+                    (manager.findLastVisibleItemPosition()-this@TvActivity.adapter.items.size).coerceAtLeast(0))
+                requestVisibleProgrammes()
+            }})
         }
         gridArea.addView(grid, FrameLayout.LayoutParams(-1, -1))
         empty = TvStyle.text(this, "Tieni premuto OK su un canale per aggiungerlo ai preferiti.", 18f, TvStyle.muted).apply { gravity = Gravity.CENTER; visibility = View.GONE }
@@ -788,15 +829,24 @@ class TvActivity : ComponentActivity() {
             }.setPositiveButton("Chiudi", null).show())
     }
 
-    private fun updateCatalog(restoreFocus: Boolean = true) {
+    private fun updateCatalog(restoreFocus: Boolean = true,catalogChange:it.lumetv.app.ui.ContinuousCatalog.Change?=null) {
         if (catalogLoaded && catalogSource != "builtin" && repository.personal.state.value.none { it.id == catalogSource && it.enabled }) {
             catalogSource = "builtin"; catalogGroup = null
             getSharedPreferences("lume", MODE_PRIVATE).edit().putString("catalog_source", catalogSource).apply()
             buildTabs()
         }
-        if (catalogGroup != null && it.lumetv.core.CatalogSelection.channels(channels, catalogSource)
+        if (catalogSource=="builtin" && catalogGroup != null && it.lumetv.core.CatalogSelection.channels(channels, catalogSource)
                 .none { it.isRadio == (currentFilter == "Radio") && catalogGroup in it.groups }) catalogGroup = null
-        val scoped = channelsForCatalog()
+        val favorites=currentFilter=="Preferiti" || currentFilter=="Radio" && radioFilter=="Preferite"
+        val paged=catalogSource!="builtin" || favorites
+        val restricted=when {favorites->repository.favorites();currentFilter=="Recenti" || currentFilter=="Radio" && radioFilter=="Recenti"->repository.recentIds.toSet();else->null}
+        val catalogReset=if(paged)personalPager.bind(it.lumetv.app.data.PersonalCatalogQuery(source=catalogSource.takeUnless {favorites},
+            kind=if(currentFilter=="Radio")it.lumetv.core.MediaKind.RADIO else it.lumetv.core.MediaKind.TV,
+            content=it.lumetv.core.PlaylistContentKind.LIVE,
+            text=if(currentFilter=="Radio")radioQuery else personalQuery,group=catalogGroup.takeUnless {favorites},ids=restricted))
+        else {personalPager.hide();false}
+        if(showingOptions)personalPager.hide()
+        val scoped = if(paged)(if(favorites)channels.filterNot {it.isPersonal} else emptyList())+personalPager.rows else channelsForCatalog()
         val television = scoped.filter {!it.isRadio && !it.isVod}
         val visible = when (currentFilter) {
             "Radio" -> scoped.filter { it.isRadio && (radioFilter != "Preferite" || repository.isFavorite(it)) &&
@@ -811,13 +861,28 @@ class TvActivity : ComponentActivity() {
         val guideMode = currentFilter == "Guida TV"
         val discoveryMode = currentFilter == "Cosa guardare"
         val programmeMode = guideMode || discoveryMode
+        val continuous=paged && !programmeMode && currentFilter!="Recenti" && !(currentFilter=="Radio" && radioFilter=="Recenti")
         adapter.guideMode = false
         adapter.sourceNames = repository.personal.state.value.associate { it.id to it.name }
-        adapter.items = visible
+        adapter.items = if(continuous)visible.filterNot {it.isPersonal} else visible
+        adapter.catalog=if(continuous)personalPager.data else null
         adapter.programmes = programmes
         adapter.currentId = current?.id
         (grid.layoutManager as GridLayoutManager).spanCount = if (::previewColumn.isInitialized && previewColumn.visibility == View.VISIBLE) 3 else 4
-        adapter.notifyDataSetChanged()
+        if(continuous && catalogChange!=null && !catalogChange.sizeChanged) {
+            val scroll=grid.layoutManager?.onSaveInstanceState()
+            val start=adapter.items.size+catalogChange.start
+            val amount=catalogChange.count.coerceAtMost(adapter.itemCount-start)
+            if(amount>0)adapter.notifyItemRangeChanged(start,amount)
+            grid.layoutManager?.onRestoreInstanceState(scroll)
+        } else adapter.notifyDataSetChanged()
+        if(catalogReset){if(pendingCatalogScroll==null)catalogFocusPosition=personalPager.offset;grid.scrollToPosition(personalPager.offset)}
+        if(adapter.itemCount>0 && adapter.catalog?.let {it.loading && it.size==0}!=true)pendingCatalogScroll?.let {scroll->
+            val focus=pendingCatalogFocus ?: catalogFocusPosition
+            pendingCatalogFocus=null
+            pendingCatalogScroll=null;grid.layoutManager?.onRestoreInstanceState(scroll)
+            grid.post {if(showingCatalog && !showingOptions && adapter.itemCount>0)grid.findViewHolderForAdapterPosition(focus.coerceIn(0,adapter.itemCount-1))?.itemView?.requestFocus()}
+        }
         grid.post {requestVisibleProgrammes()}
         grid.visibility = if (programmeMode) View.GONE else View.VISIBLE
         heading.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
@@ -825,6 +890,7 @@ class TvActivity : ComponentActivity() {
         channelFilters.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
         sourceRow.visibility = if (showingOptions || repository.personal.state.value.isEmpty() || currentFilter == "Preferiti" || currentFilter == "Radio" && radioFilter == "Preferite") View.GONE else View.VISIBLE
         sourceButton.text = "Lista: " + (repository.personal.state.value.firstOrNull { it.id == catalogSource }?.name ?: "Catalogo Lume")
+        personalSearch.visibility=if(catalogSource=="builtin")View.GONE else View.VISIBLE
         groupButton.text = catalogGroup ?: "Tutti i gruppi"
         groupButton.visibility = if (catalogSource == "builtin") View.GONE else View.VISIBLE
         catalogFooter.visibility = if (programmeMode || showingOptions) View.GONE else View.VISIBLE
@@ -836,16 +902,22 @@ class TvActivity : ComponentActivity() {
         if (discoveryMode) discoveryView.submit(television, programmes)
         else discoveryView.deactivate()
         heading.text = when (currentFilter) { "Radio" -> "Radio, in diretta."; "Recenti" -> "Le ultime dirette."; "Guida TV" -> "Ora. E tra poco."; "Preferiti" -> "I tuoi preferiti."; "Rai" -> "Il mondo Rai."; "Mediaset" -> "Il mondo Mediaset."; else -> "La TV, fatta semplice." }
-        status.text = if (currentFilter == "Radio") "${visible.size} radio · Cerca per nome o città" else "${visible.size} canali  ·  ${if (currentFilter in setOf("Rai", "Mediaset")) "Tutti i canali $currentFilter della lista WLTV" else "Scegli un canale. Mettiti comodo."}"
+        val count=adapter.itemCount
+        status.text = if (paged && personalPager.loading && count==0)"Carico i canali…" else if (currentFilter == "Radio") "$count radio · Cerca per nome o città" else "$count canali  ·  ${if (currentFilter in setOf("Rai", "Mediaset")) "Tutti i canali $currentFilter della lista WLTV" else "Scegli un canale. Mettiti comodo."}"
         updateGuideStatus()
         launchMessage?.let { status.text = it }
         syncStatus.text = if (repository.lastUpdated > 0) "●  Catalogo aggiornato" else "Catalogo automatico"
-        empty.visibility = if (!programmeMode && visible.isEmpty()) View.VISIBLE else View.GONE
+        empty.visibility = if (!programmeMode && count==0) View.VISIBLE else View.GONE
         empty.text = when {
+            paged && personalPager.error.isNotBlank()->"Impossibile aprire la lista. Premi OK per riprovare."
+            paged && personalPager.loading->"Carico i canali…"
             currentFilter == "Radio" && radioQuery.isNotBlank() -> "Nessuna radio trovata. Prova un altro nome o una città."
             currentFilter == "Recenti" || currentFilter == "Radio" && radioFilter == "Recenti" -> "Le emittenti riprodotte compariranno qui."
             else -> "Tieni premuto OK su un’emittente per aggiungerla ai preferiti."
         }
+        empty.isFocusable=paged && personalPager.error.isNotBlank()
+        empty.isClickable=empty.isFocusable
+        empty.setOnClickListener {personalPager.data.retry()}
         if (restoreFocus && showingCatalog && (currentFocus == null || currentFocus === root)) focusFirstChannel()
     }
 
@@ -865,6 +937,13 @@ class TvActivity : ComponentActivity() {
     }
 
     private fun chooseCatalogGroup() {
+        if(catalogSource!="builtin") {
+            it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog).group(repository.personal,
+                it.lumetv.app.data.PersonalCatalogQuery(source=catalogSource,kind=if(currentFilter=="Radio")it.lumetv.core.MediaKind.RADIO else it.lumetv.core.MediaKind.TV)) {
+                catalogGroup=it.takeUnless {it=="Tutti i gruppi"};updateCatalog()
+            }
+            return
+        }
         val groups = it.lumetv.core.CatalogSelection.channels(channels, catalogSource).filter { it.isRadio == (currentFilter == "Radio") }.flatMap { it.groups }.distinct().sorted()
         val labels = listOf("Tutti i gruppi") + groups
         trackDialog(android.app.AlertDialog.Builder(this).setTitle("Scegli il gruppo")
@@ -884,20 +963,22 @@ class TvActivity : ComponentActivity() {
             guideView.post { if (showingCatalog && !showingOptions && currentFilter == "Guida TV") guideView.focusSelection() }
             return
         }
-        if (adapter.items.isEmpty()) {
+        if (adapter.itemCount==0) {
             val index = channelSections.indexOf(currentFilter).coerceAtLeast(0)
             channelFilters.getChildAt(index)?.requestFocus()
             return
         }
-        if (adapter.items.isNotEmpty()) grid.post {
+        if (adapter.itemCount>0) grid.post {
             if (showingOptions) return@post
-            val position = adapter.items.indexOfFirst { it.id == current?.id }.coerceAtLeast(0)
+            val position = adapter.positionOf(current?.id) ?: catalogFocusPosition.coerceIn(0,adapter.itemCount-1)
             grid.scrollToPosition(position)
             grid.post { grid.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus() ?: grid.requestFocus() }
         }
     }
 
     private fun selectChannel(channel: Channel) {
+        grid.findContainingViewHolder(currentFocus ?: grid)?.bindingAdapterPosition?.takeIf {it>=0}?.let {catalogFocusPosition=it}
+        launchGeneration++
         selectTarget(channel,null)
     }
     private fun openPlayback(){val selected=tvPlayer.snapshot.channel;if(selected!=null)selectTarget(selected,null,true) else current?.let(::selectChannel)}
@@ -1026,6 +1107,11 @@ class TvActivity : ComponentActivity() {
 
     private fun showLiveChannels() {
         if (showingCatalog || current == null || channels.isEmpty()) return
+        current?.takeIf {it.isPersonal}?.let {playing->
+            it.lumetv.app.ui.PersonalCatalogDialogs(this,lifecycleScope,::trackDialog)
+                .channels(repository.personal,playing.sourceId,playing.kind,repository::favorites,::selectChannel)
+            return
+        }
         handler.removeCallbacks(numberAction); digits = ""
         handler.removeCallbacks(hideBanner); handler.removeCallbacks(bannerTick)
         banner.visibility = View.GONE
@@ -1077,14 +1163,18 @@ class TvActivity : ComponentActivity() {
         handler.postDelayed(hideBanner, if (reading && banner.hasDescription) 15_000 else 6_000)
     }
 
+    private var reminderQuery:Job?=null
     private fun checkProgrammeReminders() {
+        if(reminderQuery?.isActive==true || reminders.channelIds.isEmpty())return
         if (playlists.isShowing || catalogDialogs.any { it.isShowing }) return
         if (!catalogLoaded || !hasWindowFocus() || reminderDialog?.isShowing == true || exitDialog?.isShowing == true ||
             !lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
-        val due = reminders.takeDue(channels.map { it.id }.toSet(), System.currentTimeMillis()) ?: return
-        val channel = channels.firstOrNull { it.id == due.channelId } ?: return
+        reminderQuery=lifecycleScope.launch {
+        val available=reminders.channelIds.mapNotNull {repository.find(it)}.associateBy {it.id}
+        val due = reminders.takeDue(available.keys, System.currentTimeMillis()) ?: return@launch
+        val channel = available[due.channelId] ?: return@launch
         val start = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(due.start))
-        reminderDialog = android.app.AlertDialog.Builder(this)
+        reminderDialog = android.app.AlertDialog.Builder(this@TvActivity)
             .setTitle(R.string.discovery_reminder_title)
             .setMessage(getString(R.string.discovery_reminder_message, due.title, channel.name, start))
             .setPositiveButton(R.string.discovery_watch) { _, _ -> selectChannel(channel) }
@@ -1093,6 +1183,7 @@ class TvActivity : ComponentActivity() {
                 dialog.show()
                 dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE).requestFocus()
             }
+        }
     }
 
     private fun refreshCatalog(force: Boolean) {
@@ -1157,7 +1248,14 @@ class TvActivity : ComponentActivity() {
             val now=System.currentTimeMillis()
             val result=mergeProgrammeWindows(guide.window(rows,from,until),guide.personal.window(listOfNotNull(current),now,now+GuideSchedule.WINDOW))
             programmes=result
-            if(showingCatalog)updateCatalog() else if(channelBannerVisible && tvPlayer.snapshot.mode==it.lumetv.core.PlaybackMode.LIVE)updateChannelBanner()
+            if(showingCatalog) {
+                if(currentFilter in setOf("Guida TV","Cosa guardare"))updateCatalog()
+                else {
+                    val scroll=grid.layoutManager?.onSaveInstanceState()
+                    adapter.programmes=result;adapter.refreshProgrammes()
+                    grid.layoutManager?.onRestoreInstanceState(scroll)
+                }
+            } else if(channelBannerVisible && tvPlayer.snapshot.mode==it.lumetv.core.PlaybackMode.LIVE)updateChannelBanner()
         }
     }
     private fun requestVisibleProgrammes() {
@@ -1165,7 +1263,7 @@ class TvActivity : ComponentActivity() {
         val manager=grid.layoutManager as GridLayoutManager
         val first=manager.findFirstVisibleItemPosition().coerceAtLeast(0)
         val last=manager.findLastVisibleItemPosition().coerceAtLeast(first+11)
-        val rows=adapter.items.drop(first).take((last-first+1).coerceAtMost(80))
+        val rows=adapter.visibleRows(first,last.coerceAtMost(first+79))
         if(rows.none {it.isPersonal})return
         val now=System.currentTimeMillis()/1_800_000*1_800_000
         loadPersonalGuideWindow(rows,now,now+GuideSchedule.WINDOW)
@@ -1173,7 +1271,10 @@ class TvActivity : ComponentActivity() {
 
     private fun zap(direction: Int) {
         if(tvPlayer.snapshot.mode!=it.lumetv.core.PlaybackMode.LIVE){tvPlayer.seekBy(if(direction>0)30_000 else -10_000);return}
+        lifecycleScope.launch {
+        val before=current
         val next = repository.nextChannel(channels, current?.id, direction, current)
+        if(current?.id!=before?.id)return@launch
         if (next != null) {
             if (next.id != current?.id || showingCatalog || failed) selectChannel(next)
             else showChannelBanner()
@@ -1181,6 +1282,7 @@ class TvActivity : ComponentActivity() {
             val message = "Nessun preferito · Tieni premuto OK su un canale per aggiungerlo"
             if (showingCatalog) status.text = message
             else showBanner("Nessun canale preferito", "Aggiungi un preferito dal catalogo o cambia la modalità in Opzioni")
+        }
         }
     }
 

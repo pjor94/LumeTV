@@ -95,7 +95,7 @@ object PersonalPlaylistNetwork {
             .apply { headers.forEach { (name, value) -> header(name, value) }; etag?.let { header("If-None-Match", it) }; modified?.let { header("If-Modified-Since", it) } }.build()
         val client = context?.client(http,context.root.ifBlank { url },PlaylistResource.PLAYLIST,headers.keys)
             ?: client(http,url,policy={ allowed(it,allowHttp && httpAllowed()) })
-        val call=client.newBuilder().callTimeout(5,TimeUnit.MINUTES).build().newCall(request)
+        val call=client.newBuilder().callTimeout(15,TimeUnit.MINUTES).build().newCall(request)
         val response=call.awaitResponse()
         try {
             if (response.code == 304) {
@@ -154,7 +154,7 @@ internal class LimitedPlaylistInput(private val input:InputStream,private val pr
         if(value>0) {
             size+=value
             budget.bytes+=value
-            if(budget.bytes>PersonalM3uParser.MAX_BYTES)throw IOException("La lista supera il limite complessivo di 64 MiB, comprese le liste incluse.")
+            if(budget.bytes>PersonalM3uParser.MAX_BYTES)throw IOException("La lista supera il limite complessivo di 256 MiB, comprese le liste incluse.")
             progress(budget.bytes)
         }
         return value

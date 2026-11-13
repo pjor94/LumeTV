@@ -30,6 +30,11 @@ class MobileChannelAdapter(
     private val toggleFavorite: (Channel) -> Unit,
 ) : RecyclerView.Adapter<MobileChannelAdapter.Holder>() {
     var items = emptyList<MobileBrowseItem>()
+    var catalog:it.lumetv.app.ui.ContinuousCatalog<Channel>?=null
+    var programmeFor:(Channel)->Programme?={null}
+    fun itemAt(position:Int):MobileBrowseItem?=if(position<items.size)items.getOrNull(position)
+        else catalog?.peek(position-items.size)?.let {MobileBrowseItem(it,programmeFor(it),true)}
+    fun visibleRows(first:Int,last:Int)=(first..last.coerceAtMost(itemCount-1)).mapNotNull(::itemAt)
     var sourceNames = emptyMap<String, String>()
     init { setHasStableIds(true) }
 
@@ -73,13 +78,25 @@ class MobileChannelAdapter(
         return Holder(row, logo, title, subtitle, timing, progress, star)
     }
 
-    override fun getItemCount() = items.size
-    override fun getItemId(position: Int): Long = items[position].let {
+    override fun getItemCount() = items.size+(catalog?.size ?: 0)
+    override fun getItemId(position: Int): Long = if(position>=items.size)Long.MIN_VALUE+position else items[position].let {
         it.channel.id.take(15).toLong(16) xor if (it.channelRow) 0L else it.programme?.start ?: 0L
     }
 
     override fun onBindViewHolder(holder: Holder, position: Int) {
-        val item = items[position]
+        catalog?.ensure(position-items.size)
+        val item = itemAt(position)
+        if(item==null) {
+            val failed=catalog?.failedAt(position-items.size)==true
+            holder.logo.unbind();holder.logo.visibility=View.INVISIBLE;holder.favorite.visibility=View.INVISIBLE
+            holder.title.text=if(failed)"Riprova a caricare" else "Caricamento…"
+            holder.subtitle.text="";holder.timing.visibility=View.GONE;holder.progress.visibility=View.GONE
+            holder.row.contentDescription=holder.title.text
+            holder.row.setOnClickListener {holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
+            holder.row.setOnLongClickListener(null)
+            return
+        }
+        holder.logo.visibility=View.VISIBLE;holder.favorite.visibility=View.VISIBLE
         val channel = item.channel
         val programme = item.programme
         val now = System.currentTimeMillis()

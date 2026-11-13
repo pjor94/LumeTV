@@ -27,6 +27,10 @@ class ChannelAdapter(
 ) : RecyclerView.Adapter<ChannelAdapter.Holder>() {
     init { setHasStableIds(true) }
     var items = emptyList<Channel>()
+    var catalog:ContinuousCatalog<Channel>?=null
+    fun channelAt(position:Int):Channel?=if(position<items.size)items.getOrNull(position) else catalog?.peek(position-items.size)
+    fun visibleRows(first:Int,last:Int)=(first..last.coerceAtMost(itemCount-1)).mapNotNull(::channelAt)
+    fun positionOf(id:String?)=items.indexOfFirst {it.id==id}.takeIf {it>=0} ?: catalog?.indexOf {it.id==id}?.plus(items.size)
     var sourceNames = emptyMap<String, String>()
     var programmes: Map<String, List<Programme>> = emptyMap()
     var guideMode = false
@@ -89,10 +93,24 @@ class ChannelAdapter(
     }
 
     override fun getItemViewType(position: Int) = if (guideMode) 1 else 0
-    override fun getItemCount() = items.size
-    override fun getItemId(position: Int) = items[position].id.take(15).toLong(16)
+    override fun getItemCount() = items.size+(catalog?.size ?: 0)
+    override fun getItemId(position: Int) = if(position<items.size)items[position].id.take(15).toLong(16) else Long.MIN_VALUE+position
     override fun onBindViewHolder(holder: Holder, position: Int) {
-        val channel = items[position]
+        catalog?.ensure(position-items.size)
+        val channel = channelAt(position)
+        if(channel==null) {
+            val failed=catalog?.failedAt(position-items.size)==true
+            holder.logo.unbind();holder.logo.visibility=View.INVISIBLE
+            holder.number.text="";holder.badge.text="";holder.show.text=""
+            holder.name.text=if(failed)"Riprova a caricare" else "Caricamento…"
+            holder.name.textSize=21f
+            holder.card.background=TvStyle.focusBackground(holder.card.context)
+            holder.card.contentDescription=holder.name.text
+            holder.card.setOnClickListener {holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
+            holder.card.setOnLongClickListener(null)
+            return
+        }
+        holder.logo.visibility=View.VISIBLE
         val context = holder.card.context
         val sourceLabel = (if (channel.isPersonal) sourceNames[channel.sourceId] ?: "Lista personale" else channel.family).uppercase(Locale.ITALY)
         holder.number.text = if (channel.displayNumber == null) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)
@@ -158,8 +176,10 @@ class ChannelAdapter(
     override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
         if (payloads.isEmpty()) super.onBindViewHolder(holder, position, payloads)
         else {
-            if ("logo" in payloads) holder.logo.bind(items[position])
-            if ("programme" in payloads) bindProgramme(holder, items[position])
+            channelAt(position)?.let {channel->
+                if ("logo" in payloads) holder.logo.bind(channel)
+                if ("programme" in payloads) bindProgramme(holder, channel)
+            }
         }
     }
 

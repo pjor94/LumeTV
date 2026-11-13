@@ -45,6 +45,7 @@ class ProgrammeReminders(context: Context) {
                 it.optLong("end"), it.optString("title").take(300)) }
         }
     }.getOrDefault(emptyList()))
+    val channelIds:Set<String> get()=book.entries.map {it.channelId}.toSet()
     fun contains(item: DiscoveryProgramme) = book.contains(item)
     fun toggle(item: DiscoveryProgramme, now: Long): Boolean = book.toggle(item, now).also { save() }
     fun takeDue(channelIds: Set<String>, now: Long): ProgrammeReminder? {

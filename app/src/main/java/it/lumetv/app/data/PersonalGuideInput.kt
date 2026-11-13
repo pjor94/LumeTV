@@ -9,7 +9,7 @@ internal class GuideCandidate(val id:String,val epgKey:String,val tvgId:String,v
     override fun toString()="GuideCandidate()"
 }
 internal class PersonalGuideInput(val source:PersonalPlaylistSource,val settings:PlaylistSettings,val context:PersonalRequestContext,
-    val descriptor:PlaylistDescriptor,val candidates:List<GuideCandidate>) {
+    val descriptor:PlaylistDescriptor,val candidates:List<GuideCandidate>,val error:String?=null) {
     override fun toString()="PersonalGuideInput(channels=${candidates.size})"
 }
 object PersonalGuideKeys {

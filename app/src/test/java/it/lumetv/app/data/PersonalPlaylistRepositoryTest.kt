@@ -227,6 +227,7 @@ class PersonalPlaylistRepositoryTest {
         assertEquals("private-token",repo.resolve(channel,okhttp3.OkHttpClient()).headers["Authorization"])
         assertEquals(channel,repository().local().single().id)
         assertFalse(repo.local().toString().contains("private"))
+        assertEquals(listOf("Test"),repo.groups(PersonalCatalogQuery(source=id)).first)
     }
 
     @Test fun `large files stream into disk snapshots and indexed reconciliation retains identities`() = runTest(timeout=kotlin.time.Duration.parse("120s")) {
@@ -241,9 +242,12 @@ class PersonalPlaylistRepositoryTest {
         val draft=repo.prepareFile(input,progress={ bytes=it.bytes })
         assertEquals(14000,draft.report.count);assertEquals(5,draft.report.sample.size);assertEquals(input.length(),bytes)
         val id=repo.save("Grande",draft);val old=repo.local().map { it.id }
+        assertTrue(old.size<=PersonalPlaylistRepository.CATALOG_WINDOW)
+        val lastId=repo.catalog(PersonalCatalogQuery(source=id,offset=13999,limit=1)).rows.single().id
         generate("after");repo.save("Grande",repo.prepareFile(input),id)
         assertEquals(old,repo.local().map { it.id });assertEquals(old,repository().local().map { it.id })
-        assertTrue(repo.resolve(old.last(),okhttp3.OkHttpClient()).url.endsWith("after"))
+        assertEquals(lastId,repo.catalog(PersonalCatalogQuery(source=id,offset=13999,limit=1)).rows.single().id)
+        assertTrue(repo.resolve(lastId,okhttp3.OkHttpClient()).url.endsWith("after"))
         assertTrue(File(context.filesDir,"personal-playlists").listFiles().orEmpty().none { it.name.startsWith(".draft-") })
         input.delete()
     }

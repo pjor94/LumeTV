@@ -58,7 +58,7 @@ class ChannelRepository(context: Context, private val http: Transport) {
             if (!channel.isRadio && !channel.isPersonal) editor.putString("last_tv_channel", channel.id).putLong("last_tv_played_at", now)
             else if (channel.isRadio && !channel.isPersonal && !prefs.contains("last_tv_channel")) {
                 // Preserve the pre-radio last TV entry when upgrading an existing installation.
-                prefs.getString("last_channel", null)?.takeIf { it !in personal.knownIds() }?.let { editor.putString("last_tv_channel", it)
+                prefs.getString("last_channel", null)?.takeIf { id -> shared.channels.orEmpty().any {it.id==id && !it.isPersonal} }?.let { editor.putString("last_tv_channel", it)
                     .putLong("last_tv_played_at", prefs.getLong("last_played_at", 0)) }
             }
             editor.putString("last_channel", channel.id).putLong("last_played_at", now)
@@ -70,11 +70,15 @@ class ChannelRepository(context: Context, private val http: Transport) {
         get() = prefs.getBoolean("zap_favorites_only", false)
         set(value) { prefs.edit().putBoolean("zap_favorites_only", value).apply() }
 
-    fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int, current: Channel? = null): Channel? {
+    suspend fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int, current: Channel? = null): Channel? {
         val playing = channels.firstOrNull { it.id == currentId } ?: current
+        if(playing?.isPersonal==true)return personal.next(playing,direction,if(zapFavoritesOnly)favoriteIds else null)
         val scoped = channels.filter {!it.isVod && (playing==null || it.sourceId==playing.sourceId && it.kind==playing.kind)}
         return ChannelNavigation.next(scoped, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
     }
+
+    suspend fun find(id:String?):Channel? = id?.let { key -> builtins().firstOrNull {it.id==key} ?: personal.channel(key) }
+    fun favorites():Set<String> = favoriteIds.toSet()
 
     private suspend fun builtins(): List<Channel> = shared.channels ?: shared.loading.withLock {
         shared.channels ?: (sync.local() + radios.local()).also { shared.channels = it }

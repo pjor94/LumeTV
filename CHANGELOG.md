@@ -1,5 +1,13 @@
 # Changelog
 
+## In sviluppo · Capienza delle liste personali
+
+- Fino a 500.000 voci lette per sorgente e un milione di voci importate complessive. Limite dei documenti portato a 256 MiB; snapshot SQLite fino a 1 GiB per sorgente e 2 GiB complessivi.
+- Catalogo TV e smartphone con scorrimento continuo e righe riciclate, senza comandi di pagina: caricamento automatico di blocchi da 200 elementi dal database, fino a tre blocchi vicini in memoria, con ricerca e gruppi sull'intera lista. Anche Video e selettori di gruppi, canali e guida scorrono in continuo con blocchi da 50. Video, preferiti, selezione del canale, zapping e ripristino non richiedono il caricamento di tutti i metadati in memoria.
+- Controllo dei duplicati su SQLite durante l'importazione, condiviso con le liste incluse. Conservati gli snapshot atomici e gli identificativi durante gli aggiornamenti; gli archivi precedenti ricevono un indice derivato per la navigazione.
+
+Verifiche locali: 290 test JVM e 30 test Python superati; tre controlli live facoltativi esclusi. Build Debug/Release e Lint senza errori. Superati 168 controlli dello scorrimento continuo sui simulatori TV e smartphone, con testo normale e al 130%, avanti/indietro, focus, riproduzione, ritorno dal player, ricreazione, rotazione e selettori. Il precedente collaudo della capienza comprende 48 controlli con 500.000 voci per sorgente, un milione complessive e aggiornamento completo con ID e preferiti conservati.
+
 ## 0.9.0 · Liste personali, guida e video — 2026-11-12
 
 - Gestione delle liste tramite pagine interne nello stile di **Opzioni**: intestazione, sezioni, descrizioni e separatori su smartphone; elenco con dettaglio e focus su TV. Indietro conserva campi e posizione. Verifica, anteprima, errori, conferme ed eliminazione restano nella pagina; il selettore file usa quello di Android.

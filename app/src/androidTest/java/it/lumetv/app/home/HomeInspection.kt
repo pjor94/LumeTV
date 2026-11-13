@@ -20,7 +20,9 @@ class HomeInspection : Instrumentation() {
             check(Build.VERSION.SDK_INT >= 26)
             val context = targetContext
             if(arguments.getString("operation").orEmpty().startsWith("playlist-")) {
-                val result=if(arguments.getString("operation")=="playlist-pages")it.lumetv.app.playlists.PlaylistPagesInspection.run(this,arguments)
+                val result=if(arguments.getString("operation")=="playlist-large")it.lumetv.app.playlists.LargePlaylistInspection.run(context,arguments)
+                else if(arguments.getString("operation")=="playlist-continuous")it.lumetv.app.playlists.ContinuousCatalogInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-pages")it.lumetv.app.playlists.PlaylistPagesInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-def")kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                     it.lumetv.app.playlists.OnDemandInspection.run(context,requireNotNull(arguments.getString("fixtureRoot")),arguments.getString("mode")=="phone")
                 } else it.lumetv.app.playlists.PlaylistInspection.run(context,arguments)

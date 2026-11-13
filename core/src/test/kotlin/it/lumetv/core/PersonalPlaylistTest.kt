@@ -11,7 +11,8 @@ class PersonalPlaylistTest {
         val records = PlaylistIdentity.reconcile(entries, emptyList(), 1)
         assertEquals(50000, records.map { it.id }.toSet().size)
         assertEquals(records.map { it.id }, PlaylistIdentity.reconcile(entries, records, 2).map { it.id })
-        try { PersonalM3uParser.parse(text + "\n#EXTINF:-1,Extra\nhttps://example.com/extra"); fail("Count limit ignored") }
+        val budget=PlaylistScanBudget().apply { this.entries=PersonalM3uParser.MAX_ENTRIES }
+        try { PersonalM3uParser.scan("#EXTM3U\n#EXTINF:-1,Extra\nhttps://example.com/extra".reader(),budget=budget,accept={null}); fail("Count limit ignored") }
         catch (_: PlaylistFormatException) { }
     }
     private fun playlist(vararg entries: String) = "#EXTM3U\n" + entries.joinToString("\n") + "\n"

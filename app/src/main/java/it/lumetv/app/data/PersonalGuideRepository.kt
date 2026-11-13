@@ -55,15 +55,23 @@ class PersonalGuideRepository private constructor(private val app:Context) {
 
     suspend fun refresh(force:Boolean=false,sourceId:String?=null)=withContext(Dispatchers.IO) {
         mutex.withLock {
-            val inputs=personal.guideInputs(sourceId)
-            if(sourceId==null)_state.value=_state.value.filter {s->inputs.any {it.source.id==s.sourceId}}
-            for(input in inputs) {
+            personal.local()
+            val ids=sourceId?.let {listOf(it)} ?: personal.state.value.filter {it.enabled}.map {it.id}
+            if(sourceId==null)_state.value=_state.value.filter {it.sourceId in ids}
+            // Only one candidate collection is retained, even when ten large lists have a guide.
+            for(candidateId in ids) {
+                val input=personal.guideInputs(candidateId).singleOrNull()
+                if(input==null){_state.value=_state.value.filterNot {it.sourceId==candidateId};continue}
                 val id=input.source.id;val epoch=input.context.guideToken;val now=System.currentTimeMillis()
                 val job=currentCoroutineContext()
                 fun active(){job.ensureActive();if(!input.context.valid() || input.context.guideToken!=epoch)throw CancellationException("Guide policy changed")}
                 val urls=input.candidates.flatMap {it.feeds}.distinct().take(16)
                 val before=store.feeds(id).associateBy {it.id}
                 val count=store.count(id)
+                if(input.error!=null) {
+                    status(PersonalGuideStatus(id,before.values.maxOfOrNull {it.updated} ?: 0,count.first,count.second,error=input.error))
+                    continue
+                }
                 status(PersonalGuideStatus(id,before.values.maxOfOrNull {it.updated} ?: 0,count.first,count.second,true))
                 try {
                     active()

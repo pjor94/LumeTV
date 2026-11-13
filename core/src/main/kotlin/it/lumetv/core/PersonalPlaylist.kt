@@ -30,8 +30,8 @@ data class PlaylistRecord(val id: String, val entry: PlaylistEntry, val seenAt: 
 
 /** The WLTV parser and its historical identity policy remain unchanged. */
 object PersonalM3uParser {
-    const val MAX_BYTES = 64 * 1024 * 1024
-    const val MAX_ENTRIES = 50_000
+    const val MAX_BYTES = 256 * 1024 * 1024
+    const val MAX_ENTRIES = 500_000
     const val MAX_LINE = 64 * 1024
     private val attribute = Regex("([\\w-]+)\\s*=\\s*(?:\"((?:\\\\.|[^\"])*)\"|'([^']*)'|([^\\s,]+))")
     private val headerNames = mapOf("user-agent" to "User-Agent", "referer" to "Referer", "referrer" to "Referer",
@@ -46,7 +46,7 @@ object PersonalM3uParser {
             bytes += when { char.code < 128 -> 1; char.code < 2048 -> 2
                 char.isLowSurrogate() && previousHigh -> 1; else -> 3 }
             previousHigh = char.isHighSurrogate()
-            if (bytes > MAX_BYTES) throw PlaylistFormatException("La lista supera il limite di 64 MiB.")
+            if (bytes > MAX_BYTES) throw PlaylistFormatException("La lista supera il limite di 256 MiB.")
         }
         val entries = mutableListOf<PlaylistEntry>()
         val result = scan(StringReader(text), baseUrl, defaultKind, allowHttp, options = options, accept = { entries += it; null })
@@ -101,7 +101,7 @@ object PersonalM3uParser {
         }
         fun nextEntry() {
             count = ++budget.entries
-            if (count > MAX_ENTRIES) throw PlaylistFormatException("La lista supera il limite complessivo di 50.000 voci, comprese le liste incluse.")
+            if (count > MAX_ENTRIES) throw PlaylistFormatException("La lista supera il limite complessivo di 500.000 voci lette, comprese le liste incluse, le escluse e le duplicate.")
             if (count % 256 == 0) progress(count)
         }
         fun header(key: String, value: String) {
@@ -254,7 +254,7 @@ object PersonalM3uParser {
                                 field(entry.metadata.duration.toString()); field(entry.metadata.seekable.toString()); field(content.name)
                                 (entry.headers.toSortedMap() + entry.properties.toSortedMap()).forEach { (k, v) -> field(k); field(v) }
                                 val fingerprint = digest.digest().hex()
-                                if (budget.fingerprints.add(fingerprint)) {
+                                if (budget.firstFingerprint(fingerprint)) {
                                     val reason = accept(entry)
                                     if (reason == null) imported++ else diagnostic(PlaylistDiagnosticCode.UNSUPPORTED_PLAYBACK, true, reason)
                                 } else duplicates++

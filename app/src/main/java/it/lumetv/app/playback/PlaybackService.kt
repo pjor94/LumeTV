@@ -117,7 +117,7 @@ class PlaybackService : MediaSessionService() {
                 selected?.takeIf { it.isPersonal }?.let { channel ->
                     if (!repository.personal.available(channel.sourceId) || personalHttpConsent && !repository.personal.allowsHttp(channel.sourceId) ||
                         personalPolicyToken.isNotEmpty() && repository.personal.requestContext(channel.sourceId)?.token!=personalPolicyToken) stopPlayback()
-                    else repository.personal.cached().firstOrNull { it.id == channel.id }?.takeIf { it != channel }?.let {
+                    else repository.personal.channel(channel.id,channel.sourceId)?.takeIf { it != channel }?.let {
                         selected = it; updateMetadata(); publish()
                     }
                 }
@@ -422,7 +422,8 @@ class PlaybackService : MediaSessionService() {
         scope.launch {
             val catalog = repository.local()
             if (request != generation || selected?.id != channel.id) return@launch
-            repository.nextChannel(catalog, channel.id, direction, channel)?.let { select(it, mobile) }
+            val next=repository.nextChannel(catalog,channel.id,direction,channel)
+            if(request==generation && selected?.id==channel.id)next?.let {select(it,mobile)}
         }
     }
 

@@ -34,7 +34,7 @@ class PersonalOnDemandTest {
         SQLiteDatabase.openDatabase(file.path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
             val root=db.rawQuery("SELECT value FROM metadata WHERE key='source'",null).use {it.moveToFirst();JSONObject(it.getString(0))};root.put("version",3)
             db.execSQL("UPDATE metadata SET value=? WHERE key='source'",arrayOf(root.toString()))
-            db.execSQL("DROP INDEX content_position");db.execSQL("ALTER TABLE records DROP COLUMN content")
+            db.execSQL("DROP INDEX content_position");db.execSQL("DROP INDEX kind_content_position");db.execSQL("ALTER TABLE records DROP COLUMN content")
         }
         val restored=PersonalPlaylistRepository(context);assertEquals(rows,restored.local())
         assertEquals(setOf(rows.last().id),context.getSharedPreferences("lume",Context.MODE_PRIVATE).getStringSet("favorites",emptySet()))

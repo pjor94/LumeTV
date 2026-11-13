@@ -74,9 +74,9 @@ class PlaylistMetadataTest {
         var closed=false
         try {PersonalM3uParser.scan(root.reader(),"https://example.com/root.m3u",include={url->PlaylistDocument(root.reader(),url){closed=true}},accept={null});fail("Cycle accepted")}
         catch(_:PlaylistFormatException){assertTrue(closed)}
-        val budget=PlaylistScanBudget().apply {entries=49_999}
+        val budget=PlaylistScanBudget().apply {entries=PersonalM3uParser.MAX_ENTRIES-1}
         try {PersonalM3uParser.scan(("#EXTM3U\n#EXTINF:-1,Uno\nhttps://example.com/1\n#EXTINF:-1,Due\nhttps://example.com/2").reader(),budget=budget,accept={null});fail("Aggregate count ignored")}
-        catch(_:PlaylistFormatException){assertEquals(50_001,budget.entries)}
+        catch(_:PlaylistFormatException){assertEquals(PersonalM3uParser.MAX_ENTRIES+1,budget.entries)}
     }
 
     @Test fun `inherited artwork base keeps its original origin after an include redirects to a CDN`() {

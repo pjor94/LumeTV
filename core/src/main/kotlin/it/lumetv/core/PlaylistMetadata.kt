@@ -83,12 +83,13 @@ data class PlaylistDiagnostic(val code: PlaylistDiagnosticCode, val line: Int, v
 }
 
 /** Shared across includes: duplicates, rejected entries and playlist references also spend the budget. */
-class PlaylistScanBudget {
+class PlaylistScanBudget(private val rememberFingerprint: ((String) -> Boolean)? = null) {
     var entries: Int = 0
         internal set
     var documents: Int = 0
         internal set
-    internal val fingerprints = hashSetOf<String>()
+    private val fingerprints = hashSetOf<String>()
+    internal fun firstFingerprint(value: String): Boolean = rememberFingerprint?.invoke(value) ?: fingerprints.add(value)
     internal val path = hashSetOf<String>()
 }
 

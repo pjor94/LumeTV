@@ -107,6 +107,6 @@ class PersonalPlaylistNetworkTest {
             }
         }
         try { LimitedPlaylistInput(input).copyTo(java.io.OutputStream.nullOutputStream());fail("Size limit ignored") }
-        catch(error:java.io.IOException) { assertTrue(error.message.orEmpty().contains("64 MiB")) }
+        catch(error:java.io.IOException) { assertTrue(error.message.orEmpty().contains("256 MiB")) }
     }
 }

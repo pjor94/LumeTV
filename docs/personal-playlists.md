@@ -1,6 +1,6 @@
 # Compatibilità delle liste personali
 
-Questo documento descrive la compatibilità delle liste personali di **Lume TV 0.9.0**. La 0.8.0 conserva i limiti e le funzioni del proprio changelog; l’aggiornamento migra gli archivi precedenti mantenendo ID, preferiti e impostazioni.
+Questo documento descrive le liste personali nel **codice in sviluppo dopo Lume TV 0.9.0**. La 0.9.0 pubblicata mantiene i limiti di 50.000 voci lette per sorgente, 100.000 importate complessive e 64 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti e impostazioni.
 
 ## Gestione tramite pagine
 
@@ -24,21 +24,23 @@ Una lista HTTPS può contenere canali HTTP: con il consenso disattivato questi v
 
 | Elemento | Limite |
 | --- | --- |
-| Documenti M3U/M3U8, dopo decompressione HTTP, comprese le liste incluse | 64 MiB complessivi |
-| Voci lette per sorgente, comprese escluse, duplicate e riferimenti a liste incluse | 50.000 |
+| Documenti M3U/M3U8, dopo decompressione HTTP, comprese le liste incluse | 256 MiB complessivi |
+| Voci lette per sorgente, comprese escluse, duplicate e riferimenti a liste incluse | 500.000 |
 | Documenti / profondità delle liste incluse | 16 / 3 livelli oltre la radice |
-| Canali attivi complessivi | 100.000 |
+| Voci importate complessive, comprese quelle nelle sorgenti disattivate | 1.000.000 |
 | Sorgenti registrate | 10 |
 | Singola riga | 64 KiB di caratteri |
 | Header per configurazione risultante | 32, fino a 32 KiB complessivi |
 | Singolo valore di header | 4.096 caratteri |
 | Proprietà aggiuntive per canale | 32, fino a 128 KiB di caratteri complessivi e 32 KiB per valore |
 | Chiavi ClearKey per canale | 32 coppie da 128 bit |
-| Snapshot SQLite per sorgente / complessivi | 256 MiB / 512 MiB |
+| Snapshot SQLite per sorgente / complessivi | 1 GiB / 2 GiB |
 
 Il documento viene letto progressivamente e scritto in uno snapshot SQLite temporaneo, senza conservarne una copia completa in memoria. L’interfaccia mostra MiB e voci lette; **Annulla** chiude il download e rimuove la bozza. L’anteprima conserva soltanto cinque nomi di esempio. La sostituzione della copia attiva avviene dopo la verifica e la riconciliazione degli ID; un errore di rete, formato o spazio conserva la copia precedente. Durante il salvataggio finale i comandi vengono temporaneamente disabilitati.
 
-I file selezionati dal gestore documenti vengono prima copiati nella cache privata con lo stesso limite di byte. L’app non mantiene un collegamento al file originale. Il catalogo in memoria contiene solo i dati di visualizzazione; URL, header e configurazione DRM del singolo canale vengono letti dal disco quando serve riprodurlo.
+Anche le firme usate per riconoscere i duplicati vengono conservate in una tabella temporanea su disco. Gli aggiornamenti richiedono spazio per la copia precedente, la bozza e gli indici temporanei; l'importazione si interrompe se lo spazio disponibile non basta.
+
+I file selezionati dal gestore documenti vengono prima copiati nella cache privata con lo stesso limite di byte. L’app non mantiene un collegamento al file originale. La navigazione usa uno scorrimento continuo con righe riciclate: i blocchi da 200 voci si caricano automaticamente vicino alla parte visibile dell’elenco, senza pulsanti di pagina. Video e selettori usano lo stesso comportamento con blocchi da 50. Ogni elenco conserva al massimo tre blocchi vicini in memoria; quelli distanti vengono riletti dal database tornando indietro. Il contatore indica tutti i risultati della selezione e la ricerca considera l'intero database. In memoria restano una breve anteprima per sorgente, i recenti necessari al ripristino e le finestre visualizzate; URL, header e configurazione DRM del singolo canale vengono letti dal disco quando serve riprodurlo.
 
 Gli ID vengono riconciliati, nell’ordine, tramite `tipo + tvg-id`, `tipo + URL`, `tipo + nome + gruppi`, usando solo corrispondenze univoche. Gli ultimi 5.000 canali rimossi possono conservare il loro ID per 30 giorni. Se più qualità condividono lo stesso `tvg-id`, l’app passa alle strategie successive. Senza alcuna corrispondenza univoca viene assegnato un nuovo ID.
 
@@ -149,7 +151,7 @@ Per HLS AES-128 senza un sistema DRM dichiarato, la forma Kodi `parametri|header
 
 La guida ha un consenso **Consenti HTTP per questa guida** e un accesso dedicato in **Guida e archivio → Accesso alla guida**. Header, cookie e origini autorizzate restano separati da quelli video. Cambiare lingua, URL, fuso, correzione o consenso EPG annulla le richieste della guida senza sostituire la sessione del video. Il consenso HTTP della lista continua a coprire il video dell’archivio.
 
-L’associazione usa prima `tvg-id` esatto, poi `tvg-name` o nome del canale solo se univoco. Non viene applicata una ricerca approssimativa. In **Guida e archivio → Associa canali** puoi scegliere guida e ID XMLTV, ripristinare la scelta automatica o escludere un canale. La ricerca e la scelta dei canali XMLTV sono paginate. Un feed senza corrispondenze mantiene le definizioni per poterle associare manualmente; la copia valida precedente rimane disponibile. Sostituire o riordinare gli URL fa ricalcolare le associazioni degli indirizzi cambiati dopo un’importazione riuscita; lo storico del nuovo feed non viene mescolato a quello del precedente. Un errore conserva ancora la copia precedente.
+L’associazione usa prima `tvg-id` esatto, poi `tvg-name` o nome del canale solo se univoco. Non viene applicata una ricerca approssimativa. In **Guida e archivio → Associa canali** puoi scegliere guida e ID XMLTV, ripristinare la scelta automatica o escludere un canale. La ricerca e la scelta dei canali XMLTV usano lo scorrimento continuo con caricamento automatico. Un feed senza corrispondenze mantiene le definizioni per poterle associare manualmente; la copia valida precedente rimane disponibile. Sostituire o riordinare gli URL fa ricalcolare le associazioni degli indirizzi cambiati dopo un’importazione riuscita; lo storico del nuovo feed non viene mescolato a quello del precedente. Un errore conserva ancora la copia precedente.
 
 XMLTV viene analizzato in streaming: titoli fino a 300 caratteri, descrizioni fino a 1.600, profondità 32, dichiarazioni/attributi limitati. DTD esterne non vengono scaricate; entità interne e sottoinsiemi DTD vengono rifiutati. Le definizioni dei canali devono precedere i programmi. Lo `stop` mancante viene ricavato dal programma successivo dello stesso canale; l’ultimo evento privo di fine non viene inventato. La lingua preferita precede i testi senza lingua e quelli in altre lingue. Sono gestiti timestamp XMLTV parziali, offset espliciti e un fuso configurabile per quelli senza offset.
 
@@ -158,11 +160,12 @@ XMLTV viene analizzato in streaming: titoli fino a 300 caratteri, descrizioni fi
 | Download compresso o XML non compresso | 32 MiB |
 | XML dopo decompressione | 256 MiB |
 | Definizioni di canale per feed | 100.000 |
+| Dirette candidate all'associazione della guida per lista | 100.000 |
 | Programmi memorizzati per sorgente | 1.000.000 |
 | Database per sorgente / complessivi | 128 MiB / 256 MiB |
 | Conservazione configurabile | 1–7 giorni precedenti, 1–48 ore successive |
 | Risultato di una finestra UI | fino a 200 canali e 5.000 programmi |
-| Ricerca programmi | 50 risultati per pagina |
+| Ricerca programmi | blocchi da 50 risultati con scorrimento continuo |
 
 Si salvano soltanto programmi dei canali associati, nella finestra di conservazione dopo l’applicazione dello shift. `tvg-shift` può essere sostituito da una correzione EPG manuale, senza sommare entrambe. I dati hanno identità separate per lista: due sorgenti con lo stesso `tvg-id` non condividono programmi. Il database personale non entra in `guide.json`, AURA o tessere Home; anche i loghi XMLTV vengono risolti privatamente e rispettano la politica dei loghi personali.
 
@@ -172,7 +175,7 @@ Nella **Guida TV** puoi scegliere un giorno precedente o successivo e cercare ne
 
 ## Video on demand
 
-Il pulsante **Video** accanto alla scelta della lista apre **Video delle mie liste**, con ricerca per nome, scelta di lista/gruppo e pagine da 50 elementi lette da SQLite. Le voci VOD vengono riconosciute dalle indicazioni di contenuto e dalla durata positiva. **Lettura e contenuti → Tipo dei contenuti** permette di mantenere la scelta automatica o forzare una lista come dirette o video. La modifica conserva gli ID; può richiedere di riaprire il contenuto.
+Il pulsante **Video** accanto alla scelta della lista apre **Video delle mie liste**, con ricerca per nome, scelta di lista/gruppo e scorrimento continuo con blocchi da 50 elementi letti da SQLite. Le voci VOD vengono riconosciute dalle indicazioni di contenuto e dalla durata positiva. **Lettura e contenuti → Tipo dei contenuti** permette di mantenere la scelta automatica o forzare una lista come dirette o video. La modifica conserva gli ID; può richiedere di riaprire il contenuto.
 
 Live, video e archivio usano lo stesso player del servizio. I video offrono posizione, durata, barra di ricerca quando consentita, −10 secondi, +30 secondi e **Dall’inizio**. Su TV le frecce laterali cercano nel video quando il pannello non ha il focus; freccia giù porta ai comandi. I tasti media precedente/successivo cercano nel video e non cambiano canale. `seekable=0` impedisce la ricerca anche dai controlli di sistema.
 

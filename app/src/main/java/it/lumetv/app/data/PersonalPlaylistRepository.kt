@@ -64,7 +64,8 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     private val now: () -> Long = System::currentTimeMillis) {
     companion object {
         const val MAX_SOURCES = 10
-        const val MAX_TOTAL = 100_000
+        const val MAX_TOTAL = 1_000_000
+        const val CATALOG_WINDOW = 200
         private val instances = java.util.WeakHashMap<Context, PersonalPlaylistRepository>()
         fun get(context: Context): PersonalPlaylistRepository = synchronized(instances) {
             val app = context.applicationContext
@@ -80,7 +81,6 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     private val sources = linkedMapOf<String, PlaylistStored>()
     private val registered = linkedSetOf<String>()
     private val catalogs = linkedMapOf<String,List<Channel>>()
-    private val known = linkedMapOf<String,Set<String>>()
     private val busy = hashSetOf<String>()
     private val _state = MutableStateFlow<List<PersonalPlaylistSource>>(emptyList())
     val state: StateFlow<List<PersonalPlaylistSource>> = _state.asStateFlow()
@@ -88,14 +88,12 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     val version: StateFlow<Long> = _version.asStateFlow()
     @Volatile private var loaded = false
     @Volatile private var visibleChannels = emptyList<Channel>()
-    @Volatile private var knownChannelIds = emptySet<String>()
     @Volatile private var contexts = emptyMap<String,PersonalRequestContext>()
     @Volatile var storageError: String? = null
         private set
 
     suspend fun local(): List<Channel> { load(); return visibleChannels }
     fun cached(): List<Channel> = visibleChannels
-    fun knownIds(): Set<String> = knownChannelIds
     fun available(sourceId: String) = state.value.any { it.id==sourceId && it.enabled && it.count>0 }
     fun allowsHttp(sourceId: String) = state.value.firstOrNull { it.id==sourceId }?.allowHttp == true
     fun requestContext(sourceId:String):PersonalRequestContext? = contexts[sourceId]?.takeIf { it.valid() }
@@ -103,33 +101,57 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     suspend fun descriptor(id:String):PlaylistDescriptor { load();return mutex.withLock { sources[id]?.descriptor ?: PlaylistDescriptor() } }
     suspend fun importReport(id:String):PlaylistPreview? { load();return mutex.withLock { sources[id]?.report } }
     suspend fun library(source:String?,query:String,group:String?,offset:Int=0):PersonalLibraryPage {
+        return catalog(PersonalCatalogQuery(source=source,content=PlaylistContentKind.VOD,text=query,group=group,offset=offset,limit=50))
+    }
+    suspend fun catalog(query:PersonalCatalogQuery):PersonalLibraryPage {
         load();return withContext(Dispatchers.IO){mutex.withLock {
-            var skip=offset.coerceAtLeast(0);var total=0;val ids=mutableListOf<String>()
-            sources.values.filter {it.source.enabled && (source==null || it.source.id==source)}.forEach {s->
-                val (page,count)=store.library(s.source.id,s.settings.contentOverride,query,group,skip,50-ids.size.coerceAtMost(49))
-                total+=count
-                if(ids.size<50)ids.addAll(page.take(50-ids.size))
-                skip=(skip-count).coerceAtLeast(0)
+            if(query.ids?.isEmpty()==true)return@withLock PersonalLibraryPage(emptyList(),0)
+            var skip=query.offset.coerceAtLeast(0);var total=0;val rows=mutableListOf<Channel>()
+            val limit=query.limit.coerceIn(1,CATALOG_WINDOW)
+            sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)}.forEach {s->
+                kotlin.coroutines.coroutineContext.ensureActive()
+                val page=store.catalog(s,query.copy(offset=skip,limit=(limit-rows.size).coerceAtLeast(1)))
+                total+=page.total
+                if(rows.size<limit)rows.addAll(page.rows.take(limit-rows.size))
+                skip=(skip-page.total).coerceAtLeast(0)
             }
-            val wanted=ids.toSet();val lookup=visibleChannels.filter {it.id in wanted}.associateBy {it.id}
-            PersonalLibraryPage(ids.mapNotNull(lookup::get),total)
+            PersonalLibraryPage(rows,total)
+        }}
+    }
+    suspend fun groups(query:PersonalCatalogQuery):Pair<List<String>,Int> {
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            store.catalogGroups(sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)},query)
+        }}
+    }
+    suspend fun channel(id:String,source:String?=null):Channel? {
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            sources.values.asSequence().filter {it.source.enabled && (source==null || it.source.id==source)}
+                .mapNotNull {store.displayChannel(it,id)}.firstOrNull()
+        }}
+    }
+    suspend fun next(current:Channel,direction:Int,ids:Set<String>?=null):Channel? {
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            sources[current.sourceId]?.takeIf {it.source.enabled}?.let {store.nextChannel(it,store.displayChannel(it,current.id) ?: current,direction,ids)}
         }}
     }
     internal suspend fun guideInputs(only:String?=null):List<PersonalGuideInput> {
         load();return withContext(Dispatchers.IO) {mutex.withLock {
             sources.values.filter {it.source.enabled && it.settings.guide.enabled && (only==null || it.source.id==only)}.mapNotNull {stored->
                 val context=requestContext(stored.source.id) ?: return@mapNotNull null
-                val candidates=store.guideCandidates(stored)
+                val candidates=try {store.guideCandidates(stored)}catch(error:Exception) {
+                    return@mapNotNull PersonalGuideInput(stored.source,stored.settings,context,stored.descriptor,emptyList(),
+                        if(error is SourceException)error.message else "Impossibile leggere i canali della guida personale.")
+                }
                 if(candidates.none {it.feeds.isNotEmpty()})null else PersonalGuideInput(stored.source,stored.settings,context,stored.descriptor,candidates)
             }
         }}
     }
     internal suspend fun playbackEntry(id:String):PersonalEntrySnapshot {
         load();return withContext(Dispatchers.IO) {mutex.withLock {
-            val s=sources.values.firstOrNull {it.source.enabled && id in known[it.source.id].orEmpty()}
+            val pair=sources.values.asSequence().filter {it.source.enabled}.mapNotNull {s->store.entry(s.source.id,id)?.let {s to it}}.firstOrNull()
                 ?: throw SourceException("Il contenuto personale non è più disponibile.")
+            val (s,entry)=pair
             val context=requestContext(s.source.id) ?: throw SourceException("La lista è stata disattivata.")
-            val entry=store.entry(s.source.id,id) ?: throw SourceException("Il contenuto personale non è più disponibile.")
             PersonalEntrySnapshot(s.source,s.settings,entry,context,s.settings.contentOverride ?: entry.metadata.contentKind)
         }}
     }
@@ -160,11 +182,11 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 for(i in 0 until ids.length()) {
                     val id=ids.getString(i);require(PersonalPlaylistStore.validId(id));registered+=id
                     runCatching {
-                        store.read(id)?.let { Triple(it,store.channels(id,it.settings.contentOverride),store.knownIds(id)) }
-                    }.getOrNull()?.let { (stored,channels,ids) ->
+                        store.read(id)?.let {it to if(it.source.enabled)preview(it) else emptyList()}
+                    }.getOrNull()?.let { (stored,rows) ->
                         if (sources.values.sumOf { it.source.count }+stored.source.count<=MAX_TOTAL) {
-                            sources[id]=stored;known[id]=ids
-                            if(stored.source.enabled)catalogs[id]=channels
+                            sources[id]=stored
+                            if(stored.source.enabled)catalogs[id]=rows
                         }
                     }
                 }
@@ -298,9 +320,14 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         load();withContext(Dispatchers.IO) { mutex.withLock {
             writable();if(id !in registered)return@withLock
             writeIndex(registered-id)
-            val removed=known[id].orEmpty()
+            val prefs=app.getSharedPreferences("lume",Context.MODE_PRIVATE)
+            val references=buildSet {addAll(prefs.getStringSet("favorites",emptySet()).orEmpty())
+                addAll(prefs.getString("recent_channels","").orEmpty().split(','));prefs.getString("last_channel",null)?.let(::add)
+                runCatching {val reminders=JSONArray(app.getSharedPreferences("discovery",Context.MODE_PRIVATE).getString("reminders","[]"))
+                    for(i in 0 until reminders.length())reminders.optJSONObject(i)?.optString("channel")?.let(::add)}}
+            val removed=references.filter {store.containsId(id,it)}.toSet()
             contexts[id]?.invalidate();contexts=contexts-id
-            sources.remove(id);registered-=id;store.delete(id);catalogs.remove(id);known.remove(id)
+            sources.remove(id);registered-=id;store.delete(id);catalogs.remove(id)
             PersonalGuideRepository.removeFiles(app,id)
             PersonalPlaybackStore.get(app).removeSource(id)
             clearReferences(removed);publish(emptySet())
@@ -367,9 +394,9 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     suspend fun resolve(id:String,http:okhttp3.OkHttpClient):ResolvedStream {
         load()
         val (stream,context)=withContext(Dispatchers.IO) { mutex.withLock {
-            val source=sources.values.firstOrNull { it.source.enabled && id in known[it.source.id].orEmpty() }
+            val pair=sources.values.asSequence().filter {it.source.enabled}.mapNotNull {s->store.entry(s.source.id,id)?.let {s to it}}.firstOrNull()
                 ?: throw SourceException("Questo canale personale non è più disponibile. Controlla la sua lista.")
-            val entry=store.entry(source.source.id,id) ?: throw SourceException("Questo canale personale non è più disponibile. Controlla la sua lista.")
+            val (source,entry)=pair
             val context=requestContext(source.source.id) ?: throw SourceException("La configurazione della lista è cambiata. Riapri il canale.")
             PersonalPlaybackConfig.parse(entry,source.source.allowHttp,source.settings).copy(personalNetworkToken=context.token) to context
         } }
@@ -389,11 +416,9 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         contexts.filterKeys { it !in sources }.forEach { (id,context) ->context.invalidate();clearArtworkFiles(id)}
         contexts=nextContexts
         changed.forEach { id -> sources[id]?.let { stored ->
-            known[id]=store.knownIds(id)
-            if(stored.source.enabled) catalogs[id]=store.channels(id,stored.settings.contentOverride) else catalogs.remove(id)
+            if(stored.source.enabled) catalogs[id]=preview(stored) else catalogs.remove(id)
         } }
         if(changed.isNotEmpty() || increment) {
-            knownChannelIds=buildSet { known.values.forEach { addAll(it) } }
             visibleChannels=buildList { sources.values.filter { it.source.enabled }.forEach { addAll(catalogs[it.source.id].orEmpty()) } }
         }
         _state.value=registered.map { id -> sources[id]?.let { it.source.copy(refreshing=id in busy,nextRetry=it.retryAt) }
@@ -402,7 +427,15 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     }
     private fun total(count:Int,replacing:String?) {
         if(sources.values.filter { it.source.id!=replacing }.sumOf { it.source.count }+count>MAX_TOTAL)
-            throw IOException("Le liste personali superano il limite complessivo di 100.000 canali.")
+            throw IOException("Le liste personali superano il limite complessivo di 1.000.000 voci importate.")
+    }
+    private fun preview(stored:PlaylistStored):List<Channel> {
+        val rows=store.catalog(stored,PersonalCatalogQuery(content=null,limit=CATALOG_WINDOW)).rows
+        val prefs=app.getSharedPreferences("lume",Context.MODE_PRIVATE)
+        val pinned=buildSet {prefs.getString("last_channel",null)?.let(::add)
+            addAll(prefs.getString("recent_channels","").orEmpty().split(',').filter(String::isNotBlank).take(40))}
+        val extra=pinned.mapNotNull {store.displayChannel(stored,it)}
+        return (rows+extra).distinctBy {it.id}
     }
     private fun clearArtworkFiles(id:String) {
         File(app.filesDir,"channel-artwork").listFiles().orEmpty().filter {it.name.startsWith("$id-")}.forEach(File::delete)

@@ -23,8 +23,6 @@ import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.app.ui.mobile.MobileStyle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** In-window navigation. Retained parent views keep edits, scroll and D-pad focus when a child closes. */
@@ -214,25 +212,21 @@ internal class PlaylistPages(val activity:ComponentActivity,val scope:CoroutineS
     fun <T> paged(title:String,subtitle:String="",key:String="picker",load:suspend(String,Int)->Pair<List<T>,Int>,label:(T)->String,choose:(T)->Unit) {
         push(key,title,subtitle){page->
             val query=page.field("Cerca","",300)
-            val count=page.text("");val rows=LinearLayout(activity).apply {orientation=LinearLayout.VERTICAL};page.body.addView(rows)
-            var offset=0;var task:Job?=null;var generation=0
-            lateinit var previous:TextView;lateinit var next:TextView
-            fun reload(reset:Boolean=false){
-                if(reset)offset=0
-                val request=++generation;task?.cancel();rows.removeAllViews();count.text="Carico…"
-                previous.isEnabled=false;next.isEnabled=false
-                task=scope.launch {try {
-                    delay(120);val (items,total)=load(query.text.toString().trim(),offset)
-                    if(!page.alive || request!=generation)return@launch
-                    count.text=if(items.isEmpty())"Nessun risultato" else "${offset+1}–${offset+items.size} di $total"
-                    items.forEach {item->page.addRow(rows,label(item)){hideKeyboard();choose(item)}}
-                    previous.isEnabled=offset>0;next.isEnabled=offset+items.size<total
-                }catch(cancelled:CancellationException){throw cancelled}catch(error:Exception){page.message(safeMessage(error),true);count.text="Impossibile caricare i risultati."}}
+            val picker=ContinuousPicker(activity,scope,mobile,label){item->if(!page.busy){hideKeyboard();choose(item)}}
+            if(mobile)picker.view.setPadding(activity.dp(20),0,activity.dp(20),activity.dp(24))
+            val container=LinearLayout(activity).apply {orientation=LinearLayout.VERTICAL}
+            val index=page.root.indexOfChild(page.scroll)
+            page.scroll.removeView(page.body);page.root.removeView(page.scroll)
+            container.addView(page.body,LinearLayout.LayoutParams(-1,-2))
+            container.addView(picker.view,LinearLayout.LayoutParams(-1,0,1f))
+            page.root.addView(container,index,LinearLayout.LayoutParams(-1,0,1f))
+            var revision=0
+            fun reload(preserve:Boolean=false){
+                val text=query.text.toString().trim()
+                picker.bind(text to ++revision,if(preserve)picker.catalog.anchor else 0,restoreFocus=preserve){offset->load(text,offset)}
             }
-            previous=page.action("Pagina precedente"){offset=(offset-50).coerceAtLeast(0);reload()}
-            next=page.action("Pagina successiva"){offset+=50;reload()}
-            query.addTextChangedListener(watcher {reload(true)})
-            page.onRefresh={reload()};page.onDispose={task?.cancel()};reload()
+            query.addTextChangedListener(watcher {reload()})
+            page.onRefresh={reload(true)};page.onDispose=picker::close;reload()
         }
     }
     companion object {

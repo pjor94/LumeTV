@@ -35,8 +35,8 @@ internal data class PlaylistStageResult(val file: File, val preview: PlaylistPre
 /** One closed SQLite snapshot per source; an import only replaces the live snapshot after validation. */
 internal class PersonalPlaylistStore(val directory: File) {
     companion object {
-        const val MAX_DATABASE = 256L * 1024 * 1024
-        const val MAX_DISK = 512L * 1024 * 1024
+        const val MAX_DATABASE = 1024L * 1024 * 1024
+        const val MAX_DISK = 2L * 1024 * 1024 * 1024
         const val MAX_ARCHIVED = 5_000
         fun validId(id: String) = Regex("user_[a-f0-9]{32}").matches(id)
     }
@@ -59,68 +59,97 @@ internal class PersonalPlaylistStore(val directory: File) {
             val sample = mutableListOf<String>()
             var drm = 0
             val report = create(target).use { db ->
+                db.execSQL("PRAGMA temp_store=FILE")
+                attachWork(db,target)
                 db.beginTransaction()
                 try {
+                    db.execSQL("CREATE TABLE work.import_fingerprints(value TEXT PRIMARY KEY)")
+                    db.compileStatement("INSERT OR IGNORE INTO work.import_fingerprints(value) VALUES(?)").use { fingerprint ->
+                    db.compileStatement("INSERT OR IGNORE INTO record_groups(group_name,position) VALUES(?,?)").use { group ->
                     db.compileStatement("INSERT INTO records(id,payload,name,number,logo,kind,groups_json,position,active,seen,identity1,identity2,identity3,content) VALUES(?,?,?,?,?,?,?,?,1,0,?,?,?,?)").use { insert ->
                         val result = PersonalM3uParser.scan(reader, base, kind, { PersonalPlaylistNetwork.allowed(it, allowHttp) }, checkActive, {
                             progress(it); if (it % 256 == 0) checkSpace(8L * 1024 * 1024)
-                        }, settings.reading, include = include) { entry ->
+                        }, settings.reading, budget = it.lumetv.core.PlaylistScanBudget { value ->
+                            fingerprint.bindString(1,value);fingerprint.executeInsert()!=-1L
+                        }, include = include) { entry ->
                             try {
                                 val playback = PersonalPlaybackConfig.parse(entry, allowHttp, settings)
                                 bindEntry(insert, entry, PlaylistIdentity.newId(), 0)
                                 insert.executeInsert()
+                                entry.groups.forEach { name -> group.bindString(1,name);group.bindLong(2,entry.position.toLong());group.executeInsert() }
                                 if (sample.size < 5) sample += entry.name
                                 if (playback.drm != null) drm++
                                 null
                             } catch (error: PlaylistFormatException) { error.message ?: "La configurazione del canale non è supportata." }
                         }
                         db.setTransactionSuccessful(); result
-                    }
+                    } } }
                 } finally { db.endTransaction() }
             }
             return PlaylistStageResult(target, PlaylistPreview(report.imported, sample, report.excluded, report.duplicates,
                 report.warnings, report.httpEntries, drm, report.diagnostics, report.diagnosticCounts), report.descriptor)
         } catch (error: Exception) { target.delete(); File(target.path + "-journal").delete(); throw error }
+        finally {deleteWork(target)}
     }
 
     fun prepareCommit(draft: File, stored: PlaylistStored, previous: File?, now: Long) {
         checkSpace(8L * 1024 * 1024)
-        writeDb(draft).use { db ->
+        try {writeDb(draft).use { db ->
             if (previous != null) db.execSQL("ATTACH DATABASE ? AS prior", arrayOf(previous.absolutePath))
+            attachWork(db,draft)
             try {
                 db.beginTransaction()
                 try {
                     if (previous != null) {
-                        db.execSQL("CREATE TEMP TABLE matches(row_id INTEGER PRIMARY KEY,id TEXT NOT NULL UNIQUE)")
+                        db.execSQL("CREATE TABLE work.matches(row_id INTEGER PRIMARY KEY,id TEXT NOT NULL UNIQUE)")
+                        db.execSQL("CREATE TABLE work.fresh_keys(k TEXT PRIMARY KEY,rid INTEGER NOT NULL,n INTEGER NOT NULL)")
+                        db.execSQL("CREATE TABLE work.old_keys(k TEXT PRIMARY KEY,id TEXT NOT NULL,n INTEGER NOT NULL)")
+                        val freshCount=db.rawQuery("SELECT COUNT(*) FROM records",null).use {it.moveToFirst();it.getLong(0)}
                         for (key in 1..3) {
-                            db.execSQL("""INSERT INTO matches(row_id,id)
-                                SELECT fresh.rid,old.id FROM
-                                (SELECT identity$key AS k,MIN(rowid) AS rid FROM records
-                                  WHERE identity$key IS NOT NULL AND rowid NOT IN (SELECT row_id FROM matches)
-                                  GROUP BY identity$key HAVING COUNT(*)=1) AS fresh
-                                JOIN
-                                (SELECT identity$key AS k,MIN(id) AS id FROM prior.records
-                                  WHERE identity$key IS NOT NULL AND id NOT IN (SELECT id FROM matches)
-                                  GROUP BY identity$key HAVING COUNT(*)=1) AS old ON fresh.k=old.k""")
+                            db.execSQL("DELETE FROM work.fresh_keys");db.execSQL("DELETE FROM work.old_keys")
+                            // Ordered index scans stream each group into an on-disk table instead of
+                            // materializing two complete GROUP BY subqueries in SQLite's native heap.
+                            db.execSQL("""INSERT INTO work.fresh_keys SELECT identity$key,MIN(rowid),COUNT(*)
+                                FROM records INDEXED BY match$key WHERE identity$key IS NOT NULL
+                                AND rowid NOT IN (SELECT row_id FROM work.matches) GROUP BY identity$key""")
+                            db.execSQL("""INSERT INTO work.old_keys SELECT identity$key,MIN(id),COUNT(*)
+                                FROM prior.records INDEXED BY match$key WHERE identity$key IS NOT NULL
+                                AND id NOT IN (SELECT id FROM work.matches) GROUP BY identity$key""")
+                            db.execSQL("""INSERT INTO work.matches(row_id,id) SELECT fresh.rid,old.id
+                                FROM work.fresh_keys fresh JOIN work.old_keys old ON fresh.k=old.k
+                                WHERE fresh.n=1 AND old.n=1""")
+                            val matched=db.rawQuery("SELECT COUNT(*) FROM work.matches",null).use {it.moveToFirst();it.getLong(0)}
+                            if(matched==freshCount)break
                         }
-                        db.execSQL("UPDATE records SET id=(SELECT id FROM matches WHERE matches.row_id=records.rowid) WHERE rowid IN (SELECT row_id FROM matches)")
+                        db.execSQL("UPDATE records SET id=(SELECT id FROM work.matches WHERE matches.row_id=records.rowid) WHERE rowid IN (SELECT row_id FROM work.matches)")
                     }
                     db.execSQL("UPDATE records SET seen=?", arrayOf(now))
-                    if (previous != null) db.execSQL("""INSERT OR IGNORE INTO records
-                        SELECT id,payload,name,number,logo,kind,groups_json,position,0,seen,identity1,identity2,identity3,content
-                        FROM prior.records WHERE id NOT IN (SELECT id FROM records) AND seen>=?
-                        ORDER BY seen DESC,rowid DESC LIMIT $MAX_ARCHIVED""", arrayOf(now - 30L * 86_400_000))
+                    if (previous != null) {
+                        db.execSQL("CREATE TABLE work.archived_ids(id TEXT PRIMARY KEY)")
+                        db.execSQL("""INSERT INTO work.archived_ids SELECT id FROM prior.records
+                            WHERE id NOT IN (SELECT id FROM records) AND seen>=?
+                            ORDER BY seen DESC,rowid DESC LIMIT $MAX_ARCHIVED""",arrayOf(now-30L*86_400_000))
+                        db.execSQL("""INSERT OR IGNORE INTO records
+                            SELECT id,payload,name,number,logo,kind,groups_json,position,0,seen,identity1,identity2,identity3,content
+                            FROM prior.records WHERE id IN (SELECT id FROM work.archived_ids)""")
+                    }
                     writeMetadata(db, stored)
                     db.setTransactionSuccessful()
                 } finally { db.endTransaction() }
             } finally { if (previous != null) db.execSQL("DETACH DATABASE prior") }
-        }
+        }}finally {deleteWork(draft)}
     }
+
+    private fun attachWork(db:SQLiteDatabase,draft:File) {
+        db.execSQL("ATTACH DATABASE ? AS work",arrayOf(draft.path+".work"))
+        db.execSQL("PRAGMA work.cache_size=-2048")
+    }
+    private fun deleteWork(draft:File) {val file=File(draft.path+".work");sidecars(file);file.delete()}
 
     fun commit(draft: File, id: String) {
         val destination = file(id)
         val size = directory.listFiles().orEmpty().filter { it.name.endsWith(".sqlite") && !it.name.startsWith(".") && it != destination }.sumOf(File::length) + draft.length()
-        if (draft.length() > MAX_DATABASE || size > MAX_DISK) throw IOException("Le liste personali superano il limite di spazio previsto (512 MiB complessivi).")
+        if (draft.length() > MAX_DATABASE || size > MAX_DISK) throw IOException("Le liste personali superano il limite di spazio previsto (1 GiB per lista, 2 GiB complessivi).")
         // Both files are on the app's private filesystem and all connections are closed.
         sidecars(destination)
         if(!draft.renameTo(destination))throw IOException("Non riesco a salvare la lista. La copia precedente è stata conservata.")
@@ -145,6 +174,7 @@ internal class PersonalPlaylistStore(val directory: File) {
         }
         // V2 remains readable if there is temporarily no room for the metadata-only upgrade.
         if (oldFormat) upgradeContent(result)
+        ensureCatalogIndex(id)
         return result
     }
 
@@ -229,6 +259,7 @@ internal class PersonalPlaylistStore(val directory: File) {
                         }
                     }
                     require(recordsRead && root.getInt("version") == 1 && root.getString("id") == id && count <= 5_000)
+                    PlaylistCatalogIndex.populate(db)
                     val source = PersonalPlaylistSource(id, root.getString("name").take(100), PlaylistLocation.valueOf(root.getString("location")),
                         root.getBoolean("enabled") && !insecure, count, root.getLong("updated"), root.getLong("checked"), root.getLong("revision"),
                         MediaKind.valueOf(root.getString("kind")), root.optString("error"), metadataComplete = false)
@@ -273,12 +304,14 @@ internal class PersonalPlaylistStore(val directory: File) {
             db.execSQL("CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
             db.execSQL("CREATE INDEX active_position ON records(active,position)")
             db.execSQL("CREATE INDEX content_position ON records(active,content,position)")
+            PlaylistCatalogIndex.create(db)
             for (i in 1..3) db.execSQL("CREATE INDEX match$i ON records(identity$i)")
             return db
         } catch (error: Exception) { db.close(); throw error }
     }
     private fun writeDb(file: File): SQLiteDatabase = SQLiteDatabase.openOrCreateDatabase(file, null).apply {
         disableWriteAheadLogging(); setMaximumSize(MAX_DATABASE)
+        execSQL("PRAGMA temp_store=FILE")
     }
     private fun readDb(file: File): SQLiteDatabase = SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
 
@@ -387,13 +420,16 @@ internal class PersonalPlaylistStore(val directory: File) {
         } finally {db.endTransaction()}
     }
 
-    fun guideCandidates(stored:PlaylistStored):List<GuideCandidate> = readDb(file(stored.source.id)).use {db->
+    fun guideCandidates(stored:PlaylistStored,maxCandidates:Int=100_000):List<GuideCandidate> = readDb(file(stored.source.id)).use {db->
         if(stored.settings.contentOverride==PlaylistContentKind.VOD)return@use emptyList()
         val defaults=stored.descriptor
         val feedDefaults=defaults.documents.mapValues {(key,attrs)->guideUrls(attrs,defaults.bases[key])}
         val entryFeedsOnly=stored.settings.guide.urls.isEmpty() && feedDefaults.values.all {it.isEmpty()}
         val feedFilter=if(entryFeedsOnly)" AND (payload LIKE '%\"url-tvg\"%' OR payload LIKE '%\"x-tvg-url\"%')" else ""
-        db.rawQuery("SELECT id,payload FROM records WHERE active=1"+(if(stored.settings.contentOverride==PlaylistContentKind.LIVE)"" else " AND content='LIVE'")+feedFilter,null).use {c->
+        val filter="active=1"+(if(stored.settings.contentOverride==PlaylistContentKind.LIVE)"" else " AND content='LIVE'")+feedFilter
+        val count=db.rawQuery("SELECT COUNT(*) FROM records WHERE $filter",null).use {it.moveToFirst();it.getInt(0)}
+        if(count>maxCandidates)throw SourceException("La guida personale supporta fino a 100.000 dirette per lista. Il catalogo e la riproduzione restano disponibili; la guida precedente è stata conservata.")
+        db.rawQuery("SELECT id,payload FROM records WHERE $filter",null).use {c->
             buildList {while(c.moveToNext()) {
                 val e=decodeEntry(JSONObject(c.getString(1)),defaults);val key=c.getString(0)
                 val own=if(e.metadata.attributes.keys.any {it in setOf("url-tvg","x-tvg-url")})guideUrls(e.metadata.attributes,e.metadata.baseUrl) else feedDefaults[e.metadata.document].orEmpty()

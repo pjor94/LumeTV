@@ -139,7 +139,7 @@ class PersonalPlaylistsScreen(
                 if(pages.isCurrent(page))rows.post {page.scroll.scrollTo(0,scroll);if(!mobile && focus!=null)rows.findViewWithTag<View>(focus)?.requestFocus()}
             }
             page.onRefresh=::render;render()
-            page.text("Fino a 10 liste · 50.000 voci per lista · 64 MiB per file",13f)
+            page.text("Fino a 10 liste · 500.000 voci per lista · 256 MiB per file",13f)
             page.action("Importa file"){chooseFile(null)}
             add=page.action("Aggiungi URL",true){importForm()}
             if(page.initialFocus==null)page.initialFocus=add
@@ -353,7 +353,7 @@ class PersonalPlaylistsScreen(
         showWindow();pages.reset()
         pages.push("source-picker","Scegli la lista",navigation=true){page->
             val choices=buildList {if(includeAll)add("all" to "Tutte le liste");add("builtin" to "Catalogo Lume")
-                repository.state.value.filter {it.enabled && (kind==null || repository.cached().any {channel->channel.sourceId==it.id && channel.kind==kind})}.forEach {add(it.id to it.name)}}
+                repository.state.value.filter {it.enabled}.forEach {add(it.id to it.name)}}
             choices.forEach {(id,label)->page.row(label,if(id==current)"Selezionata" else ""){hide();choose(id)}}
         }
     }

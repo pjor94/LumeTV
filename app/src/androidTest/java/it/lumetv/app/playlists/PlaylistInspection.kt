@@ -131,7 +131,7 @@ object PlaylistInspection {
             if(index==0) {largeId=id;firstId=repo.local().first {it.sourceId==id}.id}
             metrics.put(JSONObject().put("entries",size).put("milliseconds",(System.nanoTime()-before)/1_000_000).put("pssKiB",Debug.getPss()))
         }
-        check(repo.local().size==100_000);check(repo.state.value.size==10)
+        check(repo.state.value.sumOf {it.count}==100_000);check(repo.local().size<=2000);check(repo.state.value.size==10)
         val channel=repo.local().first {it.sourceId==largeId}
         context.getSharedPreferences("lume",Context.MODE_PRIVATE).edit().putStringSet("favorites",setOf(firstId)).commit()
         repo.prepareUrl("$root/large.m3u?count=1&set=extra&v=0",allowHttp=true).use {draft->
@@ -142,16 +142,16 @@ object PlaylistInspection {
         check(context.getSharedPreferences("lume",Context.MODE_PRIVATE).getStringSet("favorites",emptySet())==setOf(firstId))
         val small=repo.state.value.last().id;repo.delete(small)
         repo.prepareUrl("$root/large.m3u?count=1001&set=extra&v=0",allowHttp=true).use {draft->
-            try {repo.save("Oltre limite",draft);error("Total limit ignored")}catch(expected:java.io.IOException){check(repo.local().size==99_000)}
+            val extra=repo.save("Carico 10",draft);check(repo.state.value.sumOf {it.count}==100_001)
+            repo.prepareUrl("$root/large.m3u?count=1000&set=extra&v=0",allowHttp=true).use {repo.save("Carico 10",it,extra)}
         }
-        repo.prepareUrl("$root/large.m3u?count=1000&set=extra&v=0",allowHttp=true).use {repo.save("Carico 10",it)}
-        val restored=PersonalPlaylistRepository(context,now={now});check(restored.local().size==100_000);check(restored.state.value.size==10)
+        val restored=PersonalPlaylistRepository(context,now={now});check(restored.state.value.sumOf {it.count}==100_000);check(restored.local().size<=2000);check(restored.state.value.size==10)
         check(restored.local().first {it.sourceId==largeId}.id==firstId)
         check(File(context.filesDir,"personal-playlists").listFiles().orEmpty().none {it.name.startsWith(".draft-")})
         return JSONObject().put("passed",true).put("entries",100_000).put("sources",10).put("largestSource",50_000)
             .put("milliseconds",(System.nanoTime()-started)/1_000_000).put("pssKiB",Debug.getPss()).put("maxHeapBytes",Runtime.getRuntime().maxMemory())
-            .put("imports",metrics).put("firstChannel",firstId).put("lastChannel",restored.local().last().id)
+            .put("imports",metrics).put("firstChannel",firstId).put("lastChannel",restored.catalog(it.lumetv.app.data.PersonalCatalogQuery(source=restored.state.value.last().id,offset=999,limit=1)).rows.single().id)
             .put("checks",JSONArray(listOf("100000 native catalog rows","10 independent sources","50000 rows in one source",
-                "source and total limits keep prior data","50000 row refresh preserves IDs and favorite","100000 rows survive fresh repository","drafts cleaned")))
+                "source limit keeps prior data and global budget allows 100001 rows","50000 row refresh preserves IDs and favorite","100000 rows survive fresh repository with bounded preview","drafts cleaned")))
     }
 }
