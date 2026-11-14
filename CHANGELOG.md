@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.1 · Importazione M3U più tollerante — 2026-11-14
+
+- Recupero delle configurazioni ClearKey locali senza `license_type` quando le chiavi sono valide e riconoscibili; le dichiarazioni DRM esplicite mantengono la precedenza. Header User-Agent abbreviati riconosciuti nelle proprietà comuni, manifest e stream; `file_type=mpd/m3u8` usato come indicazione di formato subordinata a MIME e manifest espliciti.
+- Sorgenti `localplay` tipizzate per i canali Discovery supportati, con resolver condiviso con il catalogo integrato e alias MotorTrend/Turbo. Nessuna conversione del comando in un percorso HTTP; i comandi sconosciuti vengono esclusi con un motivo. Impostazioni e contesto di accesso restano separati per lista.
+- Il filtro RSI LA1/LA2 si applica soltanto al catalogo integrato: le liste personali possono importarle normalmente.
+- Direttive isolate a fine documento segnalate come residui, senza creare una falsa voce incompleta. Gli scarti mantengono precedenza sui separatori, con canale, riga e motivo conservati nel rapporto. Avvisi ripetuti raggruppati; `group-logo` identificato come metadato grafico conservato.
+- Le copie importate con il lettore precedente restano disponibili e richiedono una rilettura completa per applicare la compatibilità estesa, anche con ETag invariato. Gli ID vengono riconciliati come nelle altre sostituzioni.
+- Le righe estranee o decorative non interrompono più la lettura dell'intera lista. Gli URL HTTP/HTTPS assoluti senza `EXTINF` vengono recuperati con un nome provvisorio; le voci con metadati irrecuperabili o indirizzo mancante vengono escluse singolarmente.
+- Direttive `KODIPROP`, `EXTVLCOPT` ed `EXTHTTP` riconosciute anche prima di `EXTINF`. Header, MIME, opzioni e configurazione DRM restano associati alla singola voce, senza passare alla successiva.
+- Anteprima e ultima importazione riportano voci recuperate, righe ignorate e motivi con numero di riga, nelle pagine esistenti. Diagnostica e log non includono URL, credenziali o chiavi.
+- Gli aggiornamenti del progresso già in coda non sovrascrivono più l'esito finale della verifica o il relativo errore.
+- Gli aggiornamenti con voci strutturalmente incomplete, oppure con meno canali e righe estranee, conservano la copia precedente. La sostituzione resta possibile dopo verifica dell'anteprima dalla pagina **Sorgente**. Errori di trasporto, HTML/HLS e limiti delle risorse restano bloccanti.
+
+Per le liste già salvate, usa **Aggiorna lista** oppure **Sostituisci file** per applicare il nuovo lettore e recuperare anche le voci prima escluse.
+
+Verifiche delle funzionalità: 408 test JVM superati, con tre controlli live facoltativi esclusi; 32 test Python e 188 controlli sui simulatori TV e smartphone, con testo normale e al 130%. Compilazioni Debug/Release e AndroidTest; Android Lint senza errori. Liste sintetiche e risposte simulate dei provider, senza collaudi degli stream personali reali.
+
 ## 0.10.0 · Biblioteca Video e liste estese — 2026-11-13
 
 ### Video nella navigazione principale

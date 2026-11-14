@@ -130,6 +130,32 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Private or generated'):
             build_archive(self.root, self.output)
 
+    def test_local_preparation_excludes_private_lists_and_debug_data(self):
+        marker = b'PRIVATE_RELEASE_EXCLUSION_FIXTURE'
+        private_files = ['analysis/phone/list.m3u', 'analysis/phone/report.json',
+                         '.signing/signing-secrets.json', '.env',
+                         'app/build/outputs/debug-report.json', 'app/private-snapshot.sqlite']
+        for name in private_files:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(marker)
+        source = self.root / 'app/src/main/GenericPlaylistPolicy.kt'
+        source.write_text('Generic source fixture')
+        output = build_archive(self.root, self.output, include_untracked=True)
+        with zipfile.ZipFile(output) as archive:
+            self.assertIn('LumeTV-0.2.1/app/src/main/GenericPlaylistPolicy.kt', archive.namelist())
+            for name in archive.namelist():
+                self.assertNotIn(marker, archive.read(name), name)
+                self.assertFalse(any(part in {'analysis', '.signing', 'build'} for part in Path(name).parts), name)
+
+    def test_accidentally_tracked_analysis_is_rejected_during_local_preparation(self):
+        path = self.root / 'analysis/private-list.m3u'
+        path.parent.mkdir()
+        path.write_text('Private fixture')
+        self.git('add', 'analysis/private-list.m3u')
+        with self.assertRaisesRegex(ValueError, 'Local-only path'):
+            build_archive(self.root, self.output, include_untracked=True)
+
     def test_removed_workflow_is_not_restored_in_source_archive(self):
         workflow = self.root / '.github/workflows/release.yml'
         workflow.parent.mkdir(parents=True)

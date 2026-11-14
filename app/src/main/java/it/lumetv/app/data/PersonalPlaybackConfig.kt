@@ -7,6 +7,7 @@ import it.lumetv.core.PlaylistEntry
 import it.lumetv.core.PlaylistFormatException
 import it.lumetv.core.PlaylistHeaders
 import it.lumetv.core.ResolvedStream
+import it.lumetv.core.PlaylistManifestTypes
 import it.lumetv.core.PlaylistCapabilities
 import it.lumetv.core.LicenseRequestSpec
 import it.lumetv.core.LicenseChallengeEncoding
@@ -21,20 +22,31 @@ import java.util.Locale
 /** Translates a bounded, private playlist entry. It never fetches licenses or exposes keys to catalog UI. */
 internal object PersonalPlaybackConfig {
     private const val PREFIX = "inputstream.adaptive."
-    fun parse(entry: PlaylistEntry, allowHttp: Boolean, settings:PlaylistSettings=PlaylistSettings()): ResolvedStream {
-        if (!PersonalPlaylistNetwork.allowed(URI(entry.url), allowHttp)) invalid("Il canale richiede il consenso HTTP per questa lista.")
+    fun validate(entry:PlaylistEntry,allowHttp:Boolean,settings:PlaylistSettings=PlaylistSettings()):DrmSpec? = configuration(entry,allowHttp,settings,null).drm
+
+    fun parse(entry: PlaylistEntry, allowHttp: Boolean, settings:PlaylistSettings=PlaylistSettings(), resolved:ResolvedStream?=null): ResolvedStream {
+        if(entry.localplay!=null && resolved==null)invalid("Il canale richiede il resolver localplay prima della riproduzione.")
+        return configuration(entry,allowHttp,settings,resolved)
+    }
+    private fun configuration(entry:PlaylistEntry,allowHttp:Boolean,settings:PlaylistSettings,base:ResolvedStream?):ResolvedStream {
+        val streamUrl=base?.url ?: entry.url
+        val streamUri=runCatching {URI(streamUrl)}.getOrNull()
+        if((entry.localplay==null || base!=null) && (streamUri==null || streamUri.host.isNullOrBlank() || streamUri.rawUserInfo!=null || streamUri.rawFragment!=null || streamUrl.length>8192 || !PersonalPlaylistNetwork.allowed(streamUri,allowHttp)))
+            invalid("L’indirizzo dello stream non è valido oppure richiede il consenso HTTP della lista.")
         val p = entry.properties
-        val common = PlaylistHeaders.merge(entry.headers, query(p[PREFIX + "common_headers"]), jsonHeaders(p["exthttp"]), query(p["lumetv.pipe_headers"]))
-        val streamOnly = query(p[PREFIX + "stream_headers"])
-        val manifestBase = if (PREFIX + "manifest_headers" in p) PlaylistHeaders.merge(common, query(p[PREFIX + "manifest_headers"]))
-            else PlaylistHeaders.merge(common, streamOnly)
+        val listed = PlaylistHeaders.merge(entry.headers, query(p[PREFIX + "common_headers"],true), jsonHeaders(p["exthttp"]), query(p["lumetv.pipe_headers"]))
+        val common=PlaylistHeaders.merge(base?.headers.orEmpty(),listed)
+        val streamOnly = query(p[PREFIX + "stream_headers"],true)
+        val manifestBase = if (PREFIX + "manifest_headers" in p) PlaylistHeaders.merge(base?.headers.orEmpty(),base?.manifestHeaders.orEmpty(),listed, query(p[PREFIX + "manifest_headers"],true))
+            else PlaylistHeaders.merge(base?.headers.orEmpty(),base?.manifestHeaders.orEmpty(),listed, streamOnly)
         val manifest=PlaylistHeaders.merge(manifestBase,settings.rule(PlaylistResource.MANIFEST).headers)
         val media = PlaylistHeaders.merge(common, streamOnly,settings.rule(PlaylistResource.MEDIA).headers)
         if (p[PREFIX + "manifest_type"]?.trim()?.lowercase(Locale.ROOT)?.let { it !in setOf("hls","mpd","dash") }==true)
             invalid("Il tipo di manifest richiesto dalla voce non è supportato.")
         if(listOf("inputstream","inputstreamaddon").any { p[it]?.let { name -> name!="inputstream.adaptive" }==true })
             invalid("La voce richiede un componente esterno non disponibile.")
-        val hls=(entry.mimeType?.contains("mpegurl",true)==true || URI(entry.url).path.orEmpty().endsWith(".m3u8",true))
+        val mime=p["mimetype"]?.takeIf(String::isNotBlank) ?: entry.mimeType ?: PlaylistManifestTypes.mime(p[PREFIX+"manifest_type"]) ?: PlaylistManifestTypes.mime(p[PREFIX+"file_type"]) ?: base?.mimeType
+        val hls=(mime?.contains("mpegurl",true)==true || streamUri?.path.orEmpty().endsWith(".m3u8",true))
         val keyFields=p[PREFIX+"license_key"]?.split('|')
         val key=if(p[PREFIX+"license_type"].isNullOrBlank() && p[PREFIX+"drm"].isNullOrBlank() && p[PREFIX+"drm_legacy"].isNullOrBlank() && hls && keyFields?.size==4 && keyFields.drop(2).all(String::isBlank)) {
             val parameters=keyFields[0].removePrefix("?").removePrefix("&")
@@ -42,14 +54,15 @@ internal object PersonalPlaybackConfig {
                 invalid("I parametri per la chiave HLS non sono validi.")
             HlsKeySpec(parameters,PlaylistHeaders.merge(media,query(keyFields[1]),settings.rule(PlaylistResource.KEY).headers))
         } else null
-        val drm = drm(if(key!=null)p-(PREFIX+"license_key") else p, common, entry.url, allowHttp,settings.rule(PlaylistResource.LICENSE).headers)
+        val drm = drm(if(key!=null)p-(PREFIX+"license_key") else p, common,streamUrl.takeUnless {entry.localplay!=null && base==null}, allowHttp,settings.rule(PlaylistResource.LICENSE).headers)
+            ?: base?.drm?.let {it.copy(headers=PlaylistHeaders.merge(it.headers,settings.rule(PlaylistResource.LICENSE).headers))}
         if(drm?.scheme==DrmScheme.CLEARKEY && hls)
             invalid("ClearKey personale richiede uno stream DASH con cifratura CENC.")
-        return ResolvedStream(entry.url, entry.mimeType, media, drm, personal = true, personalAllowHttp = allowHttp, manifestHeaders = manifest,
+        return ResolvedStream(streamUrl, mime, media, drm, personal = true, personalAllowHttp = allowHttp, manifestHeaders = manifest,
             seekable=entry.metadata.seekable,hlsKey=key ?: HlsKeySpec(headers=PlaylistHeaders.merge(media,settings.rule(PlaylistResource.KEY).headers)))
     }
 
-    private fun drm(p: Map<String, String>, common: Map<String, String>, streamUrl: String, allowHttp: Boolean,
+    private fun drm(p: Map<String, String>, common: Map<String, String>, streamUrl: String?, allowHttp: Boolean,
                     overrides:Map<String,String>): DrmSpec? {
         val supported=setOf(PREFIX+"license_type",PREFIX+"license_key",PREFIX+"drm_legacy",PREFIX+"drm")
         if(p.keys.any { it in PlaylistCapabilities.unsupportedDrmProperties || ("license" in it || "drm" in it) && it !in supported })
@@ -97,6 +110,11 @@ internal object PersonalPlaybackConfig {
             request=LicenseRequestSpec(method=if(license.optBoolean("use_http_get_request"))"GET" else "POST",responsePath=path,template=template,wrappers=wrappers,unwrappers=unwrappers)
         }
         if (type.isBlank() && value.isBlank()) return null
+        if(type.isBlank()) {
+            if(PREFIX+"drm" in p || PREFIX+"drm_legacy" in p)invalid("Manca il tipo di sistema DRM nella configurazione dichiarata.")
+            val response=try {clearKeys(value.trim())}catch(_:PlaylistFormatException){invalid("Manca il tipo DRM e i dati non sono una configurazione ClearKey valida.")}
+            return DrmSpec("",scheme=DrmScheme.CLEARKEY,clearKeyResponse=response,multiSession=true)
+        }
         val scheme = when (type.trim().lowercase(Locale.ROOT).removePrefix("urn:uuid:")) {
             "clearkey", "org.w3.clearkey", "e2719d58-a985-b3c9-781a-b030af78d30e" -> DrmScheme.CLEARKEY
             "widevine", "com.widevine.alpha", "edef8ba9-79d6-4ace-a3c8-27dcd51d21ed" -> DrmScheme.WIDEVINE
@@ -126,7 +144,7 @@ internal object PersonalPlaybackConfig {
         val uri = runCatching { URI(url) }.getOrNull()
         if (uri == null || uri.host.isNullOrBlank() || uri.rawUserInfo != null || uri.rawFragment != null || url.length > 8192 || !PersonalPlaylistNetwork.allowed(uri, allowHttp))
             invalid("L’indirizzo della licenza richiede HTTPS oppure il consenso HTTP della lista.")
-        val sameOrigin = runCatching { origin(URI(streamUrl)) == origin(uri) }.getOrDefault(false)
+        val sameOrigin = runCatching { streamUrl!=null && origin(URI(streamUrl)) == origin(uri) }.getOrDefault(false)
         val inherited = if (sameOrigin) common else common.filterKeys { it.equals("User-Agent", true) }
         val headers = PlaylistHeaders.merge(inherited, licenseHeaders, query(fields.getOrNull(1)),overrides)
         if(request.method=="GET" && (request.template!=null || request.wrappers.isNotEmpty()))invalid("Una licenza GET non può usare un corpo di richiesta.")
@@ -200,8 +218,10 @@ internal object PersonalPlaybackConfig {
         if (obj.length() > 32) invalid("La voce contiene troppi header HTTP.")
         return PlaylistHeaders.merge(obj.keys().asSequence().associateWith { obj.opt(it) as? String ?: invalid("Gli header HTTP devono contenere testo.") })
     }
-    private fun query(raw: String?): Map<String, String> {
+    private fun query(raw: String?,allowUserAgent:Boolean=false): Map<String, String> {
         if (raw.isNullOrBlank()) return emptyMap()
+        if(allowUserAgent && raw.none {it in "=&|"} && Regex("^(?:Mozilla|HbbTV|Dalvik|okhttp|VLC|Lavf|Kodi)/[A-Za-z0-9][ -~]{0,4094}$",RegexOption.IGNORE_CASE).matches(raw.trim()))
+            return PlaylistHeaders.merge(mapOf("User-Agent" to raw.trim()))
         if (raw.length > 32 * 1024 || raw.split('&').size > 32) invalid("La voce contiene troppi header HTTP.")
         fun decode(value: String) = try { URLDecoder.decode(value, "UTF-8") } catch (_: Exception) { invalid("La codifica degli header non è valida.") }
         val fields = raw.split('&').associate { part ->

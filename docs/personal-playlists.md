@@ -1,6 +1,8 @@
 # Compatibilità delle liste personali
 
-Questo documento descrive le liste personali di **Lume TV 0.10.0**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
+Questo documento descrive le liste personali di **Lume TV 0.10.1**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
+
+La versione 0.10.1 include il recupero delle righe anomale, la compatibilità delle configurazioni riconoscibili e le sorgenti localplay descritte sotto.
 
 ## Gestione tramite pagine
 
@@ -29,6 +31,20 @@ In **Opzioni → Le mie liste**, **Aggiungi URL** accetta un indirizzo HTTPS opp
 In **Sorgente**, la casella **Consenti HTTP per questa lista** permette di concedere o revocare il consenso con **Salva modifiche**. Alla revoca, il player interrompe la riproduzione della sorgente che era stata autorizzata a usare HTTP; le nuove richieste HTTP e i redirect verso HTTP vengono bloccati. I dati salvati e i preferiti restano disponibili. HTTP invia senza cifratura gli indirizzi e gli eventuali dati di accesso; HTTPS continua a verificare i certificati normalmente. Il consenso non aggiunge eccezioni HTTP ai servizi integrati o all’aggiornatore APK.
 
 Una lista HTTPS può contenere canali HTTP: con il consenso disattivato questi vengono esclusi, e l’anteprima ne riporta il motivo. Se non rimangono canali importabili, la verifica si interrompe senza salvare la sorgente. Un URL relativo viene risolto rispetto all’indirizzo finale della lista scaricata; un file locale deve contenere URL assoluti.
+
+### Recupero delle righe anomale
+
+La lettura prosegue dopo testo isolato e separatori decorativi riconoscibili: le righe vengono ignorate e conteggiate, conservando i canali validi prima e dopo. In M3U estesa, un URL HTTP/HTTPS assoluto senza `EXTINF` viene recuperato con il nome provvisorio **Canale N**; i percorsi relativi senza metadati non vengono trasformati in canali. Un `EXTINF` senza URL prima del successivo `EXTINF` o della fine del documento viene escluso singolarmente. Metadati con virgolette incomplete o senza nome recuperabile vengono esclusi insieme al relativo indirizzo.
+
+L'anteprima e **Stato e ultima importazione** distinguono voci recuperate, righe ignorate, escluse e duplicate. I conteggi comprendono l'intera lettura; gli esempi restano limitati a 20 e indicano canale, riga, motivo e, quando necessario, provenienza da una lista inclusa. Gli scarti hanno precedenza sui separatori, anche quando questi compaiono più avanti o in altri documenti. Gli esempi informativi uguali vengono raggruppati; le altre segnalazioni non bloccanti conservano fino a tre esempi per categoria, proprietà e documento. URL, token, valori degli header e chiavi non vengono mostrati nei messaggi diagnostici. I log tecnici riportano soltanto conteggi, tipo di errore e numero di riga.
+
+Direttive rimaste dopo l'ultimo canale vengono indicate come **direttive finali senza canale ignorate**, senza aggiungere una voce al conteggio degli scarti. Un vero `EXTINF` senza indirizzo continua invece a essere escluso singolarmente. Modelli e segnaposto non vengono completati inventando URL o dati mancanti.
+
+Il filtro RSI del catalogo integrato non si applica alle liste personali. `group-logo` viene conservato e segnalato come immagine del gruppo; la conservazione non implica la visualizzazione di copertine dei gruppi.
+
+Gli snapshot importati con il lettore precedente restano utilizzabili. **Aggiorna lista** richiede nuovamente il documento completo, senza riutilizzare ETag o Last-Modified finché la rilettura non è riuscita; per i file locali usa **Sostituisci file**. La riconciliazione degli ID conserva le corrispondenze univoche, comprese quelle dei vecchi percorsi `localplay` ricostruiti come URL relativi. Un errore mantiene la copia precedente.
+
+Un aggiornamento senza anteprima conserva la copia precedente se incontra metadati irrecuperabili o voci senza indirizzo, oppure se il catalogo si riduce in presenza di righe estranee. Per accettare consapevolmente il risultato, usa **Sorgente → Modifica URL** o **Sostituisci file**, verifica l'anteprima e salva. Non viene applicata una sostituzione parziale dopo errori di rete, codifica, HTML, manifest HLS, cicli o superamento dei limiti; rimane necessario almeno un canale valido.
 
 ## Limiti e salvataggio
 
@@ -60,6 +76,8 @@ Al primo avvio, gli archivi JSON della 0.8.0 vengono convertiti una voce alla vo
 
 Ogni configurazione si applica alla singola voce EXTINF e termina al suo URL. Le direttive non vengono eseguite come istruzioni Kodi: Lume ne traduce i valori supportati nella configurazione del proprio player Media3.
 
+Nella lettura delle liste, `KODIPROP`, `EXTVLCOPT` ed `EXTHTTP` possono precedere o seguire `EXTINF`. La configurazione termina sempre all'indirizzo della voce. Header, tipo manifest, durata, opzioni e DRM vengono azzerati per la successiva; restano valide le impostazioni esplicitamente globali e il profilo dei gruppi selezionato. Per User-Agent e Referer prevalgono, nell'ordine, i valori globali, le direttive precedenti a `EXTINF`, gli attributi della voce e le direttive successive. Le altre precedenze e gli override manuali descritti sotto restano applicabili.
+
 | Sintassi | Comportamento |
 | --- | --- |
 | Attributi EXTINF `http-user-agent`, `http-referrer` | Header comuni |
@@ -71,6 +89,7 @@ Ogni configurazione si applica alla singola voce EXTINF e termina al suo URL. Le
 | `inputstream.adaptive.stream_headers` | Aggiunte o sostituzioni per segmenti, chiavi HLS e flussi progressivi |
 | `inputstream.adaptive.manifest_type=mpd` o `dash` | DASH |
 | `inputstream.adaptive.manifest_type=hls` | HLS |
+| `inputstream.adaptive.file_type=mpd/dash` oppure `m3u8/hls` | Indicazione di formato, subordinata a MIME e manifest espliciti |
 | `inputstream.adaptive.license_type` / `license_key` | DRM nelle forme descritte sotto |
 | `inputstream.adaptive.drm_legacy` | Forma compatta DRM, dati e header separati da `\|` |
 | `inputstream.adaptive.drm` | Sottoinsieme JSON con un solo sistema e una licenza |
@@ -78,6 +97,8 @@ Ogni configurazione si applica alla singola voce EXTINF e termina al suo URL. Le
 Per gli header comuni, dal valore meno prioritario al più prioritario: attributi/EXTVLCOPT, `common_headers`, EXTHTTP, suffisso dell’URL. Si applicano poi gli header specifici per manifest o stream. Per compatibilità con le liste Kodi precedenti, se `manifest_headers` manca, anche `stream_headers` viene usato per i manifest; per separarli occorre dichiarare esplicitamente `manifest_headers`.
 
 I nomi sono confrontati senza distinguere maiuscole e minuscole; `referrer` diventa `Referer`, `cookies` diventa `Cookie`, ed è riconosciuto il prefisso `!` usato da alcune liste. Un User-Agent personalizzato viene inviato una sola volta. Header di trasporto come `Host`, `Content-Length`, `Range`, `Connection`, `Accept-Encoding` e credenziali proxy non sono accettati. Caratteri di controllo o una configurazione oltre i limiti escludono la voce.
+
+Nelle proprietà `common_headers`, `manifest_headers` e `stream_headers` è accettato anche un User-Agent abbreviato riconoscibile, per esempio `HbbTV/1.6.1`, tradotto in un solo header `User-Agent`. La forma mantiene le precedenze e gli ambiti della proprietà. Stringhe arbitrarie senza nome header e combinazioni malformate restano errori; gli header delle licenze richiedono la sintassi esplicita.
 
 Le richieste a un’origine diversa da quella iniziale perdono gli header specificati dalla lista, comprese `Authorization` e `Cookie`, conservando lo User-Agent. L’origine comprende protocollo, host e porta. In **Accesso ai server** si possono autorizzare fino a 16 origini aggiuntive per funzione. Un’autorizzazione per il video non vale per le licenze, i loghi o il download. I redirect sono controllati fino a cinque passaggi; un redirect 307/308 che mantiene un corpo POST richiede un’origine autorizzata prima di inoltrarlo.
 
@@ -108,6 +129,14 @@ Forme ammesse in `license_key` per ClearKey:
 
 Le chiavi locali vengono validate, convertite in una risposta JWK temporanea e passate al callback DRM di Media3. Non viene contattato alcun server licenze per questa forma. Più chiavi sono ammesse; chiavi diverse per lo stesso KID rendono la voce non valida. Widevine personale richiede un URL di licenza, con gli eventuali header nella stessa forma.
 
+Se manca `license_type`, una struttura locale `KID:KEY`, mappa JSON, JWK o data URI viene riconosciuta come ClearKey soltanto dopo la validazione completa. Valori ambigui, chiavi in conflitto o payload malformati restano esclusi. Una dichiarazione DRM esplicita prevale sempre; un semplice URL di licenza richiede il tipo del sistema. Anche ClearKey riconosciuto automaticamente mantiene il requisito DASH/CENC.
+
+## Sorgenti localplay
+
+Una riga `localplay=Nove` indica una sorgente da risolvere, distinta dagli URL HTTP/HTTPS. Il riconoscimento è comune a tutte le liste, anche ai file locali. Le route ammesse sono Nove, RealTime, DMAX, Giallo, Turbo/MotorTrend, HGTV, FoodNetwork, K2, Frisbee e Discovery, con gli alias espliciti per i nomi con spazi. I valori sconosciuti vengono esclusi con un motivo; non diventano percorsi relativi e non vengono eseguiti come comandi.
+
+La sorgente resta tipizzata nell'archivio privato, con ID, gruppi e metadati della lista. All'apertura viene usato lo stesso resolver Discovery del catalogo integrato. Le richieste del resolver rispettano validità, cancellazione, cookie e consenso HTTP del contesto personale, senza inoltrare gli header privati della lista durante la ricerca iniziale del provider. Gli header e le impostazioni espliciti della lista si applicano allo stream risolto con le normali precedenze; DRM e header forniti dal resolver vengono mantenuti. Non viene contattato il provider durante l'importazione.
+
 La forma compatta `drm_legacy` è `sistema|dati|header`. Il sottoinsieme JSON di `drm` accetta un solo sistema, una proprietà `license` e l’eventuale `priority`; in `license` sono ammessi `server_url`, `req_headers` (query o oggetto di stringhe) e `keyids` (mappa esadecimale per ClearKey). Esempio:
 
 ```m3u
@@ -134,7 +163,7 @@ In **Lettura e contenuti** sono disponibili M3U estesa o semplice e codifiche UT
 
 `tvg-name` resta distinto dal nome dopo la virgola; `ch-number` è riconosciuto insieme a `tvg-chno`. Il numero 9999 è un numero valido per un canale personale, distinto dal numero assente. La scelta dei gruppi mantiene il comportamento attuale come predefinito; il profilo Kodi resetta l’eredità dopo un `group-title`, mentre OTT Navigator applica `EXTGRP` alla sola voce successiva. Il profilo Kodi accetta il marcatore VOD isolato, continuando a rifiutare le strutture HLS di segmenti.
 
-`type="playlist"` e `content-type="playlist"` caricano documenti HTTP/HTTPS inclusi, in ordine, con limiti condivisi di byte, voci, profondità e documenti. I cicli vengono rifiutati. Ogni figlia usa il proprio indirizzo finale per risolvere gli URL relativi; una base loghi o un indirizzo EPG ereditato conserva l’origine del documento che l’ha dichiarata. Un errore strutturale o di download conserva l’intero snapshot precedente. Un file locale deve fornire indirizzi assoluti per gli stream e i documenti inclusi.
+`type="playlist"` e `content-type="playlist"` caricano documenti HTTP/HTTPS inclusi, in ordine, con limiti condivisi di byte, voci, profondità e documenti. I cicli vengono rifiutati. Ogni figlia usa il proprio indirizzo finale per risolvere gli URL relativi; una base loghi o un indirizzo EPG ereditato conserva l’origine del documento che l’ha dichiarata. Un errore bloccante del documento o di download conserva l’intero snapshot precedente; il recupero delle singole voci segue le regole descritte sopra. Un file locale deve fornire indirizzi assoluti per gli stream e i documenti inclusi.
 
 `refresh` accetta durate ISO-8601 o valori con suffisso `s`, `m`, `h`, `d`; un numero senza unità viene segnalato. L’intervallo è limitato fra 15 minuti e 7 giorni. `refresh_at` accetta un istante ISO-8601; l’attesa automatica non supera sette giorni. Un intervallo manuale prevale su `refresh` e `refresh_at`. I controlli avvengono durante l’uso dell’app e rispettano i limiti del server; non è incluso un servizio di aggiornamento durante standby.
 

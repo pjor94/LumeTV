@@ -27,6 +27,7 @@ class HomeInspection : Instrumentation() {
                 else if(arguments.getString("operation")=="playlist-video-navigation")it.lumetv.app.playlists.VideoNavigationInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-performance")it.lumetv.app.playlists.VideoPerformanceInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-pages")it.lumetv.app.playlists.PlaylistPagesInspection.run(this,arguments)
+                else if(arguments.getString("operation") in setOf("playlist-import-recovery","playlist-import-compatibility"))it.lumetv.app.playlists.PlaylistRecoveryInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-def")kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
                     it.lumetv.app.playlists.OnDemandInspection.run(context,requireNotNull(arguments.getString("fixtureRoot")),arguments.getString("mode")=="phone")
                 } else it.lumetv.app.playlists.PlaylistInspection.run(context,arguments)

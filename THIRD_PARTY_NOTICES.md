@@ -17,7 +17,7 @@ Il catalogo delle sorgenti e la logica delle integrazioni usate da Lume TV deriv
 
 **Ulteriori modifiche — 2026-11-09:** interfacce dedicate a smartphone Android e TV nella stessa APK, riconoscimento del dispositivo, comandi touch e guida per canale sul telefono, con catalogo, risoluzione delle sorgenti e riproduzione condivisi.
 
-Gli adattamenti Kotlin si trovano principalmente in `RaiResolver.kt`, `MediasetResolver.kt`, `La7Resolver.kt` e `StreamResolver.kt`. Lume TV reimplementa queste integrazioni per il player Android e usa il servizio playlist WLTV per aggiornare il catalogo. L’origine e il checksum della copia inclusa sono registrati in `catalog/source.json` nel repository.
+Gli adattamenti Kotlin si trovano principalmente in `RaiResolver.kt`, `MediasetResolver.kt`, `La7Resolver.kt`, `StreamResolver.kt` e `DiscoveryResolver.kt`. Lume TV reimplementa queste integrazioni per il player Android e usa il servizio playlist WLTV per aggiornare il catalogo. L’origine e il checksum della copia inclusa sono registrati in `catalog/source.json` nel repository.
 
 A WorldLiveTV, WLTV Group e ai collaboratori del progetto originale va il merito della raccolta e della manutenzione delle sorgenti. Lume TV è un progetto indipendente e non rappresenta un’app ufficiale WorldLiveTV.
 

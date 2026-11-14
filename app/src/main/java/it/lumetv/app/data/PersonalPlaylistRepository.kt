@@ -48,7 +48,12 @@ data class PersonalPlaylistSource(val id: String, val name: String, val location
     val allowHttp: Boolean = false, val metadataComplete: Boolean = true)
 data class PlaylistPreview(val count: Int, val sample: List<String>, val excluded: Int, val duplicates: Int,
     val warnings: List<String>, val httpEntries: Int, val drmEntries: Int,
-    val diagnostics: List<PlaylistDiagnostic> = emptyList(), val diagnosticCounts: Map<PlaylistDiagnosticCode,Int> = emptyMap())
+    val diagnostics: List<PlaylistDiagnostic> = emptyList(), val diagnosticCounts: Map<PlaylistDiagnosticCode,Int> = emptyMap()) {
+    val recovered get()=diagnosticCounts[PlaylistDiagnosticCode.RECOVERED_ENTRY] ?: 0
+    val ignoredLines get()=diagnosticCounts[PlaylistDiagnosticCode.IGNORED_TEXT] ?: 0
+    val structuralIssues get()=(diagnosticCounts[PlaylistDiagnosticCode.MISSING_STREAM] ?: 0)+(diagnosticCounts[PlaylistDiagnosticCode.MALFORMED_METADATA] ?: 0)
+    fun requiresReview(previousCount:Int)=structuralIssues>0 || ignoredLines>0 && count<previousCount
+}
 data class PlaylistImportProgress(val bytes: Long, val entries: Int)
 data class PlaylistClassificationProgress(val name:String,val processed:Int,val total:Int)
 enum class PlaylistSavePhase { PREPARING, SAVING }
@@ -332,6 +337,8 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                         })
                     result=PlaylistDraft(location,address,kind,staged.preview,staged.file,allowHttp,download.etag,download.modified,
                         settings,staged.descriptor,if(ownsContext)context else null)
+                    staged.preview.let { report->android.util.Log.i("LumePlaylistImport",
+                        "verification_complete entries=${report.count} recovered=${report.recovered} ignored=${report.ignoredLines} incomplete=${report.structuralIssues}") }
                 }
                 continuation.context.ensureActive();notify(true)
                 val draft=result!!
@@ -339,6 +346,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 result=null
             } catch (error: Exception) {
                 result?.close()
+                android.util.Log.w("LumePlaylistImport","verification_failed type=${error.javaClass.simpleName} line=${(error as? it.lumetv.core.PlaylistFormatException)?.line ?: 0}")
                 val safe=if(error is java.nio.charset.CharacterCodingException) IOException("La codifica della lista non è valida. Scegli UTF-8, Windows-1252 o Latin-1 nelle impostazioni avanzate.") else error
                 if(continuation.isActive) continuation.resumeWithException(safe)
             } finally { download.close() }
@@ -461,10 +469,13 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             return withContext(Dispatchers.IO) { mutex.withLock {
                 val current=sources[id]
                 if(current==null || current.source.revision!=previous.source.revision) return@withLock false
+                if(draft?.report?.requiresReview(current.source.count)==true)
+                    throw it.lumetv.core.PlaylistFormatException("La nuova copia contiene voci incomplete o meno canali dopo il recupero. La lista salvata è stata conservata. Verifica una sostituzione dalla pagina Sorgente per controllare l’anteprima.")
                 val count=draft?.report?.count ?: current.source.count;total(count,id)
                 val next=current.copy(source=current.source.copy(count=count,checked=now(),updated=if(draft!=null)now() else current.source.updated,error="",metadataComplete=if(draft!=null)true else current.source.metadataComplete),
                     etag=etag ?: current.etag,modified=modified ?: current.modified,retryAt=0,failures=0,serverRetryAt=0,
                     descriptor=draft?.descriptor ?: current.descriptor,report=draft?.report ?: current.report,
+                    importVersion=if(draft!=null)it.lumetv.core.PersonalM3uParser.VERSION else current.importVersion,
                     classificationVersion=if(draft!=null)PlaylistContentClassifier.VERSION else current.classificationVersion,
                     classificationNeedsRefresh=if(draft!=null)false else current.classificationNeedsRefresh,
                     classificationConflicts=draft?.report?.diagnosticCounts?.get(PlaylistDiagnosticCode.CONTENT_CONFLICT) ?: if(draft!=null)0 else current.classificationConflicts)
@@ -494,17 +505,11 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         }
     }
     suspend fun resolve(id:String,http:okhttp3.OkHttpClient):ResolvedStream {
-        load()
-        val (stream,context)=withContext(Dispatchers.IO) { mutex.withLock {
-            val pair=sources.values.asSequence().filter {it.source.enabled}.mapNotNull {s->store.entry(s.source.id,id)?.let {s to it}}.firstOrNull()
-                ?: throw SourceException("Questo canale personale non è più disponibile. Controlla la sua lista.")
-            val (source,entry)=pair
-            val context=requestContext(source.source.id) ?: throw SourceException("La configurazione della lista è cambiata. Riapri il canale.")
-            PersonalPlaybackConfig.parse(entry,source.source.allowHttp,source.settings).copy(personalNetworkToken=context.token) to context
-        } }
-        val mime=stream.mimeType ?: PersonalPlaylistNetwork.detectMime(stream.url,stream.manifestHeaders ?: stream.headers,http,stream.personalAllowHttp,context)
-        if(!context.valid())throw SourceException("La configurazione della lista è cambiata. Riapri il canale.")
-        return stream.copy(mimeType=mime)
+        val snapshot=playbackEntry(id)
+        val stream=PersonalPlaylistStreams.initial(snapshot,http)
+        val mime=stream.mimeType ?: PersonalPlaylistNetwork.detectMime(stream.url,stream.manifestHeaders ?: stream.headers,http,stream.personalAllowHttp,snapshot.context)
+        if(!snapshot.context.valid())throw SourceException("La configurazione della lista è cambiata. Riapri il canale.")
+        return stream.copy(mimeType=mime,personalNetworkToken=snapshot.context.token)
     }
     private fun publish(changed:Set<String>,increment:Boolean=true) {
         contentKinds.keys.retainAll(sources.keys)

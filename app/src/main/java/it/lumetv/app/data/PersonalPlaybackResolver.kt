@@ -18,7 +18,7 @@ internal class PersonalPlaybackResolver(context:Context,private val personal:Per
     private val history=PersonalPlaybackStore.get(context)
     suspend fun resolve(channel:Channel,target:PlaybackTarget,position:Long?):PersonalPlaybackResult=withContext(Dispatchers.IO) {
         val entry=personal.playbackEntry(channel.id)
-        var resolved=PersonalPlaybackConfig.parse(entry.entry,entry.source.allowHttp,entry.settings)
+        var resolved=PersonalPlaylistStreams.initial(entry,http)
         val mode=if(target.mode==PlaybackMode.ARCHIVE)PlaybackMode.ARCHIVE else if(entry.content==PlaylistContentKind.VOD)PlaybackMode.VOD else PlaybackMode.LIVE
         val actual=target.copy(mode=mode)
         val point=position ?: history.read(entry.source.id,actual).resume
@@ -28,13 +28,13 @@ internal class PersonalPlaybackResolver(context:Context,private val personal:Per
             val event=guide.event(channel,target.eventId) ?: throw SourceException("Il programma non è più presente nella guida. Torna alla diretta.")
             val settings=entry.settings.guide
             val spec=CatchupUrls.spec(entry.entry.metadata,settings.archiveDays) ?: throw SourceException("Questo canale non dichiara un archivio.")
-            val archive=CatchupUrls.build(entry.entry.url,spec,ArchiveEvent(event.programme.start,event.programme.end,event.catchupId),System.currentTimeMillis(),point,
+            val archive=CatchupUrls.build(resolved.url,spec,ArchiveEvent(event.programme.start,event.programme.end,event.catchupId),System.currentTimeMillis(),point,
                 settings.archiveZone.takeIf(String::isNotBlank)?.let(ZoneId::of) ?: ZoneId.systemDefault(),settings.ongoing,settings.startBufferSeconds,settings.endBufferSeconds)
             if(URI(archive.url).scheme.equals("http",true) && !entry.source.allowHttp)
                 throw SourceException("L’archivio richiede HTTP. Consenti HTTP per questa lista prima di rivedere il programma.")
             title=event.programme.title;duration=archive.duration;regenerate=archive.canRegenerate
             base=if(regenerate)archive.offset else 0L;start=if(regenerate)0 else point
-            val oldOrigin=origin(entry.entry.url);val newOrigin=origin(archive.url)
+            val oldOrigin=origin(resolved.url);val newOrigin=origin(archive.url)
             fun scoped(role:PlaylistResource,headers:Map<String,String>):Map<String,String> = if(oldOrigin==newOrigin || newOrigin in entry.settings.rule(role).origins)headers
                 else headers.filterKeys {it.equals("User-Agent",true)}
             val path=URI(archive.url).path.orEmpty().lowercase()

@@ -222,6 +222,8 @@ class PersonalPlaylistsScreen(
                 if(item.error.isNotBlank())page.text(item.error,muted=false)
                 if(pending)page.text(if(item.location==PlaylistLocation.URL)"Per completare il riconoscimento dei contenuti, aggiorna la lista e rileggi le indicazioni originali."
                     else "Per completare il riconoscimento dei contenuti, usa Sostituisci file e rileggi le indicazioni originali.")
+                if(!item.metadataComplete)page.text(if(item.location==PlaylistLocation.URL)"Aggiorna la lista per applicare la compatibilità estesa e rileggere anche le voci escluse in precedenza. La copia salvata resta disponibile."
+                    else "Usa Sostituisci file per applicare la compatibilità estesa. La copia salvata resta disponibile.")
                 if(conflicts>0 && conflicts!=result?.diagnosticCounts?.get(it.lumetv.core.PlaylistDiagnosticCode.CONTENT_CONFLICT))page.text("$conflicts voci con indicazioni di contenuto discordanti. Prevalgono i tipi espliciti o le regole manuali; tra gruppi discordanti prevale Dirette.")
                 fun clean(value:String)=value.filterNot {it.isISOControl() && it!='\n'}.take(1000)
                 attributes["billed-msg"]?.takeIf(String::isNotBlank)?.let {page.text(clean(it))}
@@ -229,9 +231,9 @@ class PersonalPlaylistsScreen(
                 attributes["max-conn"]?.toIntOrNull()?.takeIf {it in 1..1000}?.let {page.text("Connessioni indicate dal servizio: $it")}
                 page.section("Ultima importazione")
                 if(result==null)page.text("Il rapporto non è disponibile. Aggiorna la lista o sostituisci il file per recuperare i metadati.")
-                else {page.text(importCounts(result.count,result.excluded,result.duplicates,false))
-                    result.diagnosticCounts.forEach {(code,n)->page.text("$n · ${code.message}")}
-                    result.warnings.take(10).forEach {page.text(it)}
+                else {page.text(importCounts(result.count,result.excluded,result.duplicates,false)+recoveryCounts(result))
+                    result.diagnosticCounts.entries.sortedBy {it.key.displayPriority}.forEach {(code,n)->page.text("$n · ${code.message}")}
+                    result.warnings.take(20).forEach {page.text(it)}
                 }
             }
         }catch(cancelled:CancellationException){throw cancelled}catch(error:Exception){parent.message(PlaylistPages.safeMessage(error),true)}}
@@ -299,22 +301,23 @@ class PersonalPlaylistsScreen(
                     page.message("Verifico la lista…");progress.visibility=VISIBLE;primary.isEnabled=false;cancel.text="Interrompi verifica"
                     val controls=listOfNotNull<View>(title,address,insecure,reading,access)+(0 until type.childCount).map(type::getChildAt)
                     controls.forEach {it.isEnabled=false}
-                    verifying=scope.launch {try {
-                        val update:(PlaylistImportProgress)->Unit={state->activity.runOnUiThread {if(page.alive)page.message(String.format(Locale.ITALY,"Verifico… %.1f MiB · %,d voci",state.bytes/1048576.0,state.entries))}}
+                    verifying=scope.launch {var reporting=true;try {
+                        val update:(PlaylistImportProgress)->Unit={state->activity.runOnUiThread {if(reporting && page.alive)page.message(String.format(Locale.ITALY,"Verifico… %.1f MiB · %,d voci",state.bytes/1048576.0,state.entries))}}
                         val selectedKind=if(pages.selected(type)==1)MediaKind.RADIO else MediaKind.TV
                         val result=if(file==null)repository.prepareUrl(address?.text.toString(),selectedKind,insecure.isChecked,config,update) else repository.prepareFile(file,selectedKind,insecure.isChecked,config,update)
                         if(!page.alive){result.close();return@launch}
                         draft=result;preview.visibility=VISIBLE;preview.removeAllViews()
                         preview.addView(TvStyle.text(activity,"Anteprima della lista",20f,bold=true))
                         val report=result.report
-                        preview.addView(TvStyle.text(activity,importCounts(report.count,report.excluded,report.duplicates,true),15f,pages.secondary))
+                        preview.addView(TvStyle.text(activity,importCounts(report.count,report.excluded,report.duplicates,true)+recoveryCounts(report),15f,pages.secondary))
                         report.sample.forEach {preview.addView(TvStyle.text(activity,it,16f))}
                         report.warnings.take(5).forEach {preview.addView(TvStyle.text(activity,it,14f,pages.secondary))}
                         primary.text=if(replacing==null)"Importa lista" else "Sostituisci lista"
-                        page.message("Verifica completata. Controlla l’anteprima e salva la lista.")
+                        page.message(if(report.structuralIssues>0)"Verifica completata con voci incomplete escluse. Controlla l’anteprima prima di salvare."
+                            else "Verifica completata. Controlla l’anteprima e salva la lista.")
                         preview.post {preview.requestRectangleOnScreen(android.graphics.Rect(0,0,preview.width,preview.height.coerceAtMost(activity.dp(200))),true)}
                     }catch(cancelled:CancellationException){throw cancelled}catch(error:Exception){page.message(PlaylistPages.safeMessage(error),true)}finally {
-                        verifying=null;if(page.alive){primary.isEnabled=true;cancel.text="Annulla";progress.visibility=GONE;controls.forEach {it.isEnabled=true}}
+                        reporting=false;verifying=null;if(page.alive){primary.isEnabled=true;cancel.text="Annulla";progress.visibility=GONE;controls.forEach {it.isEnabled=true}}
                     }}
                 }
             }
@@ -323,6 +326,12 @@ class PersonalPlaylistsScreen(
     private fun importCounts(count:Int,excluded:Int,duplicates:Int,preview:Boolean):String {
         val entries=if(count==1)"1 voce ${if(preview)"importabile" else "importata"}" else "$count voci ${if(preview)"importabili" else "importate"}"
         return "$entries · $excluded ${if(excluded==1)"esclusa" else "escluse"} · $duplicates ${if(duplicates==1)"duplicata" else "duplicate"}"
+    }
+    private fun recoveryCounts(report:it.lumetv.app.data.PlaylistPreview):String {
+        val parts=mutableListOf<String>()
+        if(report.recovered>0)parts+=if(report.recovered==1)"1 voce recuperata" else "${report.recovered} voci recuperate"
+        if(report.ignoredLines>0)parts+=if(report.ignoredLines==1)"1 riga ignorata" else "${report.ignoredLines} righe ignorate"
+        return if(parts.isEmpty())"" else "\n"+parts.joinToString(" · ")
     }
     private fun chooseFile(replacing:String?) {
         replacingFile=replacing

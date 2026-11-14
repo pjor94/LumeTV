@@ -40,13 +40,13 @@ Per abilitare il collegamento con AURA nelle release, imposta anche la variabile
 ## Preparare e avviare una versione
 
 1. Imposta `versionName` in `app/build.gradle.kts` e incrementa `versionCode` per ogni nuova versione da installare come aggiornamento.
-2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.10.0` è già presente.
+2. Aggiungi in `CHANGELOG.md` una sezione `## <versionName>` con le novità da includere nella release. Per la versione attuale, la sezione `0.10.1` è già presente.
 3. Esegui le verifiche indicate in [CONTRIBUTING.md](../CONTRIBUTING.md). Aggiungi a Git tutti i nuovi sorgenti e documenti, poi committa e pubblica le modifiche.
 4. Crea e pubblica un tag esattamente uguale a `v<versionName>`. Con la versione attuale:
 
 ```sh
-git tag -a v0.10.0 -m 'Lume TV 0.10.0'
-git push origin v0.10.0
+git tag -a v0.10.1 -m 'Lume TV 0.10.1'
+git push origin v0.10.1
 ```
 
 Il push avvia la pipeline. In alternativa, dopo che il workflow è presente sul ramo predefinito, apri **Actions → Release → Run workflow** e inserisci il nome di un tag esistente. Il checkout usa quel tag; non viene pubblicato lo stato corrente di un altro ramo. Per pubblicare le modifiche nuove, il tag deve includerle.
@@ -73,6 +73,8 @@ Il job di compilazione ha permessi di sola lettura. Solo il job di pubblicazione
 - `SHA256SUMS`: checksum dei quattro allegati precedenti.
 
 Le note provengono dalla sezione della versione in `CHANGELOG.md` e mantengono il credito WorldLiveTV. Una release già pubblicata non viene sovrascritta: per modificarne l’APK crea una nuova versione. In caso di errore durante il caricamento, il workflow può riprendere una bozza rimasta incompleta. Gli allegati intermedi sono conservati come artefatti per 7 giorni; i report di verifica per 14 giorni. Gli allegati delle release restano disponibili senza quella scadenza.
+
+Prima di distribuire il pacchetto, controlla anche i file nuovi inclusi nella preparazione locale e i contenuti dell'APK, dell'archivio sorgenti e delle note. Liste personali, relativi URL, token, chiavi reali, snapshot privati, log del telefono e allegati delle segnalazioni restano fuori dai file pubblicabili. `analysis/`, `.signing/`, gli output di compilazione e i database locali sono esclusi dal pacchetto; il generatore rifiuta analisi e keystore aggiunti per errore ai file tracciati. Gli esempi di compatibilità devono usare domini e credenziali sintetici. I sorgenti upstream allegati vengono verificati mediante i checksum del lock.
 
 L’app interroga l’elenco delle release pubblicate, esclude bozze e versioni contrassegnate come pre-release e legge `update.json` dagli allegati. La pubblicazione controlla che i metadati coincidano con la configurazione Android e con l’APK preparata. Il confronto sul dispositivo usa `versionCode`: incrementalo sempre, anche rispetto a una build installata localmente per i test. I metadati non sono una fonte di fiducia per la firma: l’app confronta il certificato dell’APK con quello già installato e Android verifica la firma durante l’installazione. Le build con firma differente vengono rifiutate.
 
@@ -107,8 +109,8 @@ Puoi preparare anche gli allegati completi senza modificare l’indice Git, crea
 ```sh
 ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease :app:writeReleaseDependencies --no-daemon
 python3 tools/dependency_sources.py fetch --report app/build/reports/release-dependencies.json
-python3 tools/release.py sign --sdk "$ANDROID_HOME" --output-dir dist/v0.10.0
-python3 tools/release.py prepare --include-untracked --output-dir dist/v0.10.0
+python3 tools/release.py sign --sdk "$ANDROID_HOME" --output-dir dist/v0.10.1
+python3 tools/release.py prepare --include-untracked --output-dir dist/v0.10.1
 ```
 
 La cartella contiene APK firmata, sorgenti corrispondenti, certificato pubblico, `update.json`, checksum e note estratte dal changelog. `--include-untracked` è ammesso solo per `prepare`: include esplicitamente i nuovi sorgenti e documenti, lasciando esclusi file ignorati, chiavi, build e appunti locali.

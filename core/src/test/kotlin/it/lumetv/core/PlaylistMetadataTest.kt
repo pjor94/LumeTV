@@ -94,7 +94,7 @@ class PlaylistMetadataTest {
     @Test fun `diagnostics retain exclusions even after many optional metadata warnings`() {
         val text="#EXTM3U\n"+(1..25).joinToString("\n") {"#EXTINF:-1 catchup=\"shift\",Canale $it\nhttps://example.com/$it"}+"\n#EXTINF:-1,Bloccato\nhttp://blocked.example/live"
         val result=PersonalM3uParser.parse(text)
-        assertEquals(1,result.excluded);assertTrue(result.warnings.first().contains("HTTP"));assertEquals(20,result.diagnostics.size)
+        assertEquals(1,result.excluded);assertTrue(result.warnings.first().contains("HTTP"));assertEquals(2,result.diagnostics.size)
         assertFalse(result.warnings.joinToString().contains("blocked.example"))
         assertNull(PlaylistDescriptor(mapOf("root" to mapOf("refresh" to "12"))).refreshMillis)
     }

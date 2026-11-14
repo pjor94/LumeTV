@@ -232,7 +232,8 @@ internal class PlaylistPages(val activity:ComponentActivity,val scope:CoroutineS
     companion object {
         fun watcher(changed:()->Unit)=object:TextWatcher {override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){changed()};override fun afterTextChanged(s:Editable?) {}}
         fun safeMessage(error:Exception):String=when(error) {
-            is it.lumetv.core.PlaylistFormatException,is it.lumetv.app.data.PlaylistFetchException,is it.lumetv.app.data.SourceException->error.message.orEmpty()
+            is it.lumetv.core.PlaylistFormatException->error.message.orEmpty()+error.line?.let {" · riga $it"}.orEmpty()
+            is it.lumetv.app.data.PlaylistFetchException,is it.lumetv.app.data.SourceException->error.message.orEmpty()
             is java.io.IOException->if(error.javaClass==java.io.IOException::class.java)error.message ?: "Operazione non riuscita. Riprova." else "Connessione non riuscita. Controlla l’indirizzo e riprova."
             else->"Operazione non riuscita. La copia precedente è stata conservata."
         }

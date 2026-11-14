@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.10.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.10.0/LumeTV-0.10.0.apk)
+> ### [Scarica Lume TV 0.10.1 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.10.1/LumeTV-0.10.1.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.10.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.10.1) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -35,15 +35,15 @@ Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedica
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Novità della 0.10.0
+## Novità della 0.10.1
 
-La nuova **sezione Video** compare nella barra di smartphone e TV solo quando una lista abilitata contiene VOD. Copertine, raccolte Film e Serie, schede dei titoli, stagioni, **Continua a guardare** e **La mia lista** permettono di consultare i contenuti senza confonderli con i canali in diretta. Ricerca, filtri e posizione vengono conservati tornando dal player o cambiando sezione.
+L'importazione M3U prosegue dopo separatori e righe estranee, recupera gli URL validi senza metadati e distingue i residui finali dai veri canali incompleti. L'anteprima e l'ultima importazione conservano i dettagli degli scarti con canale, riga e motivo, raggruppando gli avvisi ripetuti.
 
-Le liste personali arrivano a **500.000 voci lette per sorgente**, **un milione di voci importate complessive** e **256 MiB per documento**. Il catalogo usa lo **scorrimento continuo**, con ricerca e gruppi sull'intero database e caricamento di blocchi limitati in memoria. Filtri e selettori sono integrati nella finestra dell'app, con comandi touch e focus del telecomando.
+Il motore riconosce direttive prima o dopo `EXTINF`, chiavi ClearKey locali valide anche senza tipo esplicito, User-Agent abbreviati e l'indicazione di formato `file_type`. Le sorgenti `localplay` supportate usano il resolver Discovery condiviso, con alias MotorTrend/Turbo. Il filtro RSI resta limitato al catalogo integrato: le liste personali seguono le normali regole di importazione.
 
-Il riconoscimento VOD gestisce anche contenuti con durata `-1`: attributi della lista, direttive Kodi e percorsi strutturati dei provider. In **Opzioni → Le mie liste → Lettura e contenuti** puoi scegliere modalità Prudente o Esteso e regole per gruppo. La biblioteca usa un indice dedicato, anteprime progressive e cache immagini condivisa per rendere più rapida la navigazione delle liste grandi.
+Per applicare le correzioni alle copie già salvate usa **Opzioni → Le mie liste → [lista] → Aggiorna lista**, oppure **Sorgente → Sostituisci file** per un file locale. L'aggiornamento mantiene la copia precedente in caso di errore e riconcilia gli ID dei canali, conservando le corrispondenze di preferiti e impostazioni.
 
-Restano disponibili HTTP su consenso per sorgente, header separati per funzione, le forme KODIPROP/ClearKey supportate, guida XMLTV e archivio per i servizi compatibili. Gli archivi precedenti conservano ID, preferiti, impostazioni e avanzamenti; liste personali e guida restano sul dispositivo, escluse da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](docs/personal-playlists.md).
+Restano disponibili la biblioteca **Video**, lo scorrimento continuo, le liste fino a **500.000 voci lette per sorgente**, HTTP su consenso, guida XMLTV e archivio per i servizi compatibili. Le liste personali restano sul dispositivo e sono escluse da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](docs/personal-playlists.md).
 
 ## TV, radio e riproduzione continua
 
@@ -132,9 +132,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.10.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.10.1** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.10.0 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.10.1 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 
@@ -195,7 +195,7 @@ Per le interruzioni recuperabili, Lume prova a riaprire la diretta fino a tre vo
 
 Il catalogo viene aggiornato ogni 24 ore mentre usi l’app. La lista inclusa nell’APK serve per il primo avvio: nomi, numerazioni e nuovi canali delle integrazioni supportate arrivano direttamente dal servizio WLTV.
 
-RSI La1 e RSI La2 sono escluse dal catalogo incluso, dalla cache e dagli aggiornamenti, anche quando presenti nella lista sorgente.
+RSI La1 e RSI La2 sono escluse dal catalogo incluso, dalla sua cache e dai suoi aggiornamenti, anche quando presenti nella sorgente integrata. Alle liste personali questo filtro non si applica: le due emittenti seguono le normali regole di importazione e riproduzione della lista.
 
 La guida usa il servizio [EPG-Guide](https://epg-guide.com/) e si aggiorna ogni sei ore. Non tutti i canali hanno un palinsesto disponibile. In caso di errore o di pausa richiesta dal servizio, Lume conserva i programmi già scaricati e riprova in seguito.
 

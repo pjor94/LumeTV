@@ -32,7 +32,7 @@ internal data class PlaylistStored(val source: PersonalPlaylistSource, val addre
     val retryAt: Long = 0, val failures: Int = 0, val serverRetryAt: Long = 0,
     val settings: PlaylistSettings = PlaylistSettings(), val descriptor: PlaylistDescriptor = PlaylistDescriptor(),
     val report: PlaylistPreview? = null,val classificationVersion:Int=PlaylistContentClassifier.VERSION,
-    val classificationNeedsRefresh:Boolean=false,val classificationConflicts:Int=0)
+    val classificationNeedsRefresh:Boolean=false,val classificationConflicts:Int=0,val importVersion:Int=PersonalM3uParser.VERSION)
 
 internal data class PlaylistStageResult(val file: File, val preview: PlaylistPreview, val descriptor: PlaylistDescriptor)
 
@@ -78,12 +78,12 @@ internal class PersonalPlaylistStore(val directory: File) {
                             fingerprint.bindString(1,value);fingerprint.executeInsert()!=-1L
                         }, include = include) { entry ->
                             try {
-                                val playback = PersonalPlaybackConfig.parse(entry, allowHttp, settings)
+                                val drmSpec = PersonalPlaybackConfig.validate(entry, allowHttp, settings)
                                 bindEntry(insert, entry, PlaylistIdentity.newId(), 0)
                                 insert.executeInsert()
                                 entry.groups.forEach { name -> group.bindString(1,name);group.bindLong(2,entry.position.toLong());group.executeInsert() }
                                 if (sample.size < 5) sample += entry.name
-                                if (playback.drm != null) drm++
+                                if (drmSpec != null) drm++
                                 null
                             } catch (error: PlaylistFormatException) { error.message ?: "La configurazione del canale non è supportata." }
                         }
@@ -395,7 +395,7 @@ internal class PersonalPlaylistStore(val directory: File) {
     private fun hash(value: String): String = android.util.Base64.encodeToString(MessageDigest.getInstance("SHA-256").digest(value.toByteArray()), android.util.Base64.NO_WRAP)
     private fun encodeEntry(e: PlaylistEntry) = JSONObject().put("name",e.name).put("url",e.url).put("tvgId",e.tvgId).put("logo",e.logo)
         .put("number",e.number).put("groups",JSONArray(e.groups)).put("kind",e.kind.name).put("headers",JSONObject(e.headers))
-        .put("mime",e.mimeType).put("position",e.position).put("properties",JSONObject(e.properties))
+        .put("localplay",e.localplay?.name).put("mime",e.mimeType).put("position",e.position).put("properties",JSONObject(e.properties))
         .put("metadata",JSONObject().put("attributes",JSONObject(e.metadata.attributes)).put("duration",e.metadata.duration)
             .put("document",e.metadata.document).put("seekable",e.metadata.seekable).put("content",e.metadata.contentKind.name)
             .put("vodMarker",e.metadata.vodMarker.name).put("classificationReason",e.metadata.classificationReason?.name)
@@ -414,7 +414,7 @@ internal class PersonalPlaylistStore(val directory: File) {
                 if (m.isNull("duration")) null else m.getDouble("duration"),document,
                 if (m.isNull("seekable")) null else m.getBoolean("seekable"), PlaylistContentKind.valueOf(m.optString("content", "LIVE")),descriptor.bases[document],
                 PlaylistVodMarker.valueOf(m.optString("vodMarker","NONE")),optional(m,"classificationReason")?.let(PlaylistClassificationReason::valueOf),
-                m.optInt("classificationVersion"),m.optBoolean("legacyVod")))
+                m.optInt("classificationVersion"),m.optBoolean("legacyVod")),optional(root,"localplay")?.let(it.lumetv.core.PlaylistLocalplay::valueOf))
     }
     private fun groups(array: JSONArray): List<String> = (0 until minOf(array.length(),20)).map { array.getString(it).take(100) }
     private fun optional(obj: JSONObject, key: String) = obj.optString(key).takeIf { it.isNotBlank() && it != "null" }
@@ -424,7 +424,7 @@ internal class PersonalPlaylistStore(val directory: File) {
             .put("count",s.count).put("updated",s.updated).put("checked",s.checked).put("revision",s.revision).put("kind",s.defaultKind.name)
             .put("allowHttp",s.allowHttp).put("error",s.error).put("address",stored.address).put("etag",stored.etag).put("modified",stored.modified)
             .put("attempted",stored.attempted).put("retryAt",stored.retryAt).put("failures",stored.failures).put("serverRetryAt",stored.serverRetryAt)
-            .put("complete",s.metadataComplete).put("settings",stored.settings.json())
+            .put("complete",s.metadataComplete).put("importVersion",stored.importVersion).put("settings",stored.settings.json())
             .put("classificationVersion",stored.classificationVersion).put("classificationNeedsRefresh",stored.classificationNeedsRefresh).put("classificationConflicts",stored.classificationConflicts)
             .put("documents",JSONObject().apply { stored.descriptor.documents.forEach { (id, attrs) -> put(id,JSONObject(attrs)) } })
             .put("bases",JSONObject(stored.descriptor.bases))
@@ -436,10 +436,10 @@ internal class PersonalPlaylistStore(val directory: File) {
         val id=root.getString("id");require(validId(id))
         val source=PersonalPlaylistSource(id,root.getString("name"),PlaylistLocation.valueOf(root.getString("location")),root.getBoolean("enabled"),
             root.getInt("count"),root.getLong("updated"),root.getLong("checked"),root.getLong("revision"),MediaKind.valueOf(root.getString("kind")),
-            root.optString("error"),allowHttp=root.optBoolean("allowHttp"),metadataComplete=root.optBoolean("complete",false))
+            root.optString("error"),allowHttp=root.optBoolean("allowHttp"),metadataComplete=root.optBoolean("complete",false) && root.optInt("importVersion")>=PersonalM3uParser.VERSION)
         return PlaylistStored(source,root.optString("address"),optional(root,"etag"),optional(root,"modified"),root.optLong("attempted"),root.optLong("retryAt"),root.optInt("failures"),root.optLong("serverRetryAt"),
             PlaylistSettings.read(root.optJSONObject("settings")),readDescriptor(root.optJSONObject("documents"),root.optJSONObject("bases")),root.optJSONObject("report")?.let(::decodeReport),
-            root.optInt("classificationVersion"),root.optBoolean("classificationNeedsRefresh"),root.optInt("classificationConflicts"))
+            root.optInt("classificationVersion"),root.optBoolean("classificationNeedsRefresh"),root.optInt("classificationConflicts"),root.optInt("importVersion"))
     }
 
     private fun readAttributes(value: JSONObject?): Map<String,String> {
@@ -456,14 +456,14 @@ internal class PersonalPlaylistStore(val directory: File) {
     }
     private fun encodeReport(r: PlaylistPreview) = JSONObject().put("count",r.count).put("sample",JSONArray(r.sample)).put("excluded",r.excluded)
         .put("duplicates",r.duplicates).put("warnings",JSONArray(r.warnings)).put("http",r.httpEntries).put("drm",r.drmEntries)
-        .put("diagnostics",JSONArray().apply { r.diagnostics.forEach { put(JSONObject().put("code",it.code.name).put("line",it.line).put("entry",it.entry).put("excluded",it.excluded)) } })
+        .put("diagnostics",JSONArray().apply { r.diagnostics.forEach { put(JSONObject().put("code",it.code.name).put("line",it.line).put("entry",it.entry).put("excluded",it.excluded).put("document",it.document).put("reason",it.reason).put("channel",it.channel).put("property",it.property)) } })
         .put("counts",JSONObject().apply { r.diagnosticCounts.forEach { (code,n) -> put(code.name,n) } })
     private fun decodeReport(r: JSONObject): PlaylistPreview {
         fun strings(name:String,max:Int) = r.optJSONArray(name)?.let { a -> require(a.length()<=max); (0 until a.length()).map { a.getString(it).take(500) } }.orEmpty()
         val d = r.optJSONArray("diagnostics") ?: JSONArray(); require(d.length()<=20)
         val counts=r.optJSONObject("counts") ?: JSONObject();require(counts.length()<=PlaylistDiagnosticCode.entries.size)
         return PlaylistPreview(r.getInt("count"),strings("sample",5),r.getInt("excluded"),r.getInt("duplicates"),strings("warnings",20),r.getInt("http"),r.getInt("drm"),
-            (0 until d.length()).map { i -> d.getJSONObject(i).let { PlaylistDiagnostic(PlaylistDiagnosticCode.valueOf(it.getString("code")),it.getInt("line"),it.getInt("entry"),it.getBoolean("excluded")) } },
+            (0 until d.length()).map { i -> d.getJSONObject(i).let { PlaylistDiagnostic(PlaylistDiagnosticCode.valueOf(it.getString("code")),it.getInt("line"),it.getInt("entry"),it.getBoolean("excluded"),it.optString("document","root").take(64),optional(it,"reason")?.take(300),it.optString("channel").take(100),optional(it,"property")?.take(100)) } },
             counts.keys().asSequence().associate { PlaylistDiagnosticCode.valueOf(it) to counts.getInt(it) })
     }
     private fun checkSpace(reserve:Long) {

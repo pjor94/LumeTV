@@ -88,6 +88,10 @@ class PlaylistDescriptor(val documents: Map<String, Map<String, String>> = empty
 }
 
 enum class PlaylistDiagnosticCode(val message: String) {
+    TRAILING_PROPERTIES("direttive finali senza canale ignorate"), UNKNOWN_LOCALPLAY("comando localplay non riconosciuto"),
+    GROUP_ARTWORK("immagini dei gruppi conservate"),
+    IGNORED_TEXT("riga estranea o separatore ignorato"), RECOVERED_ENTRY("voce recuperata con metadati minimi"),
+    MISSING_STREAM("voce incompleta: indirizzo mancante"), MALFORMED_METADATA("metadati incompleti: voce esclusa"),
     INVALID_ENTRY("indirizzo o nome non valido"), HTTP_BLOCKED("stream HTTP escluso; abilita HTTP per questa lista"),
     INVALID_HEADERS("header o protezione non supportati"), CATALOG_EXCLUDED("canale escluso dal catalogo Lume"),
     UNSUPPORTED_PLAYBACK("configurazione di riproduzione non supportata"),
@@ -96,11 +100,20 @@ enum class PlaylistDiagnosticCode(val message: String) {
     INVALID_REFRESH("aggiornamento della lista non interpretabile; usa un intervallo nelle impostazioni"),
     PLAYER_OPTION("opzione del player non supportata"),
     SERVICE_INFO("informazioni del servizio disponibili nello stato della lista"),
-    CONTENT_CONFLICT("indicazioni live e video discordanti; applicata la precedenza dei tipi espliciti o delle regole dei gruppi"),
+    CONTENT_CONFLICT("indicazioni live e video discordanti; applicata la precedenza dei tipi espliciti o delle regole dei gruppi");
+    val displayPriority get()=when(this) {
+        UNKNOWN_LOCALPLAY,MISSING_STREAM,MALFORMED_METADATA,INVALID_ENTRY,HTTP_BLOCKED,INVALID_HEADERS,CATALOG_EXCLUDED,UNSUPPORTED_PLAYBACK->0
+        RECOVERED_ENTRY,TRAILING_PROPERTIES,CONTENT_CONFLICT,INVALID_REFRESH->1
+        IGNORED_TEXT->2
+        else->3
+    }
 }
 
-data class PlaylistDiagnostic(val code: PlaylistDiagnosticCode, val line: Int, val entry: Int, val excluded: Boolean = false) {
-    val message get() = (if (entry > 0) "Voce $entry" else "Lista") + " · riga $line: " + code.message
+data class PlaylistDiagnostic(val code: PlaylistDiagnosticCode, val line: Int, val entry: Int, val excluded: Boolean = false, val document: String = "root",
+    val reason:String?=null,val channel:String="",val property:String?=null) {
+    val priority get()=if(excluded)0 else code.displayPriority
+    val message get() = (if(document=="root")"" else "Lista inclusa · ") + (if (entry > 0) "Voce $entry" else "Lista") +
+        channel.takeIf(String::isNotBlank)?.let {" ($it)"}.orEmpty()+" · riga $line: " + (reason ?: code.message)+property?.let {" · $it"}.orEmpty()
 }
 
 /** Shared across includes: duplicates, rejected entries and playlist references also spend the budget. */
@@ -121,10 +134,10 @@ class PlaylistDocument(val reader: java.io.Reader, val baseUrl: String, val rele
 
 object PlaylistCapabilities {
     val activeAttributes = setOf("tvg-id", "tvg-name", "tvg-logo", "group-title", "tvg-chno", "ch-number", "radio", "http-user-agent", "http-referrer", "type", "content-type", "media", "media-dir", "media-size", "poster", "poster-url", "tvg-poster", "cover", "cover-url", "backdrop", "backdrop-url", "fanart", "fanart-url", "tvg-background", "plot", "description", "tvg-description", "genre", "genres", "year", "release-year", "series-title", "series-name", "show-title", "tvg-series", "series-id", "show-id", "season", "season-number", "episode", "episode-number")
-    val storedAttributes = setOf("url-tvg", "x-tvg-url", "url-logo", "tvg-shift", "catchup", "catchup-type", "catchup-source", "catchup-days", "catchup-correction", "catchup-time", "timeshift", "tvg-rec", "tvg-language", "tvg-country", "parent-code", "adult", "audio-track", "video-track", "m3uautoload")
+    val storedAttributes = setOf("group-logo", "url-tvg", "x-tvg-url", "url-logo", "tvg-shift", "catchup", "catchup-type", "catchup-source", "catchup-days", "catchup-correction", "catchup-time", "timeshift", "tvg-rec", "tvg-language", "tvg-country", "parent-code", "adult", "audio-track", "video-track", "m3uautoload")
     val informativeAttributes = setOf("max-conn","billed-till","billed-msg")
     val sourceAttributes = setOf("refresh", "refresh_at")
-    val activeProperties = setOf("inputstream", "inputstreamaddon", "mimetype", "inputstream.adaptive.manifest_type", "inputstream.adaptive.common_headers", "inputstream.adaptive.manifest_headers", "inputstream.adaptive.stream_headers", "inputstream.adaptive.license_type", "inputstream.adaptive.license_key", "inputstream.adaptive.drm_legacy", "inputstream.adaptive.drm", "exthttp", "lumetv.pipe_headers")
+    val activeProperties = setOf("inputstream", "inputstreamaddon", "mimetype", "inputstream.adaptive.manifest_type", "inputstream.adaptive.file_type", "inputstream.adaptive.common_headers", "inputstream.adaptive.manifest_headers", "inputstream.adaptive.stream_headers", "inputstream.adaptive.license_type", "inputstream.adaptive.license_key", "inputstream.adaptive.drm_legacy", "inputstream.adaptive.drm", "exthttp", "lumetv.pipe_headers")
     val unsupportedDrmProperties = setOf("inputstream.adaptive.server_certificate", "inputstream.adaptive.pre_init_data", "inputstream.adaptive.license_data", "inputstream.adaptive.license_flags", "inputstream.adaptive.drm_pre_init_data")
 
     fun logo(raw: String, defaults: Map<String, String>, base: String?): String {
