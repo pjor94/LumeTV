@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.10.1 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.10.1/LumeTV-0.10.1.apk)
+> ### [Scarica Lume TV 0.10.2 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.10.2/LumeTV-0.10.2.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.10.1) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.10.2) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -35,13 +35,13 @@ Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedica
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Novità della 0.10.1
+## Novità della 0.10.2
 
-L'importazione M3U prosegue dopo separatori e righe estranee, recupera gli URL validi senza metadati e distingue i residui finali dai veri canali incompleti. L'anteprima e l'ultima importazione conservano i dettagli degli scarti con canale, riga e motivo, raggruppando gli avvisi ripetuti.
+Corretto il blocco ClearKey/DASH delle sorgenti personali `localplay`, compresa Food Network, quando il provider restituisce uno stream HLS non protetto. Formato e protezione vengono scelti dal resolver; le configurazioni statiche della lista restano conservate senza essere applicate a un flusso diverso da quello per cui erano state preparate.
 
-Il motore riconosce direttive prima o dopo `EXTINF`, chiavi ClearKey locali valide anche senza tipo esplicito, User-Agent abbreviati e l'indicazione di formato `file_type`. Le sorgenti `localplay` supportate usano il resolver Discovery condiviso, con alias MotorTrend/Turbo. Il filtro RSI resta limitato al catalogo integrato: le liste personali seguono le normali regole di importazione.
+La correzione è comune a tutte le route supportate. Restano applicati gli header per risorsa e i consensi HTTP; gli stream protetti mantengono la configurazione del provider. Le voci con URL diretto continuano a usare ClearKey, Widevine e le indicazioni di formato della lista.
 
-Per applicare le correzioni alle copie già salvate usa **Opzioni → Le mie liste → [lista] → Aggiorna lista**, oppure **Sorgente → Sostituisci file** per un file locale. L'aggiornamento mantiene la copia precedente in caso di errore e riconcilia gli ID dei canali, conservando le corrispondenze di preferiti e impostazioni.
+Per i canali `localplay` già salvati basta aggiornare l'app e riaprire il canale, senza reimportare la lista. Interfaccia, preferiti e impostazioni restano disponibili.
 
 Restano disponibili la biblioteca **Video**, lo scorrimento continuo, le liste fino a **500.000 voci lette per sorgente**, HTTP su consenso, guida XMLTV e archivio per i servizi compatibili. Le liste personali restano sul dispositivo e sono escluse da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](docs/personal-playlists.md).
 
@@ -132,9 +132,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.10.1** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.10.2** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.10.1 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.10.2 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 

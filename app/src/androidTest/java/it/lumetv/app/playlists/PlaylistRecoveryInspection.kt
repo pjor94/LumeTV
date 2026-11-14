@@ -105,6 +105,15 @@ object PlaylistRecoveryInspection {
             for(channel in commands) {
                 val stream=io {repo.resolve(channel.id,client)}
                 verify("${channel.name} uses the shared resolver and retains personal isolation"){stream.url=="$root/owned/live.m3u8" && stream.personal && stream.personalNetworkToken.isNotBlank()}
+                verify("${channel.name} uses provider HLS without the static playlist ClearKey"){
+                    stream.mimeType=="application/x-mpegURL" && stream.drm==null && stream.hlsKey?.parameters.orEmpty().isEmpty()
+                }
+                val mediaSource=it.lumetv.app.playback.PersonalMediaSources.create(context,stream,
+                    androidx.media3.common.MediaItem.Builder().setUri(stream.url).setMimeType(stream.mimeType).build(),client,client,
+                    repo.requestContext(channel.sourceId)) {repo.allowsHttp(channel.sourceId)}
+                verify("${channel.name} creates the real HLS media source without a ClearKey error"){
+                    mediaSource is androidx.media3.exoplayer.hls.HlsMediaSource
+                }
             }
             verify("MotorTrend uses the explicit Turbo alias"){io {repo.playbackEntry(commands.single {it.name=="Motor Trend"}.id).entry.localplay==PlaylistLocalplay.MOTOR_TREND}}
             verify("provider resolution uses the existing three-step protocol for all routes"){providerCalls==24}

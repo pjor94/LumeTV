@@ -29,6 +29,7 @@ internal object PersonalPlaybackConfig {
         return configuration(entry,allowHttp,settings,resolved)
     }
     private fun configuration(entry:PlaylistEntry,allowHttp:Boolean,settings:PlaylistSettings,base:ResolvedStream?):ResolvedStream {
+        val providerManaged=entry.localplay!=null
         val streamUrl=base?.url ?: entry.url
         val streamUri=runCatching {URI(streamUrl)}.getOrNull()
         if((entry.localplay==null || base!=null) && (streamUri==null || streamUri.host.isNullOrBlank() || streamUri.rawUserInfo!=null || streamUri.rawFragment!=null || streamUrl.length>8192 || !PersonalPlaylistNetwork.allowed(streamUri,allowHttp)))
@@ -41,21 +42,24 @@ internal object PersonalPlaybackConfig {
             else PlaylistHeaders.merge(base?.headers.orEmpty(),base?.manifestHeaders.orEmpty(),listed, streamOnly)
         val manifest=PlaylistHeaders.merge(manifestBase,settings.rule(PlaylistResource.MANIFEST).headers)
         val media = PlaylistHeaders.merge(common, streamOnly,settings.rule(PlaylistResource.MEDIA).headers)
-        if (p[PREFIX + "manifest_type"]?.trim()?.lowercase(Locale.ROOT)?.let { it !in setOf("hls","mpd","dash") }==true)
+        if (!providerManaged && p[PREFIX + "manifest_type"]?.trim()?.lowercase(Locale.ROOT)?.let { it !in setOf("hls","mpd","dash") }==true)
             invalid("Il tipo di manifest richiesto dalla voce non è supportato.")
         if(listOf("inputstream","inputstreamaddon").any { p[it]?.let { name -> name!="inputstream.adaptive" }==true })
             invalid("La voce richiede un componente esterno non disponibile.")
-        val mime=p["mimetype"]?.takeIf(String::isNotBlank) ?: entry.mimeType ?: PlaylistManifestTypes.mime(p[PREFIX+"manifest_type"]) ?: PlaylistManifestTypes.mime(p[PREFIX+"file_type"]) ?: base?.mimeType
+        // A typed provider route supplies its own format and protection. Static list hints
+        // may describe an older stream and must not turn unprotected HLS into ClearKey.
+        val mime=if(providerManaged)base?.mimeType else p["mimetype"]?.takeIf(String::isNotBlank) ?: entry.mimeType ?: PlaylistManifestTypes.mime(p[PREFIX+"manifest_type"]) ?: PlaylistManifestTypes.mime(p[PREFIX+"file_type"]) ?: base?.mimeType
         val hls=(mime?.contains("mpegurl",true)==true || streamUri?.path.orEmpty().endsWith(".m3u8",true))
-        val keyFields=p[PREFIX+"license_key"]?.split('|')
-        val key=if(p[PREFIX+"license_type"].isNullOrBlank() && p[PREFIX+"drm"].isNullOrBlank() && p[PREFIX+"drm_legacy"].isNullOrBlank() && hls && keyFields?.size==4 && keyFields.drop(2).all(String::isBlank)) {
+        val keyFields=if(providerManaged)null else p[PREFIX+"license_key"]?.split('|')
+        val key=if(providerManaged)base?.hlsKey?.let {it.copy(headers=PlaylistHeaders.merge(it.headers,settings.rule(PlaylistResource.KEY).headers))}
+        else if(p[PREFIX+"license_type"].isNullOrBlank() && p[PREFIX+"drm"].isNullOrBlank() && p[PREFIX+"drm_legacy"].isNullOrBlank() && hls && keyFields?.size==4 && keyFields.drop(2).all(String::isBlank)) {
             val parameters=keyFields[0].removePrefix("?").removePrefix("&")
             if(parameters.length>8192 || parameters.any { it.isISOControl() || it in "#|" } || "://" in parameters)
                 invalid("I parametri per la chiave HLS non sono validi.")
             HlsKeySpec(parameters,PlaylistHeaders.merge(media,query(keyFields[1]),settings.rule(PlaylistResource.KEY).headers))
         } else null
-        val drm = drm(if(key!=null)p-(PREFIX+"license_key") else p, common,streamUrl.takeUnless {entry.localplay!=null && base==null}, allowHttp,settings.rule(PlaylistResource.LICENSE).headers)
-            ?: base?.drm?.let {it.copy(headers=PlaylistHeaders.merge(it.headers,settings.rule(PlaylistResource.LICENSE).headers))}
+        val providerDrm=base?.drm?.let {it.copy(headers=PlaylistHeaders.merge(it.headers,settings.rule(PlaylistResource.LICENSE).headers))}
+        val drm = if(providerManaged)providerDrm else drm(if(key!=null)p-(PREFIX+"license_key") else p, common,streamUrl, allowHttp,settings.rule(PlaylistResource.LICENSE).headers) ?: providerDrm
         if(drm?.scheme==DrmScheme.CLEARKEY && hls)
             invalid("ClearKey personale richiede uno stream DASH con cifratura CENC.")
         return ResolvedStream(streamUrl, mime, media, drm, personal = true, personalAllowHttp = allowHttp, manifestHeaders = manifest,

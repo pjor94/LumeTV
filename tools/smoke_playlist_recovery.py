@@ -42,6 +42,10 @@ def compatibility_playlist(root):
         name=special.get(i,f'Canale {i}')
         if i in range(5,13):name=routes[i-5][0]
         if i in hints:lines.append('#KODIPROP:inputstream.adaptive.file_type='+('m3u8' if i in hls else 'mpd'))
+        if i in range(5,13):
+            lines.extend(['#KODIPROP:inputstream.adaptive.manifest_type=mpd',
+                '#KODIPROP:inputstream.adaptive.license_type=clearkey',
+                '#KODIPROP:inputstream.adaptive.license_key='+pairs])
         if i in [0,1]:lines.append('#KODIPROP:inputstream.adaptive.license_key='+pairs)
         if i==2:lines.append('#KODIPROP:inputstream.adaptive.stream_headers=HbbTV/1.6.1')
         artwork=f' group-logo="{root}/group.png"' if i<16 else ''

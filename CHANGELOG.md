@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.2 · Correzione riproduzione localplay — 2026-11-14
+
+- Le sorgenti `localplay` usano formato e protezione restituiti dal resolver. Corretto il blocco «ClearKey personale richiede uno stream DASH con cifratura CENC» quando il provider restituisce HLS non protetto e la lista contiene una vecchia configurazione ClearKey. La precedenza è comune a tutte le route supportate, compresa Food Network.
+- Le indicazioni statiche di formato, le licenze e le opzioni delle chiavi HLS restano conservate nella lista ma non sostituiscono la configurazione risolta dal provider. Restano applicati gli header per risorsa e i consensi HTTP; gli stream protetti mantengono il DRM e la licenza del resolver. Le voci con URL diretto continuano a usare la configurazione della lista, con le normali validazioni ClearKey/DASH.
+
+Per i canali `localplay` già salvati basta installare l'aggiornamento e riaprire il canale; non occorre reimportare la lista. Interfaccia invariata.
+
+Verifiche delle funzionalità: 418 test JVM superati, con tre controlli live facoltativi esclusi; 32 test Python e 104 controlli sui simulatori TV e smartphone. Verificate importazione, conservazione dei dati e creazione del media source HLS con liste e risposte sintetiche dei provider. Compilazioni Debug/Release e AndroidTest; Android Lint senza errori. I controlli automatici non avviano stream personali reali.
+
 ## 0.10.1 · Importazione M3U più tollerante — 2026-11-14
 
 - Recupero delle configurazioni ClearKey locali senza `license_type` quando le chiavi sono valide e riconoscibili; le dichiarazioni DRM esplicite mantengono la precedenza. Header User-Agent abbreviati riconosciuti nelle proprietà comuni, manifest e stream; `file_type=mpd/m3u8` usato come indicazione di formato subordinata a MIME e manifest espliciti.

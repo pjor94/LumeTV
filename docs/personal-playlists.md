@@ -1,8 +1,8 @@
 # Compatibilità delle liste personali
 
-Questo documento descrive le liste personali di **Lume TV 0.10.1**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
+Questo documento descrive le liste personali di **Lume TV 0.10.2**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
 
-La versione 0.10.1 include il recupero delle righe anomale, la compatibilità delle configurazioni riconoscibili e le sorgenti localplay descritte sotto.
+La versione 0.10.2 include il recupero delle righe anomale, la compatibilità delle configurazioni riconoscibili e le sorgenti localplay descritte sotto, con formato e protezione determinati dal resolver.
 
 ## Gestione tramite pagine
 
@@ -136,6 +136,8 @@ Se manca `license_type`, una struttura locale `KID:KEY`, mappa JSON, JWK o data 
 Una riga `localplay=Nove` indica una sorgente da risolvere, distinta dagli URL HTTP/HTTPS. Il riconoscimento è comune a tutte le liste, anche ai file locali. Le route ammesse sono Nove, RealTime, DMAX, Giallo, Turbo/MotorTrend, HGTV, FoodNetwork, K2, Frisbee e Discovery, con gli alias espliciti per i nomi con spazi. I valori sconosciuti vengono esclusi con un motivo; non diventano percorsi relativi e non vengono eseguiti come comandi.
 
 La sorgente resta tipizzata nell'archivio privato, con ID, gruppi e metadati della lista. All'apertura viene usato lo stesso resolver Discovery del catalogo integrato. Le richieste del resolver rispettano validità, cancellazione, cookie e consenso HTTP del contesto personale, senza inoltrare gli header privati della lista durante la ricerca iniziale del provider. Gli header e le impostazioni espliciti della lista si applicano allo stream risolto con le normali precedenze; DRM e header forniti dal resolver vengono mantenuti. Non viene contattato il provider durante l'importazione.
+
+Per le sorgenti `localplay`, formato e protezione sono determinati dal resolver. Le indicazioni statiche `mimetype`, `manifest_type`, `file_type`, `license_type`, `license_key`, `drm_legacy` e `drm` restano conservate nella voce ma non sostituiscono quelle del provider. Uno stream HLS non protetto resta quindi senza DRM anche se la lista contiene vecchie chiavi ClearKey; uno stream protetto mantiene il sistema e la licenza restituiti dal resolver. Restano applicati gli header della lista e gli override manuali per risorsa. Questa precedenza vale anche per le route già salvate, alla successiva apertura del canale. Per le voci con URL HTTP/HTTPS diretto continuano a valere le configurazioni DRM e di formato della lista.
 
 La forma compatta `drm_legacy` è `sistema|dati|header`. Il sottoinsieme JSON di `drm` accetta un solo sistema, una proprietà `license` e l’eventuale `priority`; in `license` sono ammessi `server_url`, `req_headers` (query o oggetto di stringhe) e `keyids` (mappa esadecimale per ClearKey). Esempio:
 
