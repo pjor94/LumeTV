@@ -53,6 +53,7 @@ class MobileMiniPlayer(context: Context, private val open: () -> Unit, toggle: (
             state.mode==it.lumetv.core.PlaybackMode.VOD -> "Video"
             else -> state.nowPlaying.ifBlank { if (state.audioOnly) "In ascolto" else "In diretta" }
         }
+        if (state.options.sleepRemaining > 0) status.append(" · Timer " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining).substringBefore(" rimanenti"))
         play.setImageResource(if (state.wantsToPlay) R.drawable.ic_mobile_pause else R.drawable.ic_mobile_play)
         play.contentDescription = if (state.wantsToPlay) "Pausa" else "Riprendi"
         preview.visibility = if (state.channel != null && !state.audioOnly) VISIBLE else GONE

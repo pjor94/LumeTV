@@ -19,12 +19,29 @@ class HomeInspection : Instrumentation() {
             check(Build.HARDWARE in setOf("ranchu", "goldfish")) { "Only disposable emulators are supported" }
             check(Build.VERSION.SDK_INT >= 26)
             val context = targetContext
+            if(arguments.getString("operation")=="companion") {
+                val result=it.lumetv.app.companion.CompanionInspection.run(this,arguments)
+                finish(Activity.RESULT_OK,Bundle().apply {putString("snapshot",result.toString())});return
+            }
+            if(arguments.getString("operation")=="backup") {
+                val result=it.lumetv.app.playlists.BackupInspection.run(this,arguments)
+                finish(Activity.RESULT_OK,Bundle().apply {putString("snapshot",result.toString())});return
+            }
+            if(arguments.getString("operation")=="channel-personalization") {
+                val result=it.lumetv.app.playlists.ChannelPersonalizationInspection.run(this,arguments)
+                finish(Activity.RESULT_OK,Bundle().apply {putString("snapshot",result.toString())});return
+            }
+            if (arguments.getString("operation") == "playback-options") {
+                val result = it.lumetv.app.playback.PlaybackOptionsInspection.run(this, arguments)
+                finish(Activity.RESULT_OK, Bundle().apply { putString("snapshot", result.toString()) }); return
+            }
             if(arguments.getString("operation").orEmpty().startsWith("playlist-")) {
                 val result=if(arguments.getString("operation")=="playlist-large")it.lumetv.app.playlists.LargePlaylistInspection.run(context,arguments)
                 else if(arguments.getString("operation")=="playlist-continuous")it.lumetv.app.playlists.ContinuousCatalogInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-vod-detection")it.lumetv.app.playlists.VodDetectionInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-library")it.lumetv.app.playlists.VideoLibraryInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-navigation")it.lumetv.app.playlists.VideoNavigationInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-video-continuity")it.lumetv.app.playlists.VideoContinuityInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-performance")it.lumetv.app.playlists.VideoPerformanceInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-pages")it.lumetv.app.playlists.PlaylistPagesInspection.run(this,arguments)
                 else if(arguments.getString("operation") in setOf("playlist-import-recovery","playlist-import-compatibility"))it.lumetv.app.playlists.PlaylistRecoveryInspection.run(this,arguments)

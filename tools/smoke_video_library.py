@@ -16,7 +16,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--adb',required=True);parser.add_argument('--phone',required=True);parser.add_argument('--tv',required=True)
     parser.add_argument('--video',type=Path,required=True);parser.add_argument('--font',type=float,default=1.0)
-    parser.add_argument('--operation',choices=['playlist-video-library','playlist-video-navigation'],default='playlist-video-library')
+    parser.add_argument('--operation',choices=['playlist-video-library','playlist-video-navigation','playlist-video-continuity'],default='playlist-video-library')
     parser.add_argument('--output',type=Path,default=ROOT/'analysis/video-library/native')
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'validation.json').unlink(missing_ok=True)
@@ -30,13 +30,17 @@ def main():
         def do_HEAD(self):
             self.send_response(200);self.send_header('Content-Type','video/mp4');self.send_header('Content-Length',str(len(video)));self.end_headers()
         def do_GET(self):
+            if self.path.startswith('/unavailable.mp4'):
+                self.send_error(404);return
             start=0
             if self.headers.get('Range','').startswith('bytes='):
                 match=re.match(r'bytes=(\d+)-',self.headers['Range'])
                 if match:start=min(int(match[1]),len(video)-1)
             self.send_response(206 if start else 200);self.send_header('Content-Type','video/mp4');self.send_header('Accept-Ranges','bytes')
             if start:self.send_header('Content-Range',f'bytes {start}-{len(video)-1}/{len(video)}')
-            self.send_header('Content-Length',str(len(video)-start));self.end_headers();self.wfile.write(video[start:])
+            self.send_header('Content-Length',str(len(video)-start));self.end_headers()
+            try:self.wfile.write(video[start:])
+            except (BrokenPipeError,ConnectionResetError):pass
         def log_message(self,*unused):pass
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.daemon_threads=True;Thread(target=server.serve_forever,daemon=True).start()
     apk=ROOT/'app/build/outputs/apk/debug/app-debug.apk';sha=hashlib.sha256(apk.read_bytes()).hexdigest()
@@ -51,7 +55,7 @@ def main():
             '-e','mode',mode,PACKAGE+'.test/it.lumetv.app.home.HomeInspection'],capture_output=True,text=True,timeout=600)
         (d.output/'instrumentation.log').write_text(run.stdout+run.stderr)
         logs=d.run('logcat','-d').decode(errors='replace');(d.output/'logcat.txt').write_text(logs)
-        for name in ['00-home','01-films','02-details','03-landscape','04-series','05-episodes','06-no-cover','00-no-video','01-video-tab','02-video-active','03-video-hidden','04-landscape-navigation','05-final-navigation','failure']:
+        for name in ['00-home','01-films','02-details','03-landscape','04-series','05-episodes','06-no-cover','00-no-video','01-video-tab','02-video-active','03-video-hidden','04-landscape-navigation','05-final-navigation','01-watched','02-hidden','03-next-episode','04-resumed','05-landscape','failure']:
             data=d.read(f'cache/video-library/{name}.png')
             if data:(d.output/f'{name}.png').write_bytes(data)
         match=re.search(r'^INSTRUMENTATION_RESULT: snapshot=(.+)$',run.stdout,re.M)

@@ -76,8 +76,15 @@ class TvPlayer(context: Context, @Suppress("UNUSED_PARAMETER") http: HttpClient)
     fun seek(position:Long){service?.seek(position)}
     fun seekBy(delta:Long){service?.seekBy(delta)}
     fun restart(){service?.restart()}
+    fun reopenVideo(){service?.reopenVideo()}
+    fun playFollowingEpisode(currentId:String,nextId:String){service?.playFollowingEpisode(currentId,nextId)}
+    fun reloadFollowingEpisode(){service?.reloadFollowingEpisode()}
     fun setAudioOnly(value: Boolean) { service?.setAudioOnly(value) }
     fun refreshPreferences() { service?.refreshPreferences() }
+    fun setPlaybackPreferences(value: PlaybackPreferences) { service?.setPlaybackPreferences(value) }
+    fun chooseTrack(revision: Long, type: Int, key: String): Boolean = service?.chooseTrack(revision, type, key) == true
+    fun automaticTrack(type: Int) { service?.automaticTrack(type) }
+    fun setSleepTimer(minutes: Int) { service?.setSleepTimer(minutes) }
     fun stop() { pending = null; service?.stopPlayback() }
     fun release(stop: Boolean = true) {
         pending = null

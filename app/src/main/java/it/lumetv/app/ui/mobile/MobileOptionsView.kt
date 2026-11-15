@@ -16,10 +16,13 @@ import it.lumetv.app.ui.TvStyle.dp
 
 enum class MobileOption(val label: String) {
     PLAYLISTS("Le mie liste"),
+    CHANNELS("Canali e preferiti"),
+    BACKUP("Backup e ripristino"),
     INTERFACE("Interfaccia"),
     ZAPPING("Cambio canale"),
     QUALITY("Qualità e consumo dati"),
     UPDATES("Aggiornamenti"),
+    COMPANION("Telecomando"),
     AURA("Collegamento con AURA"),
     HOME("Canali nella Home"),
     ABOUT("Informazioni"),
@@ -68,10 +71,13 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
         }
         heading("Preferenze", first = true)
         row(MobileOption.PLAYLISTS)
+        row(MobileOption.CHANNELS)
+        row(MobileOption.BACKUP)
         row(MobileOption.INTERFACE)
         row(MobileOption.ZAPPING)
         row(MobileOption.QUALITY, divider = false)
         heading("App e collegamenti")
+        row(MobileOption.COMPANION)
         row(MobileOption.UPDATES)
         row(MobileOption.AURA)
         if (it.lumetv.app.home.HomeChannels.television(context)) row(MobileOption.HOME)
@@ -83,10 +89,13 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
              version: String, availableVersion: String?, homeSummary: String) {
         val values = mapOf(
             MobileOption.PLAYLISTS to "Aggiungi liste M3U da URL HTTP/HTTPS o file",
+            MobileOption.CHANNELS to "Riordina preferiti, nascondi e ripristina canali",
+            MobileOption.BACKUP to "Esporta e recupera liste, preferiti e riprese",
             MobileOption.INTERFACE to interfaceLabel,
             MobileOption.ZAPPING to if (favoritesOnly) "Solo preferiti" else "Tutte le emittenti",
             MobileOption.QUALITY to if (dataSaver) "Risparmio dati" else "Automatica",
             MobileOption.UPDATES to (availableVersion?.let { "Lume TV $it è disponibile" } ?: "Versione installata: $version"),
+            MobileOption.COMPANION to "Abbina una TV e usa il telefono come telecomando",
             MobileOption.AURA to if (auraAllowed) "Attivo" else "Non attivo",
             MobileOption.HOME to homeSummary,
             MobileOption.ABOUT to "Lume TV $version",

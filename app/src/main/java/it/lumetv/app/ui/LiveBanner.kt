@@ -21,6 +21,8 @@ import java.util.Locale
 
 @SuppressLint("ViewConstructor") // Programmatic UI with an activity-scoped image repository.
 class LiveBanner(context: Context, logos: ChannelLogoRepository) : LinearLayout(context) {
+    var onPlaybackOptions: () -> Unit = {}
+    private val optionsButton = TvStyle.button(context, "Opzioni") { onPlaybackOptions() }
     private val logo = ChannelLogoView(context, logos)
     private val title = TvStyle.text(context, "", 27f, bold = true)
     private val show = TvStyle.text(context, "", 17f)
@@ -71,6 +73,7 @@ class LiveBanner(context: Context, logos: ChannelLogoRepository) : LinearLayout(
         information.addView(title)
         information.addView(show, LayoutParams(-1, -2).apply { topMargin = context.dp(8) })
         header.addView(information, LayoutParams(0, -2, 1f))
+        header.addView(optionsButton, LayoutParams(-2, -2).apply { leftMargin = context.dp(12) })
         addView(header)
         addView(timing, LayoutParams(-1, -2).apply { topMargin = context.dp(6) })
         addView(progress, LayoutParams(-1, context.dp(4)).apply { topMargin = context.dp(9) })
@@ -117,7 +120,13 @@ class LiveBanner(context: Context, logos: ChannelLogoRepository) : LinearLayout(
         }
         next.text = window.next?.let { "A seguire  ·  ${time(it.start)}  ${it.title}" }.orEmpty()
         next.visibility = if (window.next == null) GONE else VISIBLE
-        hint.text = "←  Canali     ·     OK  Info / Riprendi     ·     Indietro  Catalogo     ·     CH +/−  ${if (favoritesOnly) "Preferiti" else "Cambia"}"
+        hint.text = "←  Canali     ·     →  Opzioni     ·     OK  Info / Riprendi     ·     Indietro  Catalogo     ·     CH +/−  ${if (favoritesOnly) "Preferiti" else "Cambia"}"
+    }
+
+    val optionsFocused: Boolean get() = optionsButton.hasFocus()
+    fun renderOptions(state: it.lumetv.app.playback.PlaybackOptionsState) {
+        optionsButton.text = if (state.sleepRemaining > 0) "Timer · " + it.lumetv.app.playback.sleepTimerLabel(state.sleepRemaining).substringBefore(" rimanenti") else "Opzioni"
+        optionsButton.contentDescription = "Opzioni riproduzione" + if (state.sleepRemaining > 0) ", timer: " + it.lumetv.app.playback.sleepTimerLabel(state.sleepRemaining) else ""
     }
 
     fun message(title: String, subtitle: String) {

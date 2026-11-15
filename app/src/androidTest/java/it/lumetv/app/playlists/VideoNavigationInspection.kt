@@ -91,7 +91,7 @@ object VideoNavigationInspection {
             runner.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT)
             await("D-pad reaches Radio after Video"){main {activity.currentFocus===tab("Radio")}}
         } else {
-            for(destination in listOf("Preferiti","Guida","Scopri","Canali")) {
+            for(destination in listOf("Radio","Guida","Scopri","Canali")) {
                 clickTab(destination);await("$destination remains selectable alongside Video"){main {selected()==listOf(destination)}}
                 runner.waitForIdleSync();checkBar(destination)
             }

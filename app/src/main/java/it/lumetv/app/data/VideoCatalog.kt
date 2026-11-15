@@ -19,7 +19,7 @@ data class VideoItem(val id:String,val source:String,val title:String,val kind:V
     val season:Int?=null,val episode:Int?=null,val year:Int?=null,val duration:Long=0,val description:String="",
     val genres:List<String> = emptyList(),val groups:List<String> = emptyList(),val added:Long=0,
     val position:Long=0,val watchedDuration:Long=0,val completed:Boolean=false,val saved:Boolean=false,val episodes:Int=1,
-    val detailsLoaded:Boolean=true) {
+    val detailsLoaded:Boolean=true,val hiddenFromContinue:Boolean=false,val seriesId:String=series) {
     val isSeries get()=series.isNotBlank()
     val displayTitle get()=if(isSeries)seriesTitle else title
     val resume get()=if(completed || position<5000)0 else position
@@ -163,7 +163,7 @@ internal fun PersonalPlaylistStore.videoPage(sources:List<VideoSource>,q:VideoQu
                 q.season?.let {filter+="COALESCE(m.season,0)=CAST(? AS INTEGER)";args+=it.toString()}
                 if(q.shelf==VideoShelf.ADDED)filter+="m.added>0"
                 val joined=if(q.shelf==VideoShelf.CONTINUE) {
-                    filter+="w.position>=5000 AND w.completed=0"
+                    filter+="w.position>=5000 AND w.completed=0 AND w.hidden=0"
                     "history.watch w JOIN $schema.video_items m ON m.id=w.channel AND w.source='${source.id}' AND w.mode='VOD' AND w.event=''"
                 } else "$schema.video_items m"
                 if(savedMode)filter+="m.position IN (SELECT position FROM $schema.video_metadata WHERE id IN (SELECT id FROM favorites) UNION SELECT position FROM $schema.video_metadata WHERE series_key IN (SELECT series FROM saved_series WHERE source='${source.id}'))"
@@ -195,7 +195,7 @@ internal fun PersonalPlaylistStore.videoPage(sources:List<VideoSource>,q:VideoQu
                     fun number(i:Int)=if(c.isNull(i))null else c.getInt(i)
                     fun strings(i:Int)=JSONArray(c.getString(i)).let {a->(0 until minOf(a.length(),20)).map {a.getString(it)}}
                     val id=c.getString(0);val series=if(collapsed)c.getString(3) else ""
-                    sourceRows+=VideoItem(id,source,c.getString(1),VodKind.valueOf(c.getString(2)),series,c.getString(4),number(5),number(6),number(7),c.getLong(8),c.getString(10),strings(11),strings(12),c.getLong(9),saved=id in favorites || source+":"+c.getString(3) in savedSeries,episodes=episodeCounts.getValue(id),detailsLoaded=q.details)
+                    sourceRows+=VideoItem(id,source,c.getString(1),VodKind.valueOf(c.getString(2)),series,c.getString(4),number(5),number(6),number(7),c.getLong(8),c.getString(10),strings(11),strings(12),c.getLong(9),saved=id in favorites || source+":"+c.getString(3) in savedSeries,episodes=episodeCounts.getValue(id),detailsLoaded=q.details,seriesId=c.getString(3))
                 }}
                 val seriesKeys=sourceRows.map {it.series}.filter(String::isNotBlank).distinct()
                 val favoriteSeries=hashSetOf<String>()

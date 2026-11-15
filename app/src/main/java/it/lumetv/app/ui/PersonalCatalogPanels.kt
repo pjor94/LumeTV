@@ -15,7 +15,6 @@ internal class PersonalCatalogPanels(private val activity:ComponentActivity,priv
     private val host get()=hostOverride ?: CatalogPanelHost.get(activity)
     private var embedded:CatalogPanelHost?=null
     private var visibility:(Boolean)->Unit={}
-    var restartCurrent:(Channel)->Unit={}
     fun attachVideo(container:android.widget.FrameLayout,onVisibility:(Boolean)->Unit) {
         visibility=onVisibility
         embedded=CatalogPanelHost(activity,false).also {it.tag="lume_video_page_host";container.addView(it,android.widget.FrameLayout.LayoutParams(-1,-1))}
@@ -34,7 +33,7 @@ internal class PersonalCatalogPanels(private val activity:ComponentActivity,priv
         if(video!=null && target.isOpen)return
         val restored=pendingVideo ?: lastVideo;pendingVideo=null
         val artwork=it.lumetv.app.data.VideoArtworkRepository(activity,repository,it.lumetv.app.data.HttpClient(),scope)
-        val panel=VideoCatalogPanel(activity,scope,repository,artwork,toggleFavorite,choose,restartCurrent,mobile,target,restored)
+        val panel=VideoCatalogPanel(activity,scope,repository,artwork,toggleFavorite,choose,mobile,target,restored)
         if(repository.videoSources.value.isEmpty()){panel.close();return}
         video=panel
         target.push(panel.view){lastVideo=android.os.Bundle().also(panel::save);panel.close();if(video===panel)video=null;visibility(false)}
@@ -47,6 +46,7 @@ internal class PersonalCatalogPanels(private val activity:ComponentActivity,priv
         return false
     }
     fun resume():Boolean {val resumed=embedded?.resume()==true || host.resume();if(resumed)video?.refresh();return resumed}
+    fun parkVideo(){val target=embedded ?: host;if(video?.view===target.currentView && target.isOpen)target.park()}
     fun dismiss(){host.close();embedded?.close()}
     val isShowing get()=host.isOpen || embedded?.isOpen==true
     fun saveState(out:android.os.Bundle) {

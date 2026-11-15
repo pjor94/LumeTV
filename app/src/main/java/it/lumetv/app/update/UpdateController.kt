@@ -93,6 +93,8 @@ internal class UpdateController(
     private var dialog: AlertDialog? = null
     private var promptDialog: AlertDialog? = null
     private var permissionDialog: AlertDialog? = null
+    internal val inputDialog:AlertDialog?
+        get()=listOfNotNull(dialog,promptDialog,permissionDialog).lastOrNull {it.isShowing}
     private var summary: TextView? = null
     private var progress: ProgressBar? = null
     private var autoToggle: CheckBox? = null

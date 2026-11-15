@@ -4,14 +4,32 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Questa guida descrive l’interfaccia per telecomando. Se usi un telefono, consulta la [guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md).
 
-Questa guida descrive **Lume TV 0.10.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
+Questa guida descrive **Lume TV 0.11.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
 
 [Download e installazione](../README.md#distribuzione-e-installazione) · [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
+<a id="collega-telefono-in-sviluppo"></a>
+
+## Collega telefono
+
+Apri **Opzioni → Collega telefono** sulla TV: il collegamento si attiva e il QR grande compare automaticamente sulla destra, con testo e comandi sulla sinistra. Sullo smartphone apri **Telecomando** e inquadra il QR. La scansione autorizza subito il telefono, senza una seconda conferma sulla TV. Il collegamento è accessibile dalle Opzioni, senza pulsanti nelle schermate del catalogo.
+
+Il telecomando si apre sul telefono e la TV torna automaticamente alla schermata precedente, mantenendo il contenuto e il suo stato. Il QR è monouso e si rinnova ogni due minuti mentre questa pagina è aperta. Chi lo inquadra può controllare Lume su questa TV. **Altri metodi** mostra un codice distinto di 16 caratteri, l’IP e la porta per il collegamento manuale: in questo caso resta la conferma **Consenti** sulla TV. Il passaggio da un metodo all’altro invalida l’invito precedente.
+
+Il telefono può navigare nell’interfaccia di Lume con frecce, OK e Indietro. Home torna al catalogo dell’app e Opzioni apre le impostazioni sulla TV; frecce e OK funzionano anche senza riproduzione attiva. Puoi inoltre usare pausa/ripresa, cambio canale nelle dirette, avanzamento nei video, tracce disponibili e timer. Il telecomando fisico continua a funzionare e lo stato aggiornato appare sul telefono. La conferma del codice manuale e la rimozione dei telefoni richiedono il telecomando fisico.
+
+La configurazione tramite moduli sul telefono e il trasferimento delle liste non sono ancora disponibili. Le impostazioni si possono raggiungere sullo schermo TV con il telecomando smartphone. Liste, credenziali dei provider e chiavi DRM non sono esposte dal telecomando.
+
+In **Gestisci collegamenti** puoi rimuovere ogni telefono, revocando subito il controllo. **Disattiva collegamento** chiude l’accesso di rete conservando gli abbinamenti. Uscire da Lume chiude il servizio fino alla successiva apertura dell’app. Le autorizzazioni sono separate da AURA e restano escluse dai backup.
+
+Serve una rete privata IPv4 che consenta ai dispositivi di comunicare; la TV può usare Ethernet. IP e porta mostrati consentono l’inserimento manuale sul telefono. Il collegamento non accende la TV dalla modalità standby e non gestisce altre app o ingressi HDMI. Disponibile dalla versione 0.11.0.
+
 ## In questa guida
 
+- [Collega telefono](#collega-telefono)
 - [Liste personali](#liste-personali)
 - [Video on demand](#video-on-demand)
+- [Backup e ripristino](#backup-e-ripristino)
 - [Canali nella Home](#canali-nella-home)
 - [Installazione e primo avvio](#installazione-e-primo-avvio)
 - [Scegliere l’interfaccia](#scegliere-linterfaccia)
@@ -58,17 +76,38 @@ Se la TV non offre un selettore documenti, la pagina indica di usare un URL. L�
 
 ## Video on demand
 
+**Dalla versione 0.11.0:** le schede di film ed episodi offrono **Segna come visto / Segna come non visto**. Non visto azzera la ripresa; un titolo visto propone **Riguarda**. **Rimuovi da Continua a guardare** conserva il punto raggiunto, e **Mostra in Continua a guardare** permette di ripristinarlo. La mia lista rimane indipendente. Una nuova riproduzione effettivamente avviata riprende il normale aggiornamento degli avanzamenti; un errore di apertura conserva lo stato precedente.
+
+Nel player trovi **Episodio successivo**. A fine episodio il focus passa a **Guarda il prossimo episodio**: premi **OK** per avviarlo oppure **Indietro** per tornare alla libreria. Il passaggio non è automatico e mantiene il conto del timer. Stagione e numero determinano l’ordine nella stessa serie e lista; senza numeri si segue l’ordine della lista. La scheda della serie riprende l’episodio in corso o propone il primo non visto. Disponibili dalla versione 0.11.0.
+
 Se almeno una lista abilitata contiene video, nella barra principale compare **Video**, tra **Canali** e **Radio**. La home mostra copertine e raccolte Film, Serie, Continua a guardare e La mia lista. **Mostra tutto** apre la raccolta completa; **Cerca** e **Filtri** permettono di restringere i risultati per titolo, lista, categoria e ordine.
 
 Seleziona una copertina per aprire la scheda del titolo. **Guarda** o **Riprendi** avvia il player; **Dall’inizio** riparte da zero. Le serie riconosciute raggruppano stagioni ed episodi. Tornando dal player o passando tra le sezioni si conservano pagina e posizione. Copertine e informazioni dipendono dai dati presenti nella lista.
 
 Il menu superiore resta disponibile. Usa le frecce del telecomando per scorrere copertine e raccolte; **Indietro** torna al livello precedente e conserva il focus.
 
+## Backup e ripristino
+
+Disponibile dalla versione 0.11.0.
+
+Apri **Opzioni → Backup e ripristino → Crea backup**. Scegli una password da 8 a 128 caratteri, ripetila e premi **Crea e scegli dove salvare**. Il selettore documenti Android permette di salvare il file `.lumebackup`, anche su un’unità USB quando disponibile. La password protegge anche URL, header e configurazioni di accesso delle liste. Conservala: senza la password il file non può essere aperto.
+
+Per recuperare i dati, scegli **Ripristina backup**, apri il file e inserisci la password. **Verifica backup** prepara l’anteprima prima di modificare il dispositivo. Seleziona singole liste e categorie con le frecce e **OK**, poi premi **Ripristina dati selezionati**.
+
+- Le liste già presenti mantengono nome, contenuti e impostazioni. Le liste mancanti vengono aggiunte; un nome uguale viene distinto con “backup”.
+- Preferiti, La mia lista e canali nascosti vengono uniti. L’ordine dei preferiti attuale ha la precedenza.
+- Riprese, Visto/Non visto e visibilità in Continua a guardare vengono recuperati quando sul dispositivo non è già presente un avanzamento per quel contenuto.
+- **Preferenze di riproduzione** applica audio, sottotitoli, qualità e cambio canale del backup. Puoi deselezionarla per mantenere le preferenze attuali.
+
+Il ripristino non trasferisce il consenso AURA, la pubblicazione nella Home o la scelta dell’interfaccia. I dati di una lista non recuperata possono essere ignorati se non trovano la stessa lista sul dispositivo. Non vengono salvati i video o le immagini dei contenuti.
+
+Serve un gestore documenti che supporti apertura e creazione dei file. Alcune TV espongono soltanto un selettore fittizio: Lume lo riconosce e indica di installare un gestore compatibile. Il backup richiede spazio temporaneo per verifica e ripristino; gli errori vengono mostrati nella pagina.
+
 ## Installazione e primo avvio
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Scarica [LumeTV-0.10.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.10.0/LumeTV-0.10.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
+1. Scarica [LumeTV-0.10.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.11.0/LumeTV-0.11.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
@@ -179,6 +218,10 @@ Se mancano informazioni, compare **Programmazione non disponibile**. Il canale r
 
 ## Preferiti e cambio canale
 
+**Dalla versione 0.11.0:** **Opzioni → Canali e preferiti** gestisce separatamente TV e radio. Su un preferito premi **OK → Sposta**, scegli la posizione con **↑ / ↓** e premi **OK** per salvare; **Indietro** annulla. L’ordine si applica ai preferiti e al cambio canale in modalità Solo preferiti, mantenendo sorgente e tipo della diretta corrente. I numeri originali restano invariati.
+
+**Nascondi canale** lo esclude da catalogo, guida, ricerca, numeri e cambio canale. La diretta eventualmente già in corso continua. Per mostrarlo nuovamente apri **Nascosti → canale → Ripristina canale**: cuore e posizione restano conservati. Aggiornare o disattivare una lista mantiene queste scelte; eliminarla rimuove le personalizzazioni associate. Queste funzioni sono disponibili dalla versione 0.11.0.
+
 Per aggiungere o rimuovere un preferito, **tieni premuto OK** su una scheda del catalogo o su un programma nella Guida TV. Trovi i canali salvati nella sezione **Preferiti** e nei filtri della Guida e dell’elenco laterale.
 
 Per usare CH+/CH− solo sui tuoi preferiti:
@@ -272,6 +315,14 @@ La schermata radio mostra nome, stato e titolo del brano quando disponibile. Con
 
 Indietro ritorna al catalogo mantenendo la riproduzione. Per la TV, il video passa in un’anteprima accanto al catalogo o alla guida; per la radio compare il nome della stazione in ascolto. **Apri la diretta** riapre il player, **Interrompi** termina la riproduzione. Viene sempre usato lo stesso player.
 
-Premendo Home, aprendo un’altra app o uscendo da Lume TV, la riproduzione si interrompe. Questa versione non prevede ascolto radio in background, timer di spegnimento o PiP di sistema sulla TV.
+Premendo Home, aprendo un’altra app o uscendo da Lume TV, la riproduzione si interrompe. Non sono previsti ascolto radio in background o PiP di sistema sulla TV. Il timer di arresto è disponibile nelle Opzioni riproduzione.
+
+### Opzioni riproduzione e timer
+
+Durante una diretta premi **→** oppure scegli **Opzioni** nel pannello delle informazioni. Il comando è disponibile anche nei controlli dei video e nella schermata radio. Con **↑/↓ e OK** scegli tracce audio, sottotitoli e qualità disponibili. **Indietro** risale dal selettore al pannello, poi torna alla riproduzione.
+
+Le scelte specifiche si applicano al contenuto corrente. **Lingua audio preferita**, **Sottotitoli preferiti** e la modalità di qualità vengono conservati per gli stream successivi. Se manca una traccia compatibile, il player usa le alternative disponibili.
+
+**Timer di arresto** ferma la riproduzione dopo 15, 30, 60 o 90 minuti. Pause e cambi di canale mantengono il conto; **Interrompi** o l'uscita dalla TV lo annullano. Per annullarlo continuando la visione scegli **Disattivato**. La scadenza arresta anche eventuali riconnessioni.
 
 **Opzioni** apre una pagina dedicata e mantiene il menu superiore delle altre pagine TV, con **Opzioni** evidenziato. Con **↑/↓** selezioni una voce e con **OK** apri la scelta; il valore corrente compare sotto il titolo e la descrizione a destra. Dalla prima voce, **↑** raggiunge il menu per passare direttamente a Canali, Radio, Cosa guardare o Guida TV. Se una diretta è attiva, l’anteprima continua nella pagina: **→** raggiunge i suoi comandi e **←** ritorna alla voce selezionata. **Indietro** riapre il catalogo o la guida precedente. Alla riapertura dell’app, la pagina e la voce selezionata vengono ripristinate; la riproduzione resta interrotta dopo l’uscita dalla TV.

@@ -71,7 +71,8 @@ object IntegrationStore {
             }.getOrDefault(emptyMap())
             guideTime = context.getSharedPreferences("guide", Context.MODE_PRIVATE).getLong("updated", 0).takeIf { it > 0 }
         }
-        SharedCatalog.project(catalog.orEmpty(),
+        val personalization=it.lumetv.app.data.ChannelPersonalization.get(context)
+        SharedCatalog.project(personalization.ordered(personalization.visible(catalog.orEmpty())),
             prefs.getStringSet("favorites", emptySet()).orEmpty().toSet(), guide.orEmpty(), catalogTime, guideTime,
             prefs.getString("last_tv_channel", prefs.getString("last_channel", null)),
             prefs.getLong("last_tv_played_at", prefs.getLong("last_played_at", 0)).takeIf { it > 0 }, now)

@@ -68,7 +68,12 @@ internal class GuideNavigator {
     private var schedules = emptyMap<String, List<Programme>>()
     private var now = 0L
 
-    val channels: List<Channel> get() = if (favoritesOnly) allChannels.filter { it.id in favorites } else allChannels
+    private var favoriteRanks=emptyMap<String,Int>()
+    var favoriteOrder: List<String> = emptyList()
+        set(value){if(field!=value){field=value;favoriteRanks=value.withIndex().associate {it.value to it.index}}}
+    val channels: List<Channel> get() = if (favoritesOnly) allChannels.filter { it.id in favorites }.let { rows ->
+        if(favoriteRanks.isEmpty())rows else rows.sortedBy {favoriteRanks[it.id] ?: Int.MAX_VALUE}
+    } else allChannels
     val channel: Channel? get() = channels.firstOrNull { it.id == channelId }
     val shows: List<Programme> get() = channel?.let { schedules[it.epgId] }.orEmpty()
     val programme: Programme? get() = shows.firstOrNull { it.start == programmeStart }

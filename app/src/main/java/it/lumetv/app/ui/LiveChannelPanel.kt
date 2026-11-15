@@ -208,12 +208,12 @@ class LiveChannelPanel(
         if(repository!=null && model!=null && current!=null) {
             channels.submit(emptyList(),programmes,currentId)
             val selected=if(favoritesOnly)personalFavorites?.invoke().orEmpty() else null
-            val query=PersonalCatalogQuery(source=current.sourceId,kind=current.kind,ids=selected,limit=50)
+            val query=PersonalCatalogQuery(source=current.sourceId,kind=current.kind,ids=selected,limit=50,favoriteOrder=favoritesOnly)
             positionJob?.cancel()
             positionJob=personalScope?.launch {
                 val position=if(focusRows)repository.catalogPosition(current,selected) else model.anchor
                 pendingCatalogFocus=position.takeIf {focusRows}
-                model.bind(query to repository.version.value,position){offset->repository.catalog(query.copy(offset=offset)).let {it.rows to it.total}}
+                model.bind(Triple(query,repository.version.value,it.lumetv.app.data.ChannelPersonalization.get(context).revision.value),position){offset->repository.catalog(query.copy(offset=offset)).let {it.rows to it.total}}
                 channels.notifyDataSetChanged()
                 if(model.size>0 && focusRows)focusPosition(position)
             }
@@ -221,7 +221,9 @@ class LiveChannelPanel(
         }
         val focusedId = list.findFocus()?.let { list.findContainingViewHolder(it)?.bindingAdapterPosition }
             ?.takeIf { it != RecyclerView.NO_POSITION }?.let { channels.items.getOrNull(it)?.id }
-        channels.submit(if (favoritesOnly) allChannels.filter(favorite) else allChannels, programmes, currentId)
+        val personalization=it.lumetv.app.data.ChannelPersonalization.get(context)
+        val visible=personalization.visible(allChannels)
+        channels.submit(if (favoritesOnly) personalization.ordered(visible.filter(favorite)) else visible, programmes, currentId)
         count.text = resources.getQuantityString(R.plurals.live_channel_count, channels.itemCount, channels.itemCount)
         empty.visibility = if (channels.items.isEmpty()) VISIBLE else GONE
         list.visibility = if (channels.items.isEmpty()) GONE else VISIBLE

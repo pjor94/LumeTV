@@ -7,7 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 
 /** Shared lazy catalog for touch and D-pad; it has no pagination controls. */
 class PersonalCatalog(scope:CoroutineScope,private val repository:PersonalPlaylistRepository,
-    changed:(ContinuousCatalog.Change)->Unit) {
+    changed:(ContinuousCatalog.Change)->Unit,private val channels:it.lumetv.app.data.ChannelRepository?=null) {
     val data=ContinuousCatalog<Channel>(scope,changed=changed)
     private var restoredPosition:Int?=null
     private var lastQuery:PersonalCatalogQuery?=null
@@ -24,8 +24,9 @@ class PersonalCatalog(scope:CoroutineScope,private val repository:PersonalPlayli
     fun bind(query:PersonalCatalogQuery):Boolean {
         if(query!=lastQuery)lastQuery?.let {positions[positionKey(it)]=data.anchor}
         val position=restoredPosition ?: if(query==lastQuery)data.anchor else positions[positionKey(query)] ?: 0
-        val reset=data.bind(query to repository.version.value,position) {offset->
-            repository.catalog(query.copy(offset=offset,limit=data.blockSize)).let {it.rows to it.total}
+        val reset=data.bind(Triple(query,repository.version.value,channels?.personalization?.revision?.value),position) {offset->
+            val request=query.copy(offset=offset,limit=data.blockSize)
+            (channels?.catalog(request) ?: repository.catalog(request)).let {it.rows to it.total}
         }
         if(reset){restoredPosition=null;lastQuery=query}
         return reset

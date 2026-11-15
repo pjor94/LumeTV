@@ -372,6 +372,87 @@ internal class PersonalPlaylistStore(val directory: File) {
             return db
         } catch (error: Exception) { db.close(); throw error }
     }
+
+    /** Portable records, not externally supplied SQLite databases or executable SQL. */
+    fun writeBackup(stored:PlaylistStored,output:java.io.OutputStream,check:()->Unit,reference:(String)->Unit) {
+        BackupIO.writeLine(output,metadata(stored))
+        readDb(file(stored.source.id)).use {db->
+            db.rawQuery("SELECT id,payload,active,seen FROM records ORDER BY position,id",null).use {cursor->
+                var count=0
+                while(cursor.moveToNext()) {
+                    if(count++%128==0)check()
+                    val id=cursor.getString(0);reference(id)
+                    BackupIO.writeLine(output,JSONObject().put("id",id).put("entry",JSONObject(cursor.getString(1)))
+                        .put("active",cursor.getInt(2)==1).put("seen",cursor.getLong(3)))
+                }
+            }
+        }
+    }
+
+    fun readBackup(input:java.io.InputStream,id:String,check:()->Unit,record:(String)->Unit):BackupPlaylist {
+        require(validId(id));directory.mkdirs();checkSpace(16L*1024*1024)
+        val header=BackupIO.line(input) ?: throw IOException("La lista nel backup è incompleta.")
+        val old=decodeMetadata(header)
+        require(old.source.id==id && old.source.name.isNotBlank() && old.source.name.length<=100)
+        require(old.source.count in 0..PersonalM3uParser.MAX_ENTRIES && old.source.updated>=0)
+        if(old.source.location==PlaylistLocation.URL) {
+            val uri=runCatching {java.net.URI(old.address)}.getOrNull()
+            require(uri!=null && uri.rawUserInfo==null && uri.rawFragment==null && old.address.length<=8192 && PersonalPlaylistNetwork.allowed(uri,true))
+        } else require(old.address.isEmpty())
+        val stored=old.copy(source=old.source.copy(error="",refreshing=false,nextRetry=0),
+            attempted=0,retryAt=0,failures=0,serverRetryAt=0)
+        val target=file(id)
+        require(!target.exists())
+        try {
+            create(target).use {db->
+                db.beginTransaction()
+                try {
+                    var active=0;var archived=0
+                    db.compileStatement("INSERT INTO records(id,payload,name,number,logo,kind,groups_json,position,active,seen,identity1,identity2,identity3,content) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)").use {insert->
+                        while(true) {
+                            check()
+                            val row=BackupIO.line(input) ?: break
+                            val key=row.getString("id");require(BackupIO.validChannel(key))
+                            val seen=row.getLong("seen");require(seen>=0)
+                            val enabled=row.getBoolean("active")
+                            if(enabled)active++ else archived++
+                            require(active<=PersonalM3uParser.MAX_ENTRIES && archived<=MAX_ARCHIVED)
+                            val entry=decodeEntry(row.getJSONObject("entry"),stored.descriptor)
+                            require(entry.name.isNotBlank() && entry.position in 0..PersonalM3uParser.MAX_ENTRIES)
+                            require(entry.metadata.contentKind!=PlaylistContentKind.PLAYLIST)
+                            // A revoked HTTP consent remains revoked, without losing its cached records.
+                            PersonalPlaybackConfig.validate(entry,true,stored.settings)
+                            record(key);bindEntry(insert,entry,key,seen,enabled);insert.executeInsert()
+                            if((active+archived)%256==0)checkSpace(8L*1024*1024)
+                        }
+                    }
+                    require(active==stored.source.count)
+                    PlaylistCatalogIndex.populate(db)
+                    VideoCatalogIndex.recordAdded(db,false,stored.source.updated)
+                    writeMetadata(db,stored);db.setTransactionSuccessful()
+                }finally {db.endTransaction()}
+            }
+            return BackupPlaylist(target,read(id,check) ?: stored)
+        }catch(error:Exception){target.delete();File(target.path+"-journal").delete();throw error}
+    }
+    fun backupReferences(stored:PlaylistStored,ids:Set<String>):Map<String,BackupReference> {
+        if(ids.isEmpty())return emptyMap()
+        return readDb(file(stored.source.id)).use {db->buildMap {
+            ids.toList().chunked(400).forEach {batch->
+                val placeholders=batch.joinToString(","){"?"}
+                db.rawQuery("SELECT id,kind,content FROM records WHERE id IN ($placeholders)",batch.toTypedArray()).use {c->
+                    while(c.moveToNext())put(c.getString(0),BackupReference(stored.source.id,MediaKind.valueOf(c.getString(1)),
+                        stored.settings.contentOverride ?: PlaylistContentKind.valueOf(c.getString(2))))
+                }
+            }
+        }}
+    }
+    fun backupOverlaps(candidate:File,current:String):Boolean = readDb(candidate).use {db->
+        db.execSQL("ATTACH DATABASE ? AS existing",arrayOf(file(current).path))
+        db.rawQuery("SELECT 1 FROM records n JOIN existing.records p ON p.id=n.id LIMIT 1",null).use {it.moveToFirst()}
+    }
+    fun changeBackupMetadata(path:File,stored:PlaylistStored)=writeDb(path).use {writeMetadata(it,stored)}
+
     private fun writeDb(file: File): SQLiteDatabase = SQLiteDatabase.openOrCreateDatabase(file, null).apply {
         disableWriteAheadLogging(); setMaximumSize(MAX_DATABASE)
         execSQL("PRAGMA temp_store=FILE")
@@ -419,6 +500,9 @@ internal class PersonalPlaylistStore(val directory: File) {
     private fun groups(array: JSONArray): List<String> = (0 until minOf(array.length(),20)).map { array.getString(it).take(100) }
     private fun optional(obj: JSONObject, key: String) = obj.optString(key).takeIf { it.isNotBlank() && it != "null" }
     private fun writeMetadata(db: SQLiteDatabase, stored: PlaylistStored) {
+        db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES('source',?)",arrayOf(metadata(stored).toString()))
+    }
+    private fun metadata(stored:PlaylistStored):JSONObject {
         val s=stored.source
         val value=JSONObject().put("version",4).put("id",s.id).put("name",s.name).put("location",s.location.name).put("enabled",s.enabled)
             .put("count",s.count).put("updated",s.updated).put("checked",s.checked).put("revision",s.revision).put("kind",s.defaultKind.name)
@@ -429,7 +513,7 @@ internal class PersonalPlaylistStore(val directory: File) {
             .put("documents",JSONObject().apply { stored.descriptor.documents.forEach { (id, attrs) -> put(id,JSONObject(attrs)) } })
             .put("bases",JSONObject(stored.descriptor.bases))
             .put("report",stored.report?.let(::encodeReport))
-        db.execSQL("INSERT OR REPLACE INTO metadata(key,value) VALUES('source',?)",arrayOf(value.toString()))
+        return value
     }
     private fun decodeMetadata(root: JSONObject): PlaylistStored {
         require(root.getInt("version") in 2..4)

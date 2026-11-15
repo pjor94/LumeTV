@@ -86,10 +86,10 @@ internal class VideoPosterAdapter(private val context:Context,private val mobile
         }
         if(holder.boundItem!=value) {
         holder.key=value.key;holder.title.text=value.displayTitle;holder.title.minLines=if(wide)1 else 2
-        holder.detail.text=when {value.isSeries->"${value.episodes} ${if(value.episodes==1)"episodio" else "episodi"}";value.resume>0->"Riprendi · ${videoTime(value.resume)}";value.year!=null->value.year.toString();value.season!=null && value.episode!=null->"S${value.season} · E${value.episode}";else->""}
+        holder.detail.text=when {value.isSeries->"${value.episodes} ${if(value.episodes==1)"episodio" else "episodi"}";value.completed->"Visto";value.resume>0->"Riprendi · ${videoTime(value.resume)}";value.year!=null->value.year.toString();value.season!=null && value.episode!=null->"S${value.season} · E${value.episode}";else->""}
         val duration=value.watchedDuration.takeIf {it>0} ?: value.duration
-        holder.progress.visibility=if(value.position>0 && duration>0)View.VISIBLE else View.GONE
-        holder.progress.progress=if(duration>0)(value.position.toDouble()/duration*1000).toInt().coerceIn(0,1000) else 0
+        holder.progress.visibility=if(!value.isSeries && (value.position>0 || value.completed) && duration>0)View.VISIBLE else View.GONE
+        holder.progress.progress=if(value.completed)1000 else if(duration>0)(value.position.toDouble()/duration*1000).toInt().coerceIn(0,1000) else 0
         holder.card.contentDescription=listOf(value.displayTitle,holder.detail.text.toString(),"Nella mia lista".takeIf {value.saved}.orEmpty()).filter(String::isNotBlank).joinToString(", ")
         holder.card.isClickable=true;holder.card.setOnClickListener {choose(value)}
         holder.card.setOnFocusChangeListener {view,focused->TvStyle.focusMotion(view,focused,1.035f);if(focused){restoreFocusKey=null;focus(value)}}

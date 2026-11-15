@@ -174,7 +174,7 @@ def main():
         d.run("shell", "cmd", "media_session", "dispatch", "stop")
         d.wait("system stop keeps options open", lambda: page() and not d.playing())
         d.launch("favorites")
-        d.wait("catalog links dismiss options", lambda: not page() and any(n.get("content-desc") == "Preferiti" and n.get("selected") == "true" for n in d.nodes()))
+        d.wait("catalog links dismiss options", lambda: not page() and "Preferiti" in d.texts() and any(n.get("content-desc") == "Canali" and n.get("selected") == "true" for n in d.nodes()))
         d.launch("integration")
         d.wait("integration consent opens from a link", lambda: any(t.casefold() == "consenti collegamento" for t in d.texts()))
         d.key(4)

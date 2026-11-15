@@ -17,6 +17,8 @@ Il catalogo delle sorgenti e la logica delle integrazioni usate da Lume TV deriv
 
 **Ulteriori modifiche — 2026-11-09:** interfacce dedicate a smartphone Android e TV nella stessa APK, riconoscimento del dispositivo, comandi touch e guida per canale sul telefono, con catalogo, risoluzione delle sorgenti e riproduzione condivisi.
 
+**Ulteriori modifiche — 2026-11-15:** telecomando locale tra smartphone e TV, backup cifrati e ripristino selettivo, continuità di visione dei video, gestione di preferiti e canali nascosti, opzioni di riproduzione e timer.
+
 Gli adattamenti Kotlin si trovano principalmente in `RaiResolver.kt`, `MediasetResolver.kt`, `La7Resolver.kt`, `StreamResolver.kt` e `DiscoveryResolver.kt`. Lume TV reimplementa queste integrazioni per il player Android e usa il servizio playlist WLTV per aggiornare il catalogo. L’origine e il checksum della copia inclusa sono registrati in `catalog/source.json` nel repository.
 
 A WorldLiveTV, WLTV Group e ai collaboratori del progetto originale va il merito della raccolta e della manutenzione delle sorgenti. Lume TV è un progetto indipendente e non rappresenta un’app ufficiale WorldLiveTV.
@@ -45,6 +47,8 @@ I palinsesti e parte dei loghi dei canali provengono dal servizio esterno [EPG-G
 | desugar_jdk_libs_configuration (R8) | 2.1.5 | BSD-3-Clause; Copyright (c) 2016, the R8 project authors |
 | Public Suffix List, inclusa in OkHttp | Copia distribuita con OkHttp 4.12.0 | MPL-2.0; contributori Public Suffix List |
 | XZ for Java | 1.9 | Pubblico dominio; Lasse Collin, Igor Pavlov, Brett Okken |
+| ZXing Core | 3.5.4 | Apache-2.0; ZXing authors |
+| ZXing Android Embedded | 4.3.0 | Apache-2.0; Journey Mobile, Inc. e contributori |
 | JUnit, usato solo nei test | 4.13.2 | EPL-1.0; autori JUnit |
 
 Le licenze si applicano ai rispettivi componenti e non ai contenuti delle emittenti. Il progetto conserva i copyright dei sorgenti upstream; i nomi sopra riassumono i titolari, senza sostituire gli avvisi dei singoli file. Gli avvisi originali sono conservati in `app/src/main/assets/DEPENDENCY_NOTICES.txt` e nell’app.

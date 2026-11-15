@@ -46,6 +46,7 @@ class MobilePlaybackView(
     pip: () -> Unit,
     stop: () -> Unit,
 ) : FrameLayout(context) {
+    var onPlaybackOptions: () -> Unit = {}
     val video = PlayerView(context).apply {
         useController = false
         setBackgroundColor(Color.BLACK)
@@ -54,7 +55,7 @@ class MobilePlaybackView(
         setOnClickListener { setControlsVisible(controls.visibility != VISIBLE) }
     }
     private val controls = FrameLayout(context)
-    val onDemand=it.lumetv.app.ui.OnDemandControls(context)
+    val onDemand=it.lumetv.app.ui.OnDemandControls(context).apply { showOptions = false }
     private val channelName = TvStyle.text(context, "", 16f, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
     private val title = TvStyle.text(context, "", 21f, bold = true).apply { maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
     private val timing = TvStyle.text(context, "", 13f, TvStyle.accent).apply { fontFeatureSettings = "tnum" }
@@ -62,7 +63,10 @@ class MobilePlaybackView(
     private val favorite = MobileStyle.icon(context, R.drawable.ic_mobile_heart, "Aggiungi ai preferiti", toggleFavorite)
     private val expand = MobileStyle.icon(context, R.drawable.ic_mobile_expand, "Schermo intero", fullscreen)
     val pipButton = MobileStyle.icon(context, R.drawable.ic_mobile_pip, "Picture in Picture", pip)
-    private val audioView = AudioPlaybackView(context, logos, false, back, togglePause, previous, next, toggleFavorite, stop, retry, audioMode)
+    private val audioView = AudioPlaybackView(context, logos, false, back, togglePause, previous, next, toggleFavorite, stop, retry, audioMode).apply {
+        onPlaybackOptions = { this@MobilePlaybackView.onPlaybackOptions() }
+    }
+    private val optionsButton = MobileStyle.button(context, "Opzioni") { onPlaybackOptions() }
     private val play = MobileStyle.icon(context, R.drawable.ic_mobile_pause, "Pausa", togglePause)
     private val centerControls = LinearLayout(context)
     private val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -128,6 +132,7 @@ class MobilePlaybackView(
         val actions = LinearLayout(context)
         actions.addView(MobileStyle.button(context, "Canali", action = channelPicker), LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(MobileStyle.button(context, "Solo audio", action = audioMode), LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(optionsButton, LinearLayout.LayoutParams(0, -2, 1f))
         bottom.addView(actions, LinearLayout.LayoutParams(-1, -2))
         controls.addView(bottom, LayoutParams(-1, -2, Gravity.BOTTOM))
         addView(controls, LayoutParams(-1, -1))
@@ -213,12 +218,16 @@ class MobilePlaybackView(
 
     fun stopTimers() { removeCallbacks(hideControls) }
     fun renderState(state: PlaybackSnapshot, preferred: Boolean) {
+        optionsButton.text = if (state.options.sleepRemaining > 0) "Timer · " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining).substringBefore(" rimanenti") else "Opzioni"
+        optionsButton.contentDescription = if (state.options.sleepRemaining > 0) "Opzioni riproduzione, timer: " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining) else "Opzioni riproduzione"
         onDemand.render(state)
         val demand=state.mode!=it.lumetv.core.PlaybackMode.LIVE
         if(demand)play.contentDescription=if(state.ended)"Rivedi il video" else if(state.wantsToPlay)"Pausa" else "Riprendi il video"
         centerControls.getChildAt(0).visibility=if(demand)GONE else VISIBLE
         centerControls.getChildAt(2).visibility=if(demand)GONE else VISIBLE
-        if(demand){title.text=state.title;timing.text=if(state.mode==it.lumetv.core.PlaybackMode.ARCHIVE)"Archivio" else "Video";description.visibility=GONE;progress.visibility=GONE}
+        title.visibility=if(demand)GONE else VISIBLE;timing.visibility=if(demand)GONE else VISIBLE
+        (onDemand.parent as? LinearLayout)?.setPadding(context.dp(20),context.dp(if(demand)16 else 44),context.dp(20),context.dp(12))
+        if(demand){description.visibility=GONE;progress.visibility=GONE}
         title.isClickable=!demand
         audio = state.audioOnly
         audioView.visibility = if (audio && !inPip) VISIBLE else GONE

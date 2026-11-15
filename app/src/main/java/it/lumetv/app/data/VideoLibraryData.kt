@@ -64,7 +64,7 @@ internal class VideoLibraryData(private val store:PersonalPlaylistStore,private 
         val r=request(selected(q),q,preview,false)
         // File metadata is deliberately not touched by the UI thread. The read path validates it before publishing.
         val page=synchronized(cacheLock){pages.entries.lastOrNull {it.key.copy(files=emptyList())==r}?.value} ?: return null
-        val positions=history.cachedPositions() ?: return page
+        val positions=history.cachedPositions() ?: return null
         return decorate(page,positions)
     }
     private fun remember(r:Request,page:VideoPage) = synchronized(cacheLock) {
@@ -116,7 +116,7 @@ internal class VideoLibraryData(private val store:PersonalPlaylistStore,private 
         for(attempt in 0..2) {
             val snapshot=selected(q)
             if(snapshot.isEmpty() || q.group=="" || q.shelf==VideoShelf.SAVED && prefs.getStringSet("favorites",emptySet()).isNullOrEmpty() && prefs.getStringSet("video_saved_series",emptySet()).isNullOrEmpty() ||
-                q.shelf==VideoShelf.CONTINUE && history.snapshot().keys.none {key->snapshot.any {it.stored.source.id==key.first}})return@withContext VideoPage(emptyList(),0,!preview)
+                q.shelf==VideoShelf.CONTINUE && history.snapshot().none {(key,p)->p.position>=5000 && !p.completed && !p.hidden && snapshot.any {it.stored.source.id==key.first}})return@withContext VideoPage(emptyList(),0,!preview)
             val indexed=snapshot.map {VideoSource(it.stored,prepare(it))}
             val value=sql {signal->readLocked(snapshot.map {it.stored.source.id},signal) {
                 if(!valid(snapshot))return@readLocked null
@@ -137,7 +137,7 @@ internal class VideoLibraryData(private val store:PersonalPlaylistStore,private 
         throw java.io.IOException("La lista è cambiata. Riapri i video.")
     }
     private fun decorate(page:VideoPage,positions:Map<Pair<String,String>,WatchPosition>)=page.copy(rows=page.rows.map {item->
-        positions[item.source to item.id]?.let {p->item.copy(position=p.position,watchedDuration=p.duration,completed=p.completed)} ?: item.copy(position=0,watchedDuration=0,completed=false)
+        positions[item.source to item.id]?.let {p->item.copy(position=p.position,watchedDuration=p.duration,completed=p.completed,hiddenFromContinue=p.hidden)} ?: item.copy(position=0,watchedDuration=0,completed=false,hiddenFromContinue=false)
     })
     fun positions(page:VideoPage)=history.cachedPositions()?.let {decorate(page,it)} ?: page
     suspend fun <T> readSource(id:String,action:(PlaylistStored,CancellationSignal)->T):T? = withContext(Dispatchers.IO) {

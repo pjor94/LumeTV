@@ -1,6 +1,6 @@
 # Compatibilità delle liste personali
 
-Questo documento descrive le liste personali di **Lume TV 0.10.2**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
+Questo documento descrive le liste personali di **Lume TV 0.11.0**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
 
 La versione 0.10.2 include il recupero delle righe anomale, la compatibilità delle configurazioni riconoscibili e le sorgenti localplay descritte sotto, con formato e protezione determinati dal resolver.
 

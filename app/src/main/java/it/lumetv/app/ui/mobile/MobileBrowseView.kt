@@ -26,6 +26,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import it.lumetv.app.R
 import it.lumetv.app.data.ChannelLogoRepository
+import it.lumetv.app.data.ChannelPersonalization
 import it.lumetv.app.data.DiscoveryEngine
 import it.lumetv.app.data.DiscoveryPeriod
 import it.lumetv.app.data.GuideSchedule
@@ -59,6 +60,7 @@ class MobileBrowseView(
     var section = MobileSection.CHANNELS
         private set
     private var family = "Tutti"
+    private var channelMode = "Tutti"
     private var sourceId = context.getSharedPreferences("lume", Context.MODE_PRIVATE).getString("catalog_source", "builtin") ?: "builtin"
     private var sourceGroup: String? = null
     private var sourceNames = emptyMap<String, String>()
@@ -69,6 +71,8 @@ class MobileBrowseView(
     private val sectionStates=linkedMapOf<MobileSection,Bundle>()
     var sourceChooser: ((String, it.lumetv.core.MediaKind?, (String) -> Unit) -> Unit)? = null
     var openVideoLibrary:()->Unit={}
+    var manageChannels:()->Unit={}
+    var openRemote:()->Unit={}
     var catalogPager:it.lumetv.app.ui.PersonalCatalog?=null
     var favoriteIds:()->Set<String> = {emptySet()}
     var choosePersonalGroup:((String,it.lumetv.core.MediaKind,(String)->Unit)->Unit)?=null
@@ -128,7 +132,10 @@ class MobileBrowseView(
     private val scopeLabel=TvStyle.text(context,"",13f,TvStyle.muted).apply {maxLines=2;ellipsize=TextUtils.TruncateAt.END}
     private lateinit var brandToolbar:LinearLayout
     private val compactOptions=MobileStyle.icon(context,R.drawable.ic_mobile_more,"Opzioni",options).apply {visibility=GONE}
+    private val compactRemote=MobileStyle.icon(context,R.drawable.ic_remote_controller,"Telecomando") {openRemote()}.apply {visibility=GONE}
     private val filters = LinearLayout(context)
+    private val quickFilters = LinearLayout(context)
+    private val quickRow = LinearLayout(context).apply {gravity=Gravity.CENTER_VERTICAL}
     private val guideSelector = LinearLayout(context)
     private val guideChannel = MobileStyle.button(context, "Scegli un canale") { chooseGuideChannel() }
     private val navigation = LinearLayout(context).apply {tag="mobile_navigation"}
@@ -175,6 +182,8 @@ class MobileBrowseView(
             contentDescription = "Lume TV"
         }, LayoutParams(context.dp(100), context.dp(36)))
         toolbar.addView(View(context), LayoutParams(0, 1, 1f))
+        toolbar.addView(MobileStyle.icon(context,R.drawable.ic_remote_controller,"Telecomando") {openRemote()},
+            LayoutParams(context.dp(48),context.dp(48)).apply {rightMargin=context.dp(8)})
         toolbar.addView(MobileStyle.icon(context, R.drawable.ic_mobile_refresh, "Aggiorna canali e guida", refresh), LayoutParams(context.dp(48), context.dp(48)))
         toolbar.addView(MobileStyle.icon(context, R.drawable.ic_mobile_more, "Opzioni", options), LayoutParams(context.dp(48), context.dp(48)))
         addView(toolbar, LayoutParams(-1, -2))
@@ -215,9 +224,15 @@ class MobileBrowseView(
         searchRow.addView(search,LayoutParams(0,context.dp(48),1f))
         searchRow.addView(filterButton,LayoutParams(-2,context.dp(48)))
         searchRow.addView(clearButton,LayoutParams(context.dp(48),context.dp(48)))
+        searchRow.addView(compactRemote,LayoutParams(context.dp(48),context.dp(48)).apply {leftMargin=context.dp(8);rightMargin=context.dp(8)})
         searchRow.addView(compactOptions,LayoutParams(context.dp(48),context.dp(48)))
         content.addView(searchRow, LayoutParams(-1, -2).apply { topMargin = context.dp(8); bottomMargin = context.dp(4) })
         content.addView(scopeLabel,LayoutParams(-1,-2))
+        quickRow.addView(HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled=false;addView(quickFilters)
+        },LayoutParams(0,-2,1f))
+        quickRow.addView(MobileStyle.icon(context,R.drawable.ic_channel_manage,"Gestisci canali e preferiti"){manageChannels()},LayoutParams(context.dp(48),context.dp(48)))
+        content.addView(quickRow,LayoutParams(-1,-2))
         val filterScroll = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
             addView(this@MobileBrowseView.filters)
@@ -264,9 +279,10 @@ class MobileBrowseView(
     }
 
     fun submit(channels: List<Channel>, programmes: Map<String, List<Programme>>, currentId: String?, loaded: Boolean = true, recentIds: List<String> = emptyList()) {
-        this.channels = channels; this.programmes = programmes; this.currentId = currentId; this.loaded = loaded
+        this.channels = ChannelPersonalization.get(context).visible(channels); this.programmes = programmes; this.currentId = currentId; this.loaded = loaded
+        if(selectedPersonalGuide?.let {ChannelPersonalization.get(context).isHidden(it)}==true)selectedPersonalGuide=null
         this.recentIds = recentIds
-        if (selectedPersonalGuide?.id!=guideChannelId && channels.none { !it.isRadio && it.id == guideChannelId }) guideChannelId = currentId?.takeIf { id -> channels.any { !it.isRadio && it.id == id } }
+        if (guideChannelId==null || selectedPersonalGuide?.id!=guideChannelId && channels.none { !it.isRadio && it.id == guideChannelId }) guideChannelId = currentId?.takeIf { id -> channels.any { !it.isRadio && it.id == id } }
             ?: channels.firstOrNull { !it.isRadio }?.id
         renderRows()
         restorePendingScroll()
@@ -300,7 +316,7 @@ class MobileBrowseView(
     fun setCatalogLoadingMessage(message:String?){if(catalogLoadingMessage!=message){catalogLoadingMessage=message;if(!loaded)renderRows()}}
     fun setPersonalGuideMessages(messages:Map<String,String>){if(personalGuideMessages!=messages){personalGuideMessages=messages;renderRows()}}
     private fun clearFilters() {
-        family="Tutti";radioFilter="Tutte";sourceGroup=null;guideDay=0;guideEvening=false;discoveryFavorites=false
+        family="Tutti";channelMode="Tutti";radioFilter="Tutte";sourceGroup=null;guideDay=0;guideEvening=false;discoveryFavorites=false
         restoringControls=true;search.setText("");restoringControls=false
         catalogPager?.resetPosition();pendingPosition=0;pendingTop=0
         buildFilters();renderRows(true)
@@ -336,6 +352,7 @@ class MobileBrowseView(
         out.putString("mobile_source", sourceId); out.putString("mobile_source_group", sourceGroup)
         out.putString("mobile_radio_filter", radioFilter)
         out.putString("mobile_section", section.name); out.putString("mobile_family", family)
+        out.putString("mobile_channel_mode",channelMode)
         out.putString("mobile_period", period.name); out.putString("mobile_query", search.text.toString())
         out.putString("mobile_guide_channel", guideChannelId); out.putBoolean("mobile_evening", guideEvening)
         out.putBoolean("mobile_discovery_favorites", discoveryFavorites)
@@ -354,6 +371,8 @@ class MobileBrowseView(
         section = MobileSection.entries.firstOrNull { it.name == state.getString("mobile_section") } ?: MobileSection.CHANNELS
         period = DiscoveryPeriod.entries.firstOrNull { it.name == state.getString("mobile_period") } ?: DiscoveryPeriod.NOW
         family = state.getString("mobile_family")?.takeIf { it in listOf("Tutti", "TV", "Radio", "Rai", "Mediaset", "Recenti") } ?: "Tutti"
+        channelMode=state.getString("mobile_channel_mode")?.takeIf {it in listOf("Tutti","Preferiti","Recenti")} ?: if(family=="Recenti")"Recenti" else "Tutti"
+        if(family=="Recenti")family="Tutti"
         if (section == MobileSection.CHANNELS && family in listOf("TV", "Radio")) family = "Tutti"
         if (section == MobileSection.FAVORITES && family !in listOf("Tutti", "TV", "Radio")) family = "Tutti"
         radioFilter = state.getString("mobile_radio_filter")?.takeIf { it in listOf("Tutte", "Preferite", "Recenti") } ?: "Tutte"
@@ -371,7 +390,7 @@ class MobileBrowseView(
     private fun buildNavigation() {
         navigation.removeAllViews()
         fun item(label:String,icon:Int,action:()->Unit) {
-            val selected = if(label=="Video")videoSelected else !videoSelected && label==section.label
+            val selected = if(label=="Video")videoSelected else !videoSelected && label==navigationSection()
             val item = LinearLayout(context).apply {
                 orientation = VERTICAL; gravity = Gravity.CENTER
                 setPadding(0, context.dp(7), 0, context.dp(7))
@@ -393,7 +412,7 @@ class MobileBrowseView(
             val margin=context.dp(if(videoAvailable)1 else 3)
             navigation.addView(item, LayoutParams(0, -2, 1f).apply { leftMargin=margin;rightMargin=margin })
         }
-        MobileSection.entries.forEach { destination ->
+        MobileSection.entries.filterNot {it==MobileSection.FAVORITES}.forEach { destination ->
             item(destination.label,destination.icon){navigate(destination)}
             if(destination==MobileSection.CHANNELS && videoAvailable)item("Video",R.drawable.ic_mobile_play){if(videoAvailable)openVideoLibrary()}
         }
@@ -412,7 +431,7 @@ class MobileBrowseView(
         // Keep the actual controls attached: Video's host restores focus to its originating tab.
         for(index in 0 until navigation.childCount) {
             val item=navigation.getChildAt(index) as LinearLayout
-            val selected=if(item.tag=="Video")videoSelected else !videoSelected && item.tag==section.label
+            val selected=if(item.tag=="Video")videoSelected else !videoSelected && item.tag==navigationSection()
             if(item.isSelected==selected)continue
             item.isSelected=selected;item.background=MobileStyle.ripple(context,selected)
             val color=if(selected)TvStyle.accent else TvStyle.muted
@@ -420,20 +439,32 @@ class MobileBrowseView(
             (item.getChildAt(1) as TextView).apply {setTextColor(color);typeface=android.graphics.Typeface.create(if(selected)"sans-serif-medium" else "sans-serif",android.graphics.Typeface.NORMAL)}
         }
     }
+    private fun navigationSection()=if(section==MobileSection.FAVORITES)MobileSection.CHANNELS.label else section.label
 
     private fun buildFilters() {
         filters.removeAllViews()
+        quickFilters.removeAllViews()
+        quickRow.visibility=if(section in listOf(MobileSection.CHANNELS,MobileSection.RADIO,MobileSection.FAVORITES))VISIBLE else GONE
+        if(section in listOf(MobileSection.CHANNELS,MobileSection.RADIO))listOf("Tutti","Preferiti","Recenti").forEach {label->
+            val selected=if(section==MobileSection.RADIO)when(radioFilter){"Tutte"->"Tutti";"Preferite"->"Preferiti";else->radioFilter} else channelMode
+            quickFilters.addView(MobileStyle.button(context,label,selected==label){
+                if(section==MobileSection.RADIO)radioFilter=when(label){"Tutti"->"Tutte";"Preferiti"->"Preferite";else->label}
+                else {channelMode=label;family="Tutti"}
+                filtersExpanded=false;buildFilters();renderRows(true)
+            },LayoutParams(-2,-2).apply {rightMargin=context.dp(4)})
+        }
+        if(section==MobileSection.FAVORITES)listOf("Tutti","TV","Radio").forEach {label->
+            quickFilters.addView(MobileStyle.button(context,label,family==label){family=label;buildFilters();renderRows(true)},LayoutParams(-2,-2).apply {rightMargin=context.dp(4)})
+        }
         fun chip(label: String, selected: Boolean, action: () -> Unit) {
             filters.addView(MobileStyle.button(context, label, selected) { action();filtersExpanded=false; buildFilters(); renderRows(true) },
                 LayoutParams(-2, -2).apply { rightMargin = context.dp(6) })
         }
         when (section) {
-            MobileSection.CHANNELS, MobileSection.FAVORITES -> (if (section == MobileSection.FAVORITES) listOf("Tutti", "TV", "Radio") else if (sourceId == "builtin") listOf("Tutti", "Rai", "Mediaset", "Recenti") else listOf("Tutti", "Recenti")).forEach { name ->
+            MobileSection.CHANNELS -> (if (sourceId == "builtin" && channelMode=="Tutti") listOf("Tutti", "Rai", "Mediaset") else emptyList()).forEach { name ->
                 chip(name, family == name) { family = name }
             }
-            MobileSection.RADIO -> listOf("Tutte", "Preferite", "Recenti").forEach { name ->
-                chip(name, radioFilter == name) { radioFilter = name }
-            }
+            MobileSection.RADIO, MobileSection.FAVORITES -> Unit
             MobileSection.GUIDE -> {
                 chip("Da adesso", !guideEvening && guideDay==0) { guideEvening = false;guideDay=0 }
                 chip("Stasera", guideEvening) { guideEvening = true;guideDay=0 }
@@ -460,50 +491,52 @@ class MobileBrowseView(
         }
         if (sourceId=="builtin" && sourceGroup != null && it.lumetv.core.CatalogSelection.channels(channels, sourceId)
                 .none { it.isRadio == (section == MobileSection.RADIO) && sourceGroup in it.groups }) sourceGroup = null
-        val paged=sourceId!="builtin" || section==MobileSection.FAVORITES
+        val favoritesMode=section==MobileSection.FAVORITES || section==MobileSection.CHANNELS && channelMode=="Preferiti" || section==MobileSection.RADIO && radioFilter=="Preferite"
+        val recentMode=section==MobileSection.CHANNELS && channelMode=="Recenti" || section==MobileSection.RADIO && radioFilter=="Recenti"
+        val paged=sourceId!="builtin" || favoritesMode
         val queryText=search.text.toString().trim()
         val kind=when {section==MobileSection.RADIO || section==MobileSection.FAVORITES && family=="Radio"->it.lumetv.core.MediaKind.RADIO
             section!=MobileSection.FAVORITES || family=="TV"->it.lumetv.core.MediaKind.TV;else->null}
-        val restricted=when {section==MobileSection.FAVORITES || section==MobileSection.RADIO && radioFilter=="Preferite"->favoriteIds()
-            section==MobileSection.RADIO && radioFilter=="Recenti" || section==MobileSection.CHANNELS && family=="Recenti"->recentIds.toSet();else->null}
-        val catalogReset=if(paged)catalogPager?.bind(it.lumetv.app.data.PersonalCatalogQuery(source=sourceId.takeUnless {section==MobileSection.FAVORITES},kind=kind,
-            content=if(section==MobileSection.FAVORITES)null else it.lumetv.core.PlaylistContentKind.LIVE,
-            text=if(section in listOf(MobileSection.GUIDE,MobileSection.DISCOVER))"" else queryText,group=sourceGroup.takeUnless {section==MobileSection.FAVORITES},ids=restricted))
+        val restricted=when {favoritesMode->favoriteIds();recentMode->recentIds.toSet();else->null}
+        val catalogReset=if(paged)catalogPager?.bind(it.lumetv.app.data.PersonalCatalogQuery(source=sourceId.takeUnless {favoritesMode},kind=kind,
+            text=if(section in listOf(MobileSection.GUIDE,MobileSection.DISCOVER))"" else queryText,group=sourceGroup.takeUnless {favoritesMode},ids=restricted,
+            favoriteOrder=favoritesMode,includeBuiltin=favoritesMode))
         else {catalogPager?.hide();false}
         if(catalogReset==true && pendingPosition==null){pendingPosition=catalogPager?.offset ?: 0;pendingTop=0}
         val continuous=paged && catalogPager!=null && section in listOf(MobileSection.CHANNELS,MobileSection.RADIO,MobileSection.FAVORITES) &&
-            !(section==MobileSection.CHANNELS && family=="Recenti" || section==MobileSection.RADIO && radioFilter=="Recenti")
+            !recentMode
         val catalog = if(paged && catalogPager!=null) {
-            (if(section==MobileSection.FAVORITES)channels.filterNot {it.isPersonal} else emptyList())+catalogPager!!.rows
+            catalogPager!!.rows
         } else if(section==MobileSection.FAVORITES)channels else it.lumetv.core.CatalogSelection.channels(channels,sourceId,sourceGroup).filterNot {it.isVod}
-        sourceControls.visibility = if (sourceNames.isEmpty() || section == MobileSection.FAVORITES) GONE else VISIBLE
+        sourceControls.visibility = if (sourceNames.isEmpty() || favoritesMode) GONE else VISIBLE
         sourceButton.text = "Lista: " + (sourceNames[sourceId] ?: "Catalogo Lume")
         sourceButton.maxLines = 2; sourceButton.ellipsize = TextUtils.TruncateAt.END
         groupButton.maxLines = 2; groupButton.ellipsize = TextUtils.TruncateAt.END
         groupButton.text = sourceGroup ?: "Tutti i gruppi"
         groupButton.visibility = if (sourceId == "builtin") GONE else VISIBLE
-        val activeFilters=(if(queryText.isNotEmpty())1 else 0)+(if(sourceGroup!=null)1 else 0)+
-            (if(section==MobileSection.RADIO && radioFilter!="Tutte" || section==MobileSection.CHANNELS && family!="Tutti" || section==MobileSection.FAVORITES && family!="Tutti")1 else 0)
+        val activeFilters=(if(queryText.isNotEmpty())1 else 0)+(if(sourceGroup!=null && !favoritesMode)1 else 0)+
+            (if(section==MobileSection.RADIO && radioFilter!="Tutte" || section==MobileSection.CHANNELS && (family!="Tutti" || channelMode!="Tutti") || section==MobileSection.FAVORITES && family!="Tutti")1 else 0)
         filterButton.text=if(activeFilters==0)"Filtri" else "Filtri ($activeFilters)"
         filterButton.isSelected=filtersExpanded || activeFilters>0
         filterButton.background=MobileStyle.ripple(context,filterButton.isSelected)
         clearButton.visibility=if(activeFilters>0)VISIBLE else GONE
-        val scope=if(section==MobileSection.FAVORITES)"Tutte le liste" else sourceNames[sourceId] ?: "Catalogo Lume"
-        scopeLabel.text=listOfNotNull(scope,sourceGroup,queryText.takeIf {it.isNotEmpty()}?.let {"Ricerca: $it"},
-            family.takeIf {section in listOf(MobileSection.CHANNELS,MobileSection.FAVORITES) && it!="Tutti"},radioFilter.takeIf {section==MobileSection.RADIO && it!="Tutte"}).joinToString(" · ")
+        val scope=if(favoritesMode)"Preferiti · Tutte le liste attive" else sourceNames[sourceId] ?: "Catalogo Lume"
+        scopeLabel.text=listOfNotNull(scope,sourceGroup.takeUnless {favoritesMode},queryText.takeIf {it.isNotEmpty()}?.let {"Ricerca: $it"},
+            channelMode.takeIf {section==MobileSection.CHANNELS && it=="Recenti"},
+            family.takeIf {section in listOf(MobileSection.CHANNELS,MobileSection.FAVORITES) && it!="Tutti"},radioFilter.takeIf {section==MobileSection.RADIO && it=="Recenti"}).joinToString(" · ")
         scopeLabel.contentDescription=scopeLabel.text
         adaptHeight()
-        if (selectedPersonalGuide?.id!=guideChannelId && catalog.none { !it.isRadio && it.id == guideChannelId }) guideChannelId = catalog.firstOrNull { !it.isRadio }?.id
+        if (guideChannelId==null || selectedPersonalGuide?.id!=guideChannelId && catalog.none { !it.isRadio && it.id == guideChannelId }) guideChannelId = catalog.firstOrNull { !it.isRadio }?.id
         val query = search.text.toString().trim()
         val now = System.currentTimeMillis()
         val selectedChannel = selectedPersonalGuide?.takeIf {it.id==guideChannelId && it.sourceId==sourceId} ?: catalog.firstOrNull { it.id == guideChannelId }
         val rows = when (section) {
             MobileSection.CHANNELS, MobileSection.FAVORITES -> catalog.filter { channel ->
                 (section == MobileSection.FAVORITES || !channel.isRadio) &&
-                    (section != MobileSection.FAVORITES || favorite(channel)) &&
+                    (!favoritesMode || favorite(channel)) && (!recentMode || channel.id in recentIds) &&
                     (family == "Tutti" || family == "Recenti" && channel.id in recentIds || family == "TV" && !channel.isRadio || family == "Radio" && channel.isRadio || channel.family == family) &&
                     (query.isBlank() || channel.name.contains(query, true) || channel.number.toString() == query)
-            }.let { rows -> if (family == "Recenti") rows.sortedBy { recentIds.indexOf(it.id) } else rows }
+            }.let { rows -> if (recentMode) rows.sortedBy { recentIds.indexOf(it.id) } else rows }
                 .map { MobileBrowseItem(it, ProgrammeWindow.at(programmes[it.epgId].orEmpty(), now).current, channelRow = true) }
             MobileSection.RADIO -> catalog.filter { it.isRadio &&
                 (radioFilter != "Preferite" || favorite(it)) && (radioFilter != "Recenti" || it.id in recentIds) &&
@@ -520,7 +553,7 @@ class MobileBrowseView(
                 channels.filter(favorite).map { it.id }.toSet(), period, discoveryFavorites, query, now)
                 .map { MobileBrowseItem(it.channel, it.programme) }
         }
-        val fixedRows=if(continuous)rows.filterNot {it.channel.isPersonal} else rows
+        val fixedRows=if(continuous)emptyList() else rows
         adapter.catalog=if(continuous)catalogPager?.data else null
         adapter.programmeFor={channel->ProgrammeWindow.at(programmes[channel.epgId].orEmpty(),System.currentTimeMillis()).current}
         val rowCount=fixedRows.size+(adapter.catalog?.size ?: 0)
@@ -543,14 +576,13 @@ class MobileBrowseView(
         if (resetScroll && !continuous)list.scrollToPosition(0)
         list.visibility = if (rowCount==0) GONE else VISIBLE
         empty.visibility = if (rowCount==0) VISIBLE else GONE
-        val recentMode = section == MobileSection.RADIO && radioFilter == "Recenti" || section == MobileSection.CHANNELS && family == "Recenti"
         emptyTitle.text = when {
             catalogError -> "Impossibile aprire la lista"
             !loaded || initialLoading -> if(catalogLoadingMessage!=null)"Aggiorno il catalogo…" else "Un momento…"
             query.isNotBlank() -> "Nessun risultato"
             recentMode -> "Ancora nessun ascolto recente"
             section == MobileSection.RADIO && radioFilter == "Preferite" -> "Le tue radio preferite, qui"
-            section == MobileSection.FAVORITES -> "I tuoi canali, qui"
+            favoritesMode -> "I tuoi canali, qui"
             section == MobileSection.GUIDE || section == MobileSection.DISCOVER -> "Nessun programma disponibile"
             else -> "Nessun canale disponibile"
         }
@@ -560,12 +592,12 @@ class MobileBrowseView(
             query.isNotBlank() -> "Prova a cercare un altro nome."
             recentMode -> "Le emittenti riprodotte compariranno qui."
             section == MobileSection.RADIO && radioFilter == "Preferite" -> "Tocca il cuore accanto a una radio per ritrovarla qui."
-            section == MobileSection.FAVORITES -> "Tocca il cuore accanto a un canale per ritrovarlo nei preferiti."
+            favoritesMode -> "Tocca il cuore accanto a un canale per ritrovarlo nei preferiti."
             sourceId != "builtin" && section in listOf(MobileSection.GUIDE, MobileSection.DISCOVER) -> personalGuideMessages[sourceId] ?: "Nessun programma in questa fascia. Controlla la guida della lista e aggiorna."
             section == MobileSection.GUIDE || section == MobileSection.DISCOVER -> guideStatus.ifBlank { "Il palinsesto può non essere disponibile per questa selezione. La diretta resta accessibile dai Canali." }
             else -> "Controlla la connessione e aggiorna il catalogo."
         }
-        emptyAction.visibility = if(catalogError)VISIBLE else if (!loaded || initialLoading || query.isNotBlank() || recentMode || section == MobileSection.FAVORITES ||
+        emptyAction.visibility = if(catalogError)VISIBLE else if (!loaded || initialLoading || query.isNotBlank() || recentMode || favoritesMode ||
             section == MobileSection.RADIO && radioFilter == "Preferite" || sourceId != "builtin" && section == MobileSection.DISCOVER) GONE else VISIBLE
         emptyAction.text = if(catalogError)"Riprova" else if (section == MobileSection.GUIDE && selectedChannel != null) "Guarda ${selectedChannel.name}" else "Aggiorna"
         emptyAction.setOnClickListener {if(catalogError)catalogPager?.data?.retry() else if(section==MobileSection.GUIDE && selectedChannel!=null)choose(MobileBrowseItem(selectedChannel,channelRow=true)) else refresh()}
@@ -627,6 +659,7 @@ class MobileBrowseView(
         brandToolbar.visibility=if(compact)GONE else VISIBLE
         headingRow.visibility=if(compact)GONE else VISIBLE
         compactOptions.visibility=if(compact)VISIBLE else GONE
+        compactRemote.visibility=if(compact)VISIBLE else GONE
         scopeLabel.maxLines=if(compact)1 else 2
         details.visibility=if(filtersExpanded)VISIBLE else GONE
         detailsScroll.visibility=details.visibility

@@ -138,6 +138,60 @@ python3 tools/smoke_tv_channel_switch.py --adb /percorso/adb --serial emulator-5
 
 Il probe viene eseguito come shell sull’emulatore e non entra nell’APK. Il test invia uno Stop senza timestamp e sorgente durante l’apertura lenta del secondo canale; verifica anche che Stop dopo l’apertura e Stop con un timestamp reale continuino a funzionare.
 
+## Collaudare Collega TV e smartphone
+
+Compila Debug e AndroidTest, poi usa due emulatori temporanei e un MP4 sintetico locale di almeno due minuti:
+
+```sh
+python3 tools/smoke_companion.py --adb /percorso/adb --phone emulator-5590 --tv emulator-5592 --video /percorso/video.mp4 --font 1.3 --output analysis/companion/native
+```
+
+Il runner rifiuta hardware fisico. Le reti degli emulatori sono isolate: un inoltro TCP adb trasporta il TLS originale, senza bypassare codice, identità, conferma sulla TV o autorizzazione. Verifica rifiuto e approvazione, codice errato, accesso non abbinato, certificato diverso, credenziale cifrata, comandi del player, sessione obsoleta, ripetizione idempotente, rotazione, chiusura/riapertura della TV e revoca. Scoperta mDNS, fotocamera e comportamento degli access point richiedono un successivo collaudo sulla rete reale. Nessun controllo UI viene aggiunto alla CI.
+
+## Collaudare backup e ripristino
+
+Compila Debug e AndroidTest ed esegui il collaudo su due emulatori temporanei:
+
+```sh
+python3 tools/smoke_backup.py --adb /percorso/adb --phone emulator-5590 --tv emulator-5592 --font 1.3 --output analysis/backup/native
+```
+
+Ripeti con `--font 2.0` e una cartella distinta. Il runner rifiuta hardware fisico e sostituisce solo i dati dei simulatori. Verifica pagine native, contratti Android per creazione/apertura documenti, password discordanti o errate, selezione vuota, categorie e singole liste, conservazione dei dati presenti, riprese e archivi, ordine, nascosti, ripetizione senza duplicati, rotazione, focus TV e annullamento. L’APK AndroidTest contiene un’attività documenti fittizia, abilitata soltanto durante questo collaudo per la risoluzione degli intent sulle immagini TV; i monitor dell’instrumentation restituiscono file sintetici privati. L’attività non fa parte dell’APK dell’app.
+
+I test JVM confrontano la derivazione PBKDF2 con il provider JDK e verificano autenticazione, manomissioni, troncamenti, formati futuri, percorsi estranei, identificativi duplicati, righe fuori limite, capienza e rollback dopo errore di commit. Il formato usa AES-256-GCM a blocchi autenticati, PBKDF2-HMAC-SHA256 con 600.000 iterazioni e lettura di record portabili, senza accettare database SQLite esterni. Sono previsti 2 GiB per archivio e dati espansi, 16 MiB per il manifesto, 2 MiB per riga e fino a 5.000 avanzamenti; restano i limiti delle liste personali. Il collaudo dell’interfaccia resta manuale e non viene aggiunto alla CI.
+
+## Collaudare Video e continuità
+
+Per il blocco Video e continuità, usa le APK Debug/AndroidTest e un MP4 sintetico locale di almeno due minuti:
+
+```sh
+python3 tools/smoke_video_library.py --adb /percorso/adb --phone emulator-5580 --tv emulator-5582 --video /percorso/video.mp4 --operation playlist-video-continuity --font 1.3 --output analysis/video-continuity/native
+```
+
+Il collaudo verifica visto/non visto, rimozione e ripristino da Continua, ripresa nello stesso player, precedenza delle modifiche manuali sui salvataggi tardivi, errore di apertura, fine episodio con conferma, tasto OK e seek sulla TV, passaggio di stagione, isolamento tra liste, azioni obsolete, schermo intero automatico su smartphone, rotazione e timer. Ripeti con `--font 2.0` e una cartella distinta. Richiede emulatori temporanei, sostituisce soltanto i loro dati e non aggiunge controlli UI alla CI.
+
+## Collaudare canali e preferiti
+
+Per il blocco preferiti e navigazione, compila le APK Debug/AndroidTest e usa due emulatori temporanei:
+
+```sh
+python3 tools/smoke_channel_personalization.py --adb /percorso/adb --phone emulator-5580 --tv emulator-5582
+```
+
+Verifica filtri rapidi, barra a quattro/cinque sezioni, preferiti oltre l’anteprima, trascinamento, D-pad, annullamento, canali nascosti e ripristino, radio e collegamento ai preferiti. `--count 100000` prova una lista grande; `--font 1.3` e `--font 2.0` controllano il testo ingrandito. Sostituisce i dati dei soli emulatori, rifiuta dispositivi fisici e ripristina la scala del testo. Report e schermate sono in `analysis/channel-personalization/`. Non eseguire altri collaudi sugli stessi emulatori contemporaneamente. Questi controlli restano manuali, fuori dalla CI.
+
+## Collaudare opzioni di riproduzione e timer
+
+`tools/smoke_playback_options.py` richiede `ffmpeg`, due emulatori temporanei e le APK Debug/AndroidTest compilate. Genera flussi HLS sintetici con due lingue audio, due risoluzioni e sottotitoli; verifica preferenze, selezioni temporanee, cambio di stream, navigazione, rotazione, timer e arresto dell'audio in background. La scadenza è abbreviata soltanto dall'APK di test tramite il runner protetto per emulatori. Non accetta dispositivi fisici e non modifica la CI. I cataloghi di prova sostituiscono i dati dei soli emulatori temporanei; la scala del testo viene ripristinata alla fine.
+
+```sh
+python3 tools/smoke_playback_options.py --adb /percorso/adb --phone emulator-5580 --tv emulator-5582
+```
+
+Usa `--font 1.3` o `--font 2.0` e una diversa cartella `--output` per verificare il testo ingrandito. Report e schermate vengono conservati nella cartella di output.
+
+Con un timer attivo il servizio disabilita temporaneamente l'audio offload: la normale gestione del wake lock del player mantiene attiva la scadenza anche quando l'audio potrebbe essere riprodotto senza CPU. Annullare il timer ripristina la preferenza offload. La policy è verificata nei test; consumi e comportamento delle ottimizzazioni del produttore richiedono hardware fisico.
+
 ## Collaudare i launcher su emulatori
 
 `tools/smoke_home_channels.py` rifiuta seriali diversi da `emulator-*`. Compila e installa sull’emulatore sia `:app:assembleDebug` sia `:app:assembleDebugAndroidTest`; il runner `HomeInspection` è presente solo nell’APK di test e controlla anche `Build.HARDWARE`. Ispeziona esclusivamente le righe preview appartenenti a Lume attraverso il provider reale, senza privilegi di root o modifiche alle autorizzazioni del dispositivo.

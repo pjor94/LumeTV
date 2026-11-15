@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.10.2 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.10.2/LumeTV-0.10.2.apk)
+> ### [Scarica Lume TV 0.11.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.11.0/LumeTV-0.11.0.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.10.2) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.11.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -35,15 +35,14 @@ Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedica
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Novità della 0.10.2
+## Novità della 0.11.0
 
-Corretto il blocco ClearKey/DASH delle sorgenti personali `localplay`, compresa Food Network, quando il provider restituisce uno stream HLS non protetto. Formato e protezione vengono scelti dal resolver; le configurazioni statiche della lista restano conservate senza essere applicate a un flusso diverso da quello per cui erano state preparate.
+- **Telecomando TV dallo smartphone:** apri **Opzioni → Collega telefono** sulla TV e inquadra il QR grande sulla destra. Il telecomando si apre subito, con frecce, OK, Indietro, Home di Lume e Opzioni per navigare nei menu, oltre ai controlli di riproduzione. Le aperture successive riconnettono l’ultima TV.
+- **Backup e ripristino:** un file locale protetto da password conserva liste personali, configurazioni di accesso, preferiti, canali nascosti, avanzamenti e preferenze. L’anteprima permette di scegliere i dati da recuperare mantenendo quelli già presenti.
+- **Video e continuità:** episodio successivo, proposta con conferma a fine episodio, Visto/Non visto e rimozione reversibile da Continua a guardare. Sullo smartphone, video e dirette si aprono subito a schermo intero orizzontale.
+- **Preferiti e riproduzione:** riordino dei preferiti, canali nascosti, scelta delle tracce audio e dei sottotitoli, qualità e timer da 15, 30, 60 o 90 minuti. La barra smartphone mantiene al massimo cinque sezioni, con preferiti e recenti nei filtri di Canali e Radio.
 
-La correzione è comune a tutte le route supportate. Restano applicati gli header per risorsa e i consensi HTTP; gli stream protetti mantengono la configurazione del provider. Le voci con URL diretto continuano a usare ClearKey, Widevine e le indicazioni di formato della lista.
-
-Per i canali `localplay` già salvati basta aggiornare l'app e riaprire il canale, senza reimportare la lista. Interfaccia, preferiti e impostazioni restano disponibili.
-
-Restano disponibili la biblioteca **Video**, lo scorrimento continuo, le liste fino a **500.000 voci lette per sorgente**, HTTP su consenso, guida XMLTV e archivio per i servizi compatibili. Le liste personali restano sul dispositivo e sono escluse da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](docs/personal-playlists.md).
+Preferiti, liste e avanzamenti già presenti vengono conservati aggiornando con la stessa firma. Restano disponibili le correzioni `localplay` della 0.10.2, la biblioteca Video, le liste fino a **500.000 voci lette per sorgente**, la guida XMLTV e l’archivio per i servizi compatibili. [Tutte le novità](CHANGELOG.md#0110--telecomando-tv-backup-e-continuità-di-visione--2026-11-15) · [Liste personali](docs/personal-playlists.md).
 
 ## TV, radio e riproduzione continua
 
@@ -55,7 +54,11 @@ Su Android TV, una schermata radio dedicata offre i comandi per telecomando. Tor
 
 **Opzioni** è una pagina dedicata su entrambi i dispositivi. Sulla TV mantiene il menu superiore delle altre pagine, con navigazione da telecomando e anteprima della diretta; sul telefono mantiene il mini player. È corretto anche l’arresto involontario della riproduzione cambiando canale dalla lista sulla Bravia.
 
-Il progetto continua a usare un solo player. Timer di spegnimento e integrazioni per l’auto sono esclusi da questa versione. I consumi e l’audio offload vanno verificati su hardware fisico; la modalità solo audio non riduce necessariamente il traffico se la sorgente unisce audio e video nello stesso flusso.
+Il progetto continua a usare un solo player. **Opzioni riproduzione** permette di scegliere tracce audio, sottotitoli, qualità e timer da 15, 30, 60 o 90 minuti. I consumi e l’audio offload vanno verificati su hardware fisico; la modalità solo audio non riduce necessariamente il traffico se la sorgente unisce audio e video nello stesso flusso. Non sono disponibili integrazioni per l’auto.
+
+**Opzioni → Canali e preferiti** permette di riordinare i preferiti TV e radio e nascondere o ripristinare canali. **Tutti / Preferiti / Recenti** sono accessibili dentro Canali e Radio. **Opzioni → Backup e ripristino** crea e recupera un file protetto da password tramite un gestore documenti Android compatibile.
+
+Il **Telecomando** smartphone controlla la TV sulla rete privata IPv4. Il collegamento tramite QR autorizza subito il telefono; chi può inquadrarlo può controllare Lume su quella TV. Il codice manuale mantiene la conferma sul televisore e i telefoni possono essere rimossi da **Gestisci collegamenti**. Lume deve essere aperta sulla TV; configurazione tramite moduli smartphone, catalogo sul telefono, invio liste e sincronizzazione restano previsti per sviluppi successivi. Vedi le guide [TV](docs/GUIDA-ANDROID-TV.md#collega-telefono) e [smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md#telecomando-e-collegamento-tv).
 
 ## Funzioni
 
@@ -64,7 +67,7 @@ Il progetto continua a usare un solo player. Timer di spegnimento e integrazioni
 - Canali Rai, Rai/TGR e Mediaset presenti nella lista WLTV, insieme alle altre sorgenti supportate.
 - Riproduzione a tutto schermo di flussi HLS e DASH, con supporto Widevine quando richiesto dall’emittente.
 - Su TV: navigazione con telecomando, selezione numerica e cambio canale con CH+/CH−.
-- Su smartphone Android: navigazione touch con **Canali / Radio / Preferiti / Guida / Scopri**, ricerca e pulsanti per preferiti, pausa/ripresa, cambio canale e schermo intero.
+- Su smartphone Android: navigazione touch con **Canali / Video / Radio / Guida / Scopri**, con Video quando disponibile, ricerca e pulsanti per preferiti, pausa/ripresa, cambio canale e schermo intero.
 - Elenco canali durante la diretta, con loghi, programma in onda e filtro preferiti, senza interrompere la visione: laterale sulla TV e touch sul telefono.
 - Preferiti e memorizzazione dell’ultimo canale guardato. Sulla TV, l’ultimo canale viene riaperto all’avvio; sul telefono si apre il catalogo.
 - Cambio canale su tutti i canali o solo sui preferiti, configurabile in **Opzioni**, con CH+/CH− sulla TV e pulsanti precedente/successivo sul telefono.
@@ -132,9 +135,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.10.2** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.11.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.10.2 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.11.0 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 

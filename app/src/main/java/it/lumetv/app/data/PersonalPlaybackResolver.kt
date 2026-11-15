@@ -10,7 +10,7 @@ import java.net.URI
 import java.time.ZoneId
 
 internal class PersonalPlaybackResult(val stream:ResolvedStream,val target:PlaybackTarget,val title:String,
-    val duration:Long,val startPosition:Long,val baseOffset:Long,val regenerate:Boolean) {
+    val duration:Long,val startPosition:Long,val baseOffset:Long,val regenerate:Boolean,val seriesKey:String="") {
     override fun toString()="PersonalPlaybackResult(mode=${target.mode})"
 }
 internal class PersonalPlaybackResolver(context:Context,private val personal:PersonalPlaylistRepository,private val http:OkHttpClient) {
@@ -46,7 +46,8 @@ internal class PersonalPlaybackResolver(context:Context,private val personal:Per
         }
         val mime=resolved.mimeType ?: PersonalPlaylistNetwork.detectMime(resolved.url,resolved.manifestHeaders ?: resolved.headers,http,entry.source.allowHttp,entry.context)
         if(!entry.context.valid())throw SourceException("La lista non è più disponibile.")
-        PersonalPlaybackResult(resolved.copy(mimeType=mime,personalNetworkToken=entry.context.token),actual,title,duration,start,base,regenerate)
+        PersonalPlaybackResult(resolved.copy(mimeType=mime,personalNetworkToken=entry.context.token),actual,title,duration,start,base,regenerate,
+            if(mode==PlaybackMode.VOD)VodMetadata.from(entry.entry).seriesKey else "")
     }
     private fun origin(raw:String):String=PlaylistSettings.origin(raw.toHttpUrl())
 }

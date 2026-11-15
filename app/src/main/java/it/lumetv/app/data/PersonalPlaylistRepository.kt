@@ -135,6 +135,37 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     suspend fun videoPreview(query:VideoQuery):VideoPage {load();return try {videoData.page(query.copy(offset=0,limit=16),true)}finally {_videoProgress.value=null}}
     suspend fun videoGroups(query:VideoQuery):List<String> {load();return videoData.groups(query)}
     suspend fun videoDetails(item:VideoItem):VideoItem? = videos(if(item.isSeries)VideoQuery(source=item.source,series=item.series,limit=1) else VideoQuery(source=item.source,id=item.id,collapseSeries=false,limit=1)).rows.firstOrNull()
+    suspend fun nextEpisode(source:String,id:String):VideoItem? {
+        load()
+        val next=videoData.readSource(source){stored,signal->store.nextEpisodeId(stored,id,signal)} ?: return null
+        return videos(VideoQuery(source=source,id=next,collapseSeries=false,limit=1,details=false)).rows.firstOrNull()
+    }
+    suspend fun seriesPlaybackTarget(item:VideoItem):VideoItem? {
+        require(item.isSeries)
+        videos(VideoQuery(source=item.source,series=item.series,shelf=VideoShelf.CONTINUE,collapseSeries=false,limit=1,details=false)).rows.firstOrNull()?.let {return it}
+        val history=PersonalPlaybackStore.get(app)
+        val next=videoData.readSource(item.source){stored,signal->store.firstUnwatchedId(stored,item.series,history.database(),signal)}
+        return videos(if(next!=null)VideoQuery(source=item.source,id=next,collapseSeries=false,limit=1,details=false)
+            else VideoQuery(source=item.source,series=item.series,collapseSeries=false,limit=1,details=false)).rows.firstOrNull()
+    }
+    suspend fun setVideoCompleted(item:VideoItem,completed:Boolean)=editVideoHistory(item){duration->
+        PersonalPlaybackStore.get(app).complete(item.source,it.lumetv.core.PlaybackTarget(item.id,it.lumetv.core.PlaybackMode.VOD),completed,duration)
+    }
+    suspend fun setContinueHidden(item:VideoItem,hidden:Boolean)=editVideoHistory(item){_->
+        PersonalPlaybackStore.get(app).hide(item.source,it.lumetv.core.PlaybackTarget(item.id,it.lumetv.core.PlaybackMode.VOD),hidden);Unit
+    }
+    private suspend fun editVideoHistory(item:VideoItem,edit:(Long)->Unit) {
+        require(!item.isSeries);load()
+        val changed=videoData.readSource(item.source){stored,signal->
+            android.database.sqlite.SQLiteDatabase.openDatabase(store.file(item.source).path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db->
+                val content=if(stored.settings.contentOverride==null)" AND content='VOD'" else ""
+                db.rawQuery("SELECT duration FROM video_items WHERE id=?$content",arrayOf(item.id),signal).use {c->
+                    if(c.moveToFirst()){edit(c.getLong(0));true}else false
+                }
+            }
+        } ?: false
+        if(!changed)throw IOException("Il titolo non è più disponibile. Riapri i video.")
+    }
     suspend fun videoSeasons(item:VideoItem,query:String="",offset:Int=0):Pair<List<Int>,Int> {
         load();return videoData.readSource(item.source){stored,signal->
             android.database.sqlite.SQLiteDatabase.openDatabase(store.file(item.source).path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db->
@@ -177,14 +208,21 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             }
         }
     }
-    suspend fun catalog(query:PersonalCatalogQuery):PersonalLibraryPage {
+    private val personalization by lazy {ChannelPersonalization.get(app)}
+    private fun personalized(query:PersonalCatalogQuery)=query.copy(
+        excluded=if(query.includeHidden)emptySet() else personalization.hiddenIds,
+        ranks=if(query.favoriteOrder)personalization.order else emptyList())
+    suspend fun catalog(query:PersonalCatalogQuery,builtin:List<Channel> = emptyList()):PersonalLibraryPage {
         load();return withContext(Dispatchers.IO){mutex.withLock {
             if(query.ids?.isEmpty()==true)return@withLock PersonalLibraryPage(emptyList(),0)
+            val request=personalized(query)
+            val selected=sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)}
+            if(query.favoriteOrder || query.includeBuiltin)return@withLock store.orderedCatalog(selected,builtin,request)
             var skip=query.offset.coerceAtLeast(0);var total=0;val rows=mutableListOf<Channel>()
             val limit=query.limit.coerceIn(1,CATALOG_WINDOW)
-            sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)}.forEach {s->
+            selected.forEach {s->
                 kotlin.coroutines.coroutineContext.ensureActive()
-                val page=store.catalog(s,query.copy(offset=skip,limit=(limit-rows.size).coerceAtLeast(1)))
+                val page=store.catalog(s,request.copy(offset=skip,limit=(limit-rows.size).coerceAtLeast(1)))
                 total+=page.total
                 if(rows.size<limit)rows.addAll(page.rows.take(limit-rows.size))
                 skip=(skip-page.total).coerceAtLeast(0)
@@ -192,9 +230,21 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             PersonalLibraryPage(rows,total)
         }}
     }
+    suspend fun favoriteIds(query:PersonalCatalogQuery,builtin:List<Channel> = emptyList()):List<String> {
+        require(query.ids!=null)
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            store.orderedCatalogIds(sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)},builtin,personalized(query))
+        }}
+    }
+    suspend fun favoriteOwners(query:PersonalCatalogQuery,builtin:List<Channel> = emptyList()):Map<String,String> {
+        require(query.ids!=null)
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            store.orderedCatalogOwners(sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)},builtin,personalized(query))
+        }}
+    }
     suspend fun groups(query:PersonalCatalogQuery):Pair<List<String>,Int> {
         load();return withContext(Dispatchers.IO){mutex.withLock {
-            store.catalogGroups(sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)},query)
+            store.catalogGroups(sources.values.filter {it.source.enabled && (query.source==null || it.source.id==query.source)},personalized(query))
         }}
     }
     suspend fun channel(id:String,source:String?=null):Channel? {
@@ -205,13 +255,24 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     }
     suspend fun next(current:Channel,direction:Int,ids:Set<String>?=null):Channel? {
         load();return withContext(Dispatchers.IO){mutex.withLock {
-            sources[current.sourceId]?.takeIf {it.source.enabled}?.let {store.nextChannel(it,store.displayChannel(it,current.id) ?: current,direction,ids)}
+            sources[current.sourceId]?.takeIf {it.source.enabled}?.let {stored->
+                if(ids==null)store.nextChannel(stored,store.displayChannel(stored,current.id) ?: current,direction,null,personalization.hiddenIds)
+                else {
+                    val sequence=store.orderedCatalogIds(listOf(stored),emptyList(),personalized(PersonalCatalogQuery(source=current.sourceId,kind=current.kind,ids=ids,favoriteOrder=true)))
+                    val index=sequence.indexOf(current.id)
+                    val next=if(sequence.isEmpty())null else sequence[if(index<0)if(direction<0)sequence.lastIndex else 0 else Math.floorMod(index+direction,sequence.size)]
+                    next?.let {store.displayChannel(stored,it)}
+                }
+            }
         }}
     }
     suspend fun catalogPosition(current:Channel,ids:Set<String>?=null):Int {
         load();return withContext(Dispatchers.IO){mutex.withLock {
             sources[current.sourceId]?.takeIf {it.source.enabled}?.let {stored->
-                store.displayChannel(stored,current.id)?.let {store.catalogPosition(stored,it,ids)}
+                store.displayChannel(stored,current.id)?.let {
+                    if(ids==null)store.catalogPosition(stored,it,null,personalization.hiddenIds)
+                    else store.orderedCatalogIds(listOf(stored),emptyList(),personalized(PersonalCatalogQuery(source=current.sourceId,kind=current.kind,ids=ids,favoriteOrder=true))).indexOf(current.id).coerceAtLeast(0)
+                }
             } ?: 0
         }}
     }
@@ -426,7 +487,8 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 addAll(prefs.getString("recent_channels","").orEmpty().split(','));prefs.getString("last_channel",null)?.let(::add)
                 runCatching {val reminders=JSONArray(app.getSharedPreferences("discovery",Context.MODE_PRIVATE).getString("reminders","[]"))
                     for(i in 0 until reminders.length())reminders.optJSONObject(i)?.optString("channel")?.let(::add)}}
-            val removed=references.filter {store.containsId(id,it)}.toSet()
+            val removed=store.matchingIds(id,references+personalization.order)+personalization.sourceIds(id)
+            personalization.removeSource(id,removed)
             contexts[id]?.invalidate();contexts=contexts-id
             sources.remove(id);registered-=id;store.delete(id);catalogs.remove(id)
             PersonalGuideRepository.removeFiles(app,id)
@@ -569,6 +631,77 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         return !recent(stored.source.checked,interval)
     }
     private fun writable() { storageError?.let { throw IOException(it) } }
+    internal suspend fun <T> backupSnapshot(block:(List<PlaylistStored>,PersonalPlaylistStore)->T):T {
+        load()
+        return withContext(Dispatchers.IO){mutex.withLock {
+            writable()
+            if(registered.any {it !in sources})throw IOException("Una lista salvata non è leggibile. Correggila prima di creare un backup.")
+            block(sources.values.toList(),store)
+        }}
+    }
+    /** All candidates are validated first. Existing source identities are always kept. */
+    internal suspend fun <T> restoreBackup(
+        prepared:List<BackupPlaylist>,includeLists:Boolean,referenceIds:Set<String>,check:()->Unit,
+        apply:(Map<String,BackupReference>,Set<String>,Int,Int,()->Unit)->T,
+    ):T {
+        load()
+        return withContext(Dispatchers.IO){mutex.withLock {
+            writable();check()
+            val candidates=if(includeLists)prepared.filter {it.stored.source.id !in registered} else emptyList()
+            if(registered.size+candidates.size>MAX_SOURCES)throw IOException("Il ripristino supera il limite di 10 liste. Deseleziona le liste o liberane una prima di riprovare.")
+            if(sources.values.sumOf {it.source.count}+candidates.sumOf {it.stored.source.count}>MAX_TOTAL)
+                throw IOException("Il ripristino supera il limite complessivo di 1.000.000 voci.")
+            val bytes=candidates.sumOf {it.file.length()}
+            if(directory.usableSpace<bytes+16L*1024*1024)throw IOException("Spazio insufficiente per ripristinare le liste. Libera spazio e riprova.")
+            for(candidate in candidates) {
+                require(candidate.file.isFile)
+                for(existing in sources.keys) {
+                    check()
+                    if(store.backupOverlaps(candidate.file,existing))throw IOException("Il backup contiene identificativi già usati da un’altra lista. Le liste esistenti sono state conservate.")
+                }
+            }
+            val original=registered.toList();val copied=mutableListOf<String>();val added=mutableListOf<PlaylistStored>()
+            var committed=false
+            try {
+                val names=sources.values.map {it.source.name.lowercase(java.util.Locale.ROOT)}.toMutableSet()
+                for(candidate in candidates) {
+                    check()
+                    val raw=candidate.stored.source.name;var name=raw;var suffix=1
+                    while(!names.add(name.lowercase(java.util.Locale.ROOT))) {
+                        val tail=if(suffix==1)" (backup)" else " (backup $suffix)"
+                        name=raw.take(100-tail.length)+tail;suffix++
+                    }
+                    val value=candidate.stored.copy(source=candidate.stored.source.copy(name=name))
+                    val draft=File(directory,".draft-restore-"+UUID.randomUUID()+".sqlite")
+                    try {
+                        candidate.file.inputStream().use {input->draft.outputStream().use {output->
+                            val buffer=ByteArray(64*1024)
+                            while(true){check();val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count)}
+                            output.fd.sync()
+                        }}
+                        store.changeBackupMetadata(draft,value)
+                        store.commit(draft,value.source.id);copied+=value.source.id;added+=value
+                    }finally {draft.delete();File(draft.path+"-journal").delete()}
+                }
+                val references=linkedMapOf<String,BackupReference>()
+                (sources.values+added).forEach {value->check();references.putAll(store.backupReferences(value,referenceIds))}
+                val result=apply(references,(sources.keys+added.map {it.source.id}).toSet(),added.size,
+                    if(includeLists)prepared.size-added.size else 0) {
+                    kotlin.check(!committed);writeIndex(original+copied);committed=true
+                }
+                kotlin.check(committed)
+                registered+=copied;added.forEach {sources[it.source.id]=it}
+                publish(copied.toSet())
+                result
+            }catch(error:Exception) {
+                var remove=true
+                if(committed)try {writeIndex(original)}catch(_:Exception){remove=false}
+                if(remove)copied.forEach(store::delete)
+                registered.clear();registered.addAll(original);copied.forEach {sources.remove(it);catalogs.remove(it)}
+                throw error
+            }
+        }}
+    }
     private fun writeIndex(ids:Collection<String>) {
         val bytes=JSONObject().put("version",1).put("ids",JSONArray(ids)).toString().toByteArray()
         val output=index.startWrite()

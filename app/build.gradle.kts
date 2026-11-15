@@ -12,8 +12,8 @@ android {
         applicationId = "it.lumetv.app"
         minSdk = 23
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.10.2"
+        versionCode = 24
+        versionName = "0.11.0"
         testInstrumentationRunner = "it.lumetv.app.home.HomeInspection"
     }
     buildTypes {
@@ -85,6 +85,8 @@ dependencies {
     implementation("androidx.media3:media3-session:1.11.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.tukaani:xz:1.9")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")

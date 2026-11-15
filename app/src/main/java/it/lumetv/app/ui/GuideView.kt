@@ -145,6 +145,7 @@ class GuideView(
     }
 
     fun submit(channels: List<Channel>, programmes: Map<String, List<Programme>>, currentId: String?) {
+        navigation.favoriteOrder = it.lumetv.app.data.ChannelPersonalization.get(context).order
         day.visibility=if(channels.any {it.isPersonal})VISIBLE else GONE
         search.visibility=day.visibility
         this.currentId = currentId

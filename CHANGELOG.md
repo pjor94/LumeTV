@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.11.0 · Telecomando TV, backup e continuità di visione — 2026-11-15
+
+### Collega TV e smartphone
+
+- **Opzioni → Collega telefono** sulla TV mostra un QR grande sulla destra, con testo e comandi sulla sinistra. Sullo smartphone apri **Telecomando** e inquadra il QR: il collegamento è immediato, senza un altro **Consenti** sulla TV. Il QR è monouso, temporaneo e si rinnova automaticamente; chi lo inquadra può controllare Lume sulla TV.
+- La TV torna automaticamente alle Opzioni quando il telefono ha ricevuto l’accesso, mantenendo contenuto e stato della riproduzione. Il QR rimane interamente visibile anche scorrendo i comandi con testo ingrandito.
+- Il telecomando riapre l’ultima TV usata senza nuovi codici. Il nome della TV nell’intestazione apre il selettore; **Altri metodi** raccoglie codice manuale, IP e porta. Il codice manuale usa un invito distinto e mantiene la conferma sulla TV; cambiare metodo invalida l’invito precedente.
+- Croce direzionale e OK centrale, Indietro, Home di Lume e Opzioni navigano nell’interfaccia TV anche senza una riproduzione attiva. Il controllo resta nella finestra di Lume in primo piano. La conferma del codice manuale e la rimozione dei telefoni richiedono il telecomando fisico.
+- Play/pausa, cambio canale o avanzamento video, cursore accessibile e opzioni espandibili sotto la navigazione. In orizzontale navigazione e riproduzione si affiancano. Un cambio di contenuto sulla TV annulla il trascinamento precedente del cursore.
+- Audio, sottotitoli, qualità, timer, ritorno alla diretta e prossimo episodio seguono le capacità del contenuto. La chiusura del telecomando sul telefono non interrompe la riproduzione sulla TV.
+- TLS con identità della TV verificata, credenziali cifrate tramite Android Keystore e autorizzazioni revocabili dalla TV. Abbinamenti e chiavi restano esclusi dai backup portabili. Dopo la revoca, **Abbina di nuovo** permette di ripartire dal QR.
+- Scoperta e controllo sulla rete privata IPv4; il listener si chiude uscendo da Lume sulla TV. Il telefono riprova la connessione quando la TV torna disponibile. Comandi ordinati, legati alla sessione e identificati in modo univoco evitano azioni in ritardo e ripetizioni dopo una riconnessione.
+- Configurazione TV tramite moduli smartphone, catalogo sul telefono, invio liste e backup, passaggio della visione e sincronizzazione restano previsti per sviluppi successivi.
+
+### Backup e ripristino
+
+- **Opzioni → Backup e ripristino** su smartphone e TV. **Crea backup** produce un file locale `.lumebackup` protetto da password, con liste personali e configurazioni di accesso, preferiti, ordine e canali nascosti, La mia lista, riprese e stati Visto/Non visto.
+- **Ripristina backup** verifica password e integrità prima dell’anteprima. Si scelgono categorie e singole liste; le liste già presenti mantengono contenuti e impostazioni. Liste diverse con lo stesso nome ricevono un nome distinto.
+- Preferiti e nascosti vengono uniti mantenendo l’ordine attuale. Gli avanzamenti già presenti hanno la precedenza; il ripristino non li elimina per fare spazio. Audio, sottotitoli, qualità e cambio canale vengono applicati soltanto selezionando le preferenze.
+- Lettura a blocchi, limiti per archivi e singole voci, verifica degli identificativi e preparazione in archivio privato. Password errata, file danneggiato, versione non supportata ed errori di scrittura mantengono i dati già presenti.
+- Scelta della cartella e del file tramite documenti Android. Sui dispositivi che offrono soltanto il selettore TV fittizio viene indicata la necessità di un gestore documenti compatibile.
+
+### Video e continuità di visione
+
+- **Episodio successivo** nelle schede e nel player: segue stagione e numero, comprese le transizioni tra stagioni, all’interno della stessa serie e sorgente. Le copie con lo stesso numero vengono saltate; senza numeri si segue l’ordine della lista.
+- A fine episodio compare **Guarda il prossimo episodio**, con titolo del successivo e focus dedicato sulla TV. L’avvio richiede una scelta esplicita. Il timer di arresto continua a scorrere durante il passaggio.
+- **Segna come visto / Segna come non visto** per film ed episodi. Non visto azzera il punto di ripresa; i titoli visti restano consultabili e riproducibili dall’inizio. Le copertine indicano lo stato Visto.
+- **Rimuovi da Continua a guardare** conserva il punto raggiunto. La scheda permette di mostrarlo di nuovo; una riproduzione effettivamente avviata ripristina anche la presenza nella raccolta. Un tentativo di riproduzione non riuscito conserva lo stato precedente.
+- Le scelte manuali prevalgono sui salvataggi tardivi del player già aperto. Riprendere o rivedere il titolo avvia una nuova sessione di avanzamento, anche quando è ancora selezionato nello stesso player.
+- Il pulsante principale di una serie riprende un episodio in corso oppure propone il primo non visto. Corretto il tasto OK dei controlli video su TV; comandi e testi si adattano al testo ingrandito. Preferiti, La mia lista, archivi e avanzamenti esistenti vengono conservati.
+- Su smartphone, aprire un video o una diretta attiva subito lo schermo intero orizzontale, anche tornando dal mini player. Il pulsante dedicato permette di tornare in verticale; il catalogo ripristina la rotazione normale.
+- La guida smartphone seleziona un canale disponibile anche al primo accesso, quando non esiste ancora una scelta precedente.
+
+### Preferiti e navigazione
+
+- Preferiti TV e radio riordinabili da **Opzioni → Canali e preferiti**: trascinamento su smartphone, spostamento con frecce e conferma sulla TV. I numeri originali restano invariati; Indietro annulla uno spostamento non confermato.
+- Canali nascosti esclusi da catalogo, guida, elenco durante la diretta, ricerca e cambio canale. La vista **Nascosti** permette di ripristinarli mantenendo il cuore e la posizione. La diretta già in corso continua.
+- Ordine e visibilità seguono gli ID stabili durante gli aggiornamenti delle liste. Disattivare una lista conserva le personalizzazioni; eliminarla rimuove quelle associate. I preferiti e gli avanzamenti di Video restano conservati.
+- Barra smartphone con **Canali / Video / Radio / Guida / Scopri**, fino a cinque destinazioni; Video compare solo quando disponibile. **Tutti / Preferiti / Recenti** sono subito accessibili dentro Canali e Radio. Il collegamento `lumetv://favorites` continua ad aprire i preferiti.
+- Preferiti del catalogo integrato e delle liste personali consultabili insieme, con pagine limitate e senza caricare tutti i dati di riproduzione delle liste grandi.
+
+### Opzioni riproduzione e timer
+
+- Pannello condiviso per TV, smartphone e radio: selezione delle tracce audio, sottotitoli e varianti video disponibili, con indicazione della risoluzione in riproduzione.
+- Lingua audio e sottotitoli preferiti salvati sul dispositivo; selezioni specifiche limitate al contenuto corrente. Il cambio di stream invalida le vecchie scelte senza modificare le preferenze.
+- Timer di arresto da 15, 30, 60 o 90 minuti, gestito dal servizio anche durante l'ascolto in background. Pause e cambi di canale mantengono il conto; Interrompi lo annulla. La scadenza arresta anche le riconnessioni e conserva la posizione dei video.
+- Accesso dal player smartphone, dalla schermata radio e dai controlli VOD; sulla TV, freccia destra durante la diretta e pulsante Opzioni nel pannello informazioni. Il pannello si chiude entrando in PiP.
+
+Verifiche della preparazione: 493 test JVM superati, con 3 controlli live facoltativi esclusi; 32 test Python e catalogo di 155 voci verificato. Compilazioni Debug, Release e AndroidTest completate; Android Lint senza errori. I controlli automatici non avviano stream personali reali.
+
 ## 0.10.2 · Correzione riproduzione localplay — 2026-11-14
 
 - Le sorgenti `localplay` usano formato e protezione restituiti dal resolver. Corretto il blocco «ClearKey personale richiede uno stream DASH con cifratura CENC» quando il provider restituisce HLS non protetto e la lista contiene una vecchia configurazione ClearKey. La precedenza è comune a tutte le route supportate, compresa Food Network.

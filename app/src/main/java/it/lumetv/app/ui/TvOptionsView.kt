@@ -16,8 +16,11 @@ import it.lumetv.app.ui.TvStyle.dp
 
 enum class TvOption(val label: String, val description: String) {
     PLAYLISTS("Le mie liste", "Aggiungi e gestisci liste personali M3U per TV e radio, tramite indirizzo HTTP/HTTPS o file."),
+    CHANNELS("Canali e preferiti", "Riordina i preferiti di TV e radio. Nascondi i canali dal catalogo, dalla guida e dal cambio canale; ripristinali dalla vista Nascosti."),
+    BACKUP("Backup e ripristino", "Crea un file protetto da password con liste, preferiti e riprese. Verifica l’anteprima e scegli i dati da recuperare mantenendo quelli già presenti."),
     INTERFACE("Interfaccia", "Scegli la disposizione TV o smartphone, oppure lascia il riconoscimento automatico."),
     ZAPPING("CH+/CH−", "Scegli se i tasti di cambio canale scorrono tutte le emittenti o soltanto i preferiti."),
+    COMPANION("Collega telefono", "Apri Telecomando sul telefono e inquadra il QR per collegarti subito. Gestisci qui anche i telefoni autorizzati."),
     AURA("Collegamento con AURA", "Gestisci la condivisione di canali, preferiti e guida con AURA su questa TV."),
     HOME("Canali nella Home", "Scegli fino a 24 canali del catalogo integrato da mostrare nella Home dei launcher compatibili. Il consenso è separato da AURA."),
     UPDATES("Aggiornamenti", "Controlla le nuove versioni di Lume TV e gestisci gli aggiornamenti dell’app."),
@@ -85,8 +88,10 @@ class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(
     }
 
     fun bind(interfaceLabel: String, favoritesOnly: Boolean, auraAllowed: Boolean, version: String, availableVersion: String?, homeSummary: String) {
-        val values = mapOf(TvOption.PLAYLISTS to "Liste M3U sul dispositivo", TvOption.INTERFACE to interfaceLabel,
+        val values = mapOf(TvOption.PLAYLISTS to "Liste M3U sul dispositivo", TvOption.CHANNELS to "Ordine e canali nascosti", TvOption.INTERFACE to interfaceLabel,
+            TvOption.BACKUP to "Liste, preferiti, riprese e preferenze",
             TvOption.ZAPPING to if (favoritesOnly) "Solo preferiti" else "Tutti i canali",
+            TvOption.COMPANION to "Telecomando dal telefono sulla rete di casa",
             TvOption.AURA to if (auraAllowed) "Attivo" else "Non attivo",
             TvOption.HOME to homeSummary,
             TvOption.UPDATES to (availableVersion?.let { "Lume TV $it è disponibile" } ?: "Versione installata: $version"),

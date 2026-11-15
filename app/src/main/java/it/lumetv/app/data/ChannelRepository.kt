@@ -41,6 +41,7 @@ class ChannelRepository(context: Context, private val http: Transport) {
     private val sync = CatalogSync(http, store, { app.assets.open("channels.m3u").bufferedReader().use { it.readText() } })
     private val radios = RadioRepository(app, http)
     val personal = PersonalPlaylistRepository.get(app)
+    val personalization = ChannelPersonalization.get(app)
     val lastUpdated: Long get() = store.lastSuccess
     // Read only. Every mutation below copies the set before passing it to an editor.
     private val favoriteIds get() = prefs.getStringSet("favorites", emptySet()).orEmpty()
@@ -73,16 +74,27 @@ class ChannelRepository(context: Context, private val http: Transport) {
     suspend fun nextChannel(channels: List<Channel>, currentId: String?, direction: Int, current: Channel? = null): Channel? {
         val playing = channels.firstOrNull { it.id == currentId } ?: current
         if(playing?.isPersonal==true)return personal.next(playing,direction,if(zapFavoritesOnly)favoriteIds else null)
-        val scoped = channels.filter {!it.isVod && (playing==null || it.sourceId==playing.sourceId && it.kind==playing.kind)}
-        return ChannelNavigation.next(scoped, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
+        val scoped = personalization.visible(channels).filter {!it.isVod && (playing==null || it.sourceId==playing.sourceId && it.kind==playing.kind)}
+        return ChannelNavigation.next(if(zapFavoritesOnly)personalization.ordered(scoped) else scoped, currentId, direction, if (zapFavoritesOnly) favoriteIds else null)
     }
 
-    suspend fun find(id:String?):Channel? = id?.let { key -> builtins().firstOrNull {it.id==key} ?: personal.channel(key) }
+    suspend fun find(id:String?):Channel? = id?.let { key -> (builtins().firstOrNull {it.id==key} ?: personal.channel(key))?.takeUnless(personalization::isHidden) }
     fun favorites():Set<String> = favoriteIds.toSet()
+    suspend fun catalog(query:PersonalCatalogQuery):PersonalLibraryPage = personal.catalog(query,builtinFor(query))
+    suspend fun favoriteSequence(kind:it.lumetv.core.MediaKind,includeHidden:Boolean=false):List<String> {
+        val q=PersonalCatalogQuery(kind=kind,ids=favorites(),favoriteOrder=true,includeBuiltin=true,includeHidden=includeHidden)
+        return personal.favoriteIds(q,builtinFor(q))
+    }
+    suspend fun favoriteLocations(kind:it.lumetv.core.MediaKind):Map<String,String> {
+        val q=PersonalCatalogQuery(kind=kind,ids=favorites(),favoriteOrder=true,includeBuiltin=true,includeHidden=true)
+        return personal.favoriteOwners(q,builtinFor(q))
+    }
+    private suspend fun builtinFor(query:PersonalCatalogQuery):List<Channel> = if(query.includeBuiltin)builtins() else emptyList()
 
     private suspend fun builtins(): List<Channel> = shared.channels ?: shared.loading.withLock {
         shared.channels ?: (sync.local() + radios.local()).also { shared.channels = it }
     }
+    internal suspend fun backupBuiltins():List<Channel> = builtins()
 
     suspend fun local(): List<Channel> = (builtins() + personal.local()).also {
         IntegrationStore.catalogChanged(app, it.filter { c -> !c.isRadio && !c.isPersonal }, lastUpdated)
@@ -113,6 +125,7 @@ class ChannelRepository(context: Context, private val http: Transport) {
         added
         }
         IntegrationStore.changed(app)
+        personalization.favoriteChanged(channel,added)
         return added
     }
 

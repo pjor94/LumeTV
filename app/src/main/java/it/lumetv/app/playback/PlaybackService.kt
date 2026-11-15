@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Binder
 import android.os.IBinder
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -14,7 +15,6 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -50,6 +50,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /** One playback owner for TV, touch UI, lock-screen controls and Bluetooth. */
@@ -103,6 +104,17 @@ class PlaybackService : MediaSessionService() {
     private var regenerate=false
     private var loaded=false
     private var ended=false
+    private var historySession:it.lumetv.app.data.WatchSession?=null
+    private var historyPrepared=false
+    private var historyActive=false
+    private var episodeJob:Job?=null
+    private var episodeGeneration=0L
+    private var episodeSeries=""
+    private var following:PlaybackEpisode?=null
+    private var followingLoading=false
+    private var followingError=false
+    private lateinit var trackOptions: PlaybackTrackController
+    private lateinit var sleepTimer: SleepTimer
     @Volatile var snapshot = PlaybackSnapshot()
         private set
 
@@ -120,6 +132,7 @@ class PlaybackService : MediaSessionService() {
                     else repository.personal.channel(channel.id,channel.sourceId)?.takeIf { it != channel }?.let {
                         selected = it; updateMetadata(); publish()
                     }
+                    if(target.mode==PlaybackMode.VOD && selected!=null && episodeSeries.isNotBlank())loadFollowingEpisode()
                 }
             }
         }
@@ -135,6 +148,8 @@ class PlaybackService : MediaSessionService() {
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_NETWORK)
                 addListener(object : Player.Listener {
+                    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) { publish() }
+                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) { publish() }
                     override fun onRenderedFirstFrame() = debug("first_frame")
                     override fun onPlaybackStateChanged(state: Int) {
                         debug("state=$state")
@@ -163,6 +178,11 @@ class PlaybackService : MediaSessionService() {
                     }
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         if (isPlaying) {
+                            if(!historyActive && loaded && target.mode!=PlaybackMode.LIVE) {
+                                historyActive=true
+                                val channel=selected;val watch=historySession
+                                if(channel!=null && watch!=null)repository.personal.requestContext(channel.sourceId)?.let {history.enqueueStart(it,watch,position(),duration())}
+                            }
                             recovery.onPlaying()
                             selected?.takeIf { target.mode==PlaybackMode.LIVE && it.id != recordedId }?.let {
                                 recordedId = it.id; repository.recordPlayback(it)
@@ -197,6 +217,8 @@ class PlaybackService : MediaSessionService() {
                 })
             }
         debug("player_created")
+        trackOptions = PlaybackTrackController(this, player)
+        sleepTimer = SleepTimer(scope, SystemClock::elapsedRealtime, ::publish, ::stopPlayback)
         val controls = object : ForwardingPlayer(player) {
             override fun getCurrentPosition():Long=if(target.mode==PlaybackMode.ARCHIVE)position() else super.getCurrentPosition()
             override fun getContentPosition():Long=if(target.mode==PlaybackMode.ARCHIVE)position() else super.getContentPosition()
@@ -275,10 +297,15 @@ class PlaybackService : MediaSessionService() {
     fun selectArchive(channel:Channel,eventId:String,mobile:Boolean) {
         if(channel.isPersonal && eventId.isNotEmpty())selectTarget(channel,mobile,channel.isRadio,true,PlaybackTarget(channel.id,PlaybackMode.ARCHIVE,eventId))
     }
-    private fun selectTarget(channel:Channel,mobile:Boolean,audio:Boolean,play:Boolean,nextTarget:PlaybackTarget) {
+    private fun selectTarget(channel:Channel,mobile:Boolean,audio:Boolean,play:Boolean,nextTarget:PlaybackTarget,useSaved:Boolean=false) {
         if (channel.isPersonal && !repository.personal.available(channel.sourceId)) return
+        val samePosition=position().takeIf {loaded && !ended && selected?.sourceId==channel.sourceId && nextTarget==target &&
+            (!useSaved || historySession?.let(history::isCurrent)==true)}
         capturePosition()
-        target=nextTarget;contentTitle=channel.name;contentDuration=0;baseOffset=0;resumePosition=null;regenerate=false;loaded=false;ended=false
+        history.release(historySession)
+        historySession=if(channel.isPersonal && nextTarget.mode!=PlaybackMode.LIVE)history.session(channel.sourceId,nextTarget) else null
+        historyPrepared=false;historyActive=false;clearFollowingEpisode()
+        target=nextTarget;contentTitle=channel.name;contentDuration=0;baseOffset=0;resumePosition=samePosition;regenerate=false;loaded=false;ended=false
         changingChannel = selected != null && selected?.id != channel.id
         this.mobile = mobile
         audioOnly = channel.isRadio || audio
@@ -294,12 +321,14 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun open() {
+        if (sleepTimer.isExpired) { stopPlayback(); return }
         val channel = selected ?: return
         capturePosition()
         loaded=false
         val request = ++generation
         resolveJob?.cancel()
         switching = true
+        trackOptions.reset()
         player.stop(); player.clearMediaItems()
         switching = false
         error = null
@@ -314,10 +343,20 @@ class PlaybackService : MediaSessionService() {
                     catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
                     catch (_: Exception) { /* A source error does not discard the cached channel. */ }
                 }
+                val watch=historySession
+                if(watch!=null && !historyPrepared) {
+                    val initial=resumePosition
+                    val point=initial ?: withContext(Dispatchers.IO){history.read(watch.source,watch.target).resume}
+                    if(request!=generation || selected?.id!=channel.id)return@launch
+                    resumePosition=point;historyPrepared=true
+                }
                 val result=if(channel.isPersonal)personalResolver.resolve(channel,target,resumePosition) else null
                 val stream = result?.stream ?: resolver.resolve(channel)
                 if (request != generation || selected?.id != channel.id) return@launch
-                if(result!=null){target=result.target;contentTitle=result.title;contentDuration=result.duration;baseOffset=result.baseOffset;regenerate=result.regenerate}
+                if(result!=null){target=result.target;contentTitle=result.title;contentDuration=result.duration;baseOffset=result.baseOffset;regenerate=result.regenerate
+                    episodeSeries=result.seriesKey
+                    if(target.mode==PlaybackMode.VOD && episodeSeries.isNotBlank())loadFollowingEpisode() else clearFollowingEpisode()
+                }
                 if (stream.personalAllowHttp && !repository.personal.allowsHttp(channel.sourceId))
                     throw it.lumetv.app.data.SourceException("Il consenso HTTP di questa lista è stato disattivato.")
                 if(stream.personal && repository.personal.requestContext(channel.sourceId)?.token!=stream.personalNetworkToken)
@@ -391,7 +430,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun resume() {
+        if (sleepTimer.isExpired) { stopPlayback(); return }
         if (selected == null) return
+        if(target.mode==PlaybackMode.VOD && historySession?.let(history::isCurrent)==false){reopenVideo();return}
         if(ended && target.mode!=PlaybackMode.LIVE){restart();return}
         desiredPlaying = true
         error = null
@@ -406,7 +447,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     fun stopPlayback() {
+        sleepTimer.cancel()
         capturePosition();loaded=false
+        history.release(historySession);historySession=null;historyPrepared=false;historyActive=false;clearFollowingEpisode()
         changingChannel = false
         generation++; resolveJob?.cancel(); recovery.stop()
         selected = null; desiredPlaying = false; message = ""; error = null; nowPlaying = ""
@@ -427,24 +470,61 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private fun clearFollowingEpisode() {
+        episodeGeneration++;episodeJob?.cancel();episodeJob=null;episodeSeries=""
+        following=null;followingLoading=false;followingError=false
+    }
+    fun reloadFollowingEpisode(){if(target.mode==PlaybackMode.VOD && episodeSeries.isNotBlank())loadFollowingEpisode()}
+    private fun loadFollowingEpisode() {
+        val channel=selected?.takeIf {target.mode==PlaybackMode.VOD && episodeSeries.isNotBlank()} ?: return
+        val request=++episodeGeneration;episodeJob?.cancel();following=null;followingLoading=true;followingError=false;publish()
+        episodeJob=scope.launch {
+            try {
+                val next=repository.personal.nextEpisode(channel.sourceId,channel.id)
+                if(request!=episodeGeneration || selected?.id!=channel.id || selected?.sourceId!=channel.sourceId || target.mode!=PlaybackMode.VOD)return@launch
+                following=next?.let {PlaybackEpisode(it.source,it.id,it.title,it.season,it.episode)};followingLoading=false;publish()
+            }catch(cancelled:CancellationException){throw cancelled}
+            catch(_:Exception){if(request==episodeGeneration){followingLoading=false;followingError=true;publish()}}
+        }
+    }
+    fun playFollowingEpisode(currentId:String,nextId:String) {
+        val current=selected?.takeIf {it.id==currentId && target.mode==PlaybackMode.VOD} ?: return
+        val next=following?.takeIf {it.id==nextId && it.source==current.sourceId} ?: return
+        val request=generation
+        scope.launch {
+            try {
+                val actual=repository.personal.nextEpisode(current.sourceId,current.id)
+                if(request!=generation || selected?.id!=currentId || following!=next || target.mode!=PlaybackMode.VOD)return@launch
+                if(actual?.id!=next.id || actual.source!=next.source){loadFollowingEpisode();return@launch}
+                val channel=repository.personal.channel(next.id,next.source)?.takeIf {it.isVod}
+                if(request!=generation || selected?.id!=currentId || following!=next || target.mode!=PlaybackMode.VOD)return@launch
+                if(channel!=null)select(channel,mobile,audioOnly,true) else loadFollowingEpisode()
+            }catch(cancelled:CancellationException){throw cancelled}
+            catch(_:Exception){if(request==generation && selected?.id==currentId){following=null;followingError=true;publish()}}
+        }
+    }
+    fun reopenVideo(){selected?.takeIf {target.mode==PlaybackMode.VOD}?.let {selectTarget(it,mobile,audioOnly,true,target,useSaved=true)}}
+
     fun setAudioOnly(enabled: Boolean) {
         audioOnly = selected?.isRadio == true || enabled
         applyTrackPreferences()
         publish()
     }
 
-    fun refreshPreferences() { applyTrackPreferences() }
+    fun refreshPreferences() { trackOptions.refresh(); publish() }
+
+    fun setPlaybackPreferences(value: PlaybackPreferences) { trackOptions.setPreferences(value); publish() }
+    fun chooseTrack(revision: Long, type: Int, key: String): Boolean = trackOptions.choose(revision, type, key).also { publish() }
+    fun automaticTrack(type: Int) { trackOptions.automatic(type); publish() }
+    fun setSleepTimer(minutes: Int) {
+        if (minutes == 0) sleepTimer.cancel()
+        else if (selected != null) sleepTimer.start(minutes)
+        applyTrackPreferences()
+        publish()
+    }
 
     private fun applyTrackPreferences() {
-        val saver = getSharedPreferences("lume", MODE_PRIVATE).getBoolean("data_saver", false)
-        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, audioOnly)
-            .setMaxVideoBitrate(if (saver) 800_000 else Int.MAX_VALUE)
-            .setMaxAudioBitrate(if (saver) 96_000 else Int.MAX_VALUE)
-            .setForceLowestBitrate(saver)
-            .setAudioOffloadPreferences(AudioOffloadPreferences.Builder()
-                .setAudioOffloadMode(if (audioOnly) AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED else AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED).build())
-            .build()
+        trackOptions.apply(audioOnly, sleepTimer.remaining > 0)
     }
 
     private fun waiting(text: String) {
@@ -464,11 +544,13 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun publish() {
+        if (!::trackOptions.isInitialized || !::sleepTimer.isInitialized) return
         val next = PlaybackSnapshot(selected, player.isPlaying, desiredPlaying,
             selected != null && error == null && desiredPlaying && (message.isNotEmpty() || player.playbackState == Player.STATE_BUFFERING),
             player.playbackState == Player.STATE_READY, audioOnly,
             PlaybackPolicy.canContinueInBackground(mobile, selected, audioOnly), message, error, nowPlaying,
-            target.mode,contentTitle,position(),duration(),target.mode!=PlaybackMode.LIVE && seekingAllowed && (regenerate || player.isCurrentMediaItemSeekable),ended)
+            target.mode,contentTitle,position(),duration(),target.mode!=PlaybackMode.LIVE && seekingAllowed && (regenerate || player.isCurrentMediaItemSeekable),ended,
+            trackOptions.snapshot(sleepTimer.remaining),following,followingLoading,followingError,generation.toLong())
         if (next != snapshot) {
             snapshot = next
             observers.toList().forEach { it(next) }
@@ -481,6 +563,8 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         capturePosition()
+        history.release(historySession)
+        sleepTimer.cancel()
         recovery.stop(); network.stop(); scope.cancel(); observers.clear()
         session.release(); player.release()
         super.onDestroy()
@@ -490,9 +574,10 @@ class PlaybackService : MediaSessionService() {
     private fun duration():Long=if(target.mode==PlaybackMode.ARCHIVE && contentDuration>0)contentDuration else if(player.duration>0)player.duration+baseOffset else contentDuration
     private fun capturePosition(completed:Boolean=ended) {
         val channel=selected ?: return
-        if(target.mode==PlaybackMode.LIVE || !channel.isPersonal || !loaded)return
+        if(target.mode==PlaybackMode.LIVE || !channel.isPersonal || !loaded || !historyActive)return
         val point=position();resumePosition=point
-        repository.personal.requestContext(channel.sourceId)?.let {history.enqueue(it,channel.sourceId,target,point,duration(),completed)}
+        val watch=historySession ?: return
+        repository.personal.requestContext(channel.sourceId)?.let {history.enqueue(it,watch,point,duration(),completed)}
     }
     fun seek(position:Long) {
         if(target.mode==PlaybackMode.LIVE || !seekingAllowed || selected==null)return
@@ -502,7 +587,10 @@ class PlaybackService : MediaSessionService() {
         else if(regenerate){capturePosition();resumePosition=wanted;loaded=false;open()}
     }
     fun seekBy(delta:Long)=seek(position()+delta)
-    fun restart(){if(target.mode!=PlaybackMode.LIVE){resumePosition=0;loaded=false;ended=false;desiredPlaying=true;recovery.start();open()}}
+    fun restart(){if(target.mode!=PlaybackMode.LIVE){
+        history.release(historySession);historySession=selected?.takeIf {it.isPersonal}?.let {history.session(it.sourceId,target)};historyPrepared=false;historyActive=false
+        resumePosition=0;loaded=false;ended=false;desiredPlaying=true;recovery.start();open()
+    }}
     fun returnToLive() {val channel=selected ?: return;if(target.mode==PlaybackMode.ARCHIVE)select(channel,mobile,audioOnly,true) else resume()}
 
     private fun debug(value: String) {

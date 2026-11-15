@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.*
 @OptIn(FlowPreview::class)
 internal class VideoCatalogPanel(private val activity:ComponentActivity,private val scope:CoroutineScope,
     private val repository:PersonalPlaylistRepository,private val artwork:VideoArtworkRepository,
-    private val toggleFavorite:(Channel)->Unit,private val choose:(Channel)->Unit,private val restartCurrent:(Channel)->Unit,
+    private val toggleFavorite:(Channel)->Unit,private val choose:(Channel)->Unit,
     private val mobile:Boolean,private val host:CatalogPanelHost,saved:Bundle?=null) {
     private val jobs=SupervisorJob(scope.coroutineContext[Job])
     private val work=CoroutineScope(scope.coroutineContext+jobs)
@@ -381,6 +381,7 @@ internal class VideoCatalogPanel(private val activity:ComponentActivity,private 
         val query=if(item.isSeries)VideoQuery(source=item.source,series=item.series,limit=1) else VideoQuery(source=item.source,id=item.id,collapseSeries=false,limit=1)
         var value=repository.cachedVideos(query)?.rows?.firstOrNull() ?: item
         var target=value;var targetReady=!item.isSeries;var stamp:Any?=null;var actionStamp:Any?=null
+        var nextEpisode:VideoItem?=null;var editing=false
         var imageJob:Job?=null;var imageBinding="";var firstFocus=true
         var scrollPosition=saved?.getInt("detail_scroll") ?: 0;var scrollRestored=false
         val row=LinearLayout(activity).apply {gravity=Gravity.TOP;orientation=LinearLayout.HORIZONTAL}
@@ -400,10 +401,20 @@ internal class VideoCatalogPanel(private val activity:ComponentActivity,private 
         val actions=LinearLayout(activity).apply {orientation=if(mobile)LinearLayout.VERTICAL else LinearLayout.HORIZONTAL}
         val actionArea:View=if(mobile)actions else HorizontalScrollView(activity).apply {isHorizontalScrollBarEnabled=false;addView(actions)}
         content.addView(actionArea,LinearLayout.LayoutParams(-1,-2).apply {topMargin=activity.dp(20)})
-        val resume=TvStyle.text(activity,"",14f,TvStyle.muted).apply {visibility=View.GONE}
+        val resume=TvStyle.text(activity,"",14f,TvStyle.muted).apply {visibility=View.GONE;maxLines=4;ellipsize=TextUtils.TruncateAt.END}
         content.addView(resume,LinearLayout.LayoutParams(-1,-2).apply {topMargin=activity.dp(10)})
         fun bind() {
             if(screen!==screens.lastOrNull())return
+            fun change(edit:suspend()->Unit) {
+                if(editing)return
+                editing=true;bind()
+                work.launch {
+                    try {edit();stamp=null;screen.refresh()}
+                    catch(cancelled:CancellationException){throw cancelled}
+                    catch(_:Exception){message("Impossibile aggiornare lo stato del video. Riprova.",true)}
+                    finally {editing=false;bind()}
+                }
+            }
             name.text=value.displayTitle;meta.text=metadata(value)
             source.text=repository.state.value.firstOrNull {it.id==value.source}?.name.orEmpty()
             plot.text=value.description;plot.visibility=if(value.description.isBlank())View.GONE else View.VISIBLE
@@ -412,25 +423,44 @@ internal class VideoCatalogPanel(private val activity:ComponentActivity,private 
                 imageJob?.cancel();if(binding!=imageBinding)image.setImageDrawable(null);imageBinding=binding
                 imageJob=artwork.request(value,targetPx=activity.dp(width*3/2)){bitmap->if(screen in screens && bitmap!=null)image.setImageBitmap(bitmap)}
             }
-            val nextAction=listOf(value.saved,targetReady,target.resume>0,value.isSeries)
+            val nextAction=listOf(value.saved,targetReady,target.resume>0,target.completed,value.isSeries,value.hiddenFromContinue,nextEpisode?.id,editing)
             if(actionStamp!=nextAction) {
-                val hadFocus=actions.hasFocus();actions.removeAllViews()
-                val resumeLabel=if(target.resume>0)"Riprendi" else "Guarda"
-                val play=button(resumeLabel){play(target,false)}.apply {tag="video_play";contentDescription="$resumeLabel ${value.displayTitle}";isEnabled=targetReady}
-                actions.addView(play,LinearLayout.LayoutParams(if(mobile)-1 else -2,activity.dp(48)))
-                if(target.resume>0)actions.addView(button("Dall’inizio"){play(target,true)}.apply {isEnabled=targetReady},LinearLayout.LayoutParams(if(mobile)-1 else -2,activity.dp(48)))
-                actions.addView(button(if(value.saved)"Rimuovi dalla mia lista" else "Aggiungi alla mia lista") {
+                val hadFocus=actions.hasFocus();val focusTag=actions.findFocus()?.tag;actions.removeAllViews()
+                fun action(label:String,tag:String,choose:()->Unit):TextView=button(label,action=choose).apply {
+                    this.tag=tag;minimumHeight=activity.dp(48);isEnabled=targetReady && !editing
+                    if(mobile){maxLines=3;ellipsize=null}
+                    actions.addView(this,LinearLayout.LayoutParams(if(mobile)-1 else -2,-2))
+                }
+                val resumeLabel=if(target.completed)"Riguarda" else if(target.resume>0)"Riprendi" else "Guarda"
+                val play=action(resumeLabel,"video_play"){play(target,false)}.apply {contentDescription="$resumeLabel ${value.displayTitle}"}
+                if(target.resume>0)action("Dall’inizio","video_restart"){play(target,true)}
+                nextEpisode?.let {next->action("Guarda episodio successivo","video_next"){play(next,false)}.contentDescription="Guarda episodio successivo: ${next.title}"}
+                action(if(value.saved)"Rimuovi dalla mia lista" else "Aggiungi alla mia lista","video_saved") {
                     work.launch {try {if(value.isSeries)repository.toggleSavedSeries(value) else repository.channel(value.id,value.source)?.let(toggleFavorite);screen.refresh()}catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){message("Impossibile aggiornare La mia lista. Riprova.",true)}}
-                },LinearLayout.LayoutParams(if(mobile)-1 else -2,activity.dp(48)))
-                if(value.isSeries)actions.addView(button("Stagioni ed episodi"){grid(VideoQuery(source=value.source,series=value.series,collapseSeries=false),"Episodi",seriesItem=value)},LinearLayout.LayoutParams(if(mobile)-1 else -2,activity.dp(48)))
+                }
+                if(value.isSeries)action("Stagioni ed episodi","video_episodes"){grid(VideoQuery(source=value.source,series=value.series,collapseSeries=false),"Episodi",seriesItem=value)}
+                else {
+                    action(if(value.completed)"Segna come non visto" else "Segna come visto","video_watched") {change {repository.setVideoCompleted(value,!value.completed)}}
+                    if(value.resume>0)action(if(value.hiddenFromContinue)"Mostra in Continua a guardare" else "Rimuovi da Continua a guardare","video_continue") {
+                        change {repository.setContinueHidden(value,!value.hiddenFromContinue)}
+                    }
+                }
                 for(index in 0 until actions.childCount-1) {
                     val spacing=actions.getChildAt(index).layoutParams as LinearLayout.LayoutParams
                     if(mobile)spacing.bottomMargin=activity.dp(4) else spacing.rightMargin=activity.dp(12)
                 }
                 actionStamp=nextAction
-                if(!mobile && targetReady && (hadFocus || firstFocus))play.post {if(screen===screens.lastOrNull() && host.isOpen){play.requestFocus();firstFocus=false}}
+                if(!mobile && targetReady && (hadFocus || firstFocus))play.post {if(screen===screens.lastOrNull() && host.isOpen){
+                    val focus=focusTag?.let {actions.findViewWithTag<View>(it)}?.takeIf {it.isEnabled} ?: play
+                    focus.requestFocus();firstFocus=false
+                }}
             }
-            resume.text=if(target.resume>0)"Riprendi da ${videoTime(target.resume)}"+if(value.isSeries)" · ${target.title}" else "" else ""
+            resume.text=listOfNotNull(when {
+                target.resume>0->"Riprendi da ${videoTime(target.resume)}"+(if(value.isSeries)" · ${target.title}" else "")
+                value.isSeries && targetReady->if(target.completed)"Episodi già visti · ${target.title}" else "Da vedere · ${target.title}"
+                value.completed->"Visto"
+                else->null
+            },"Rimosso da Continua a guardare".takeIf {value.hiddenFromContinue && !value.isSeries},nextEpisode?.let {"Prossimo · ${it.title}"}).joinToString("\n")
             resume.visibility=if(resume.text.isBlank())View.GONE else View.VISIBLE
             if(!scrollRestored && value.detailsLoaded)scroll.post {scroll.scrollTo(0,scrollPosition);scrollRestored=true}
         }
@@ -445,10 +475,10 @@ internal class VideoCatalogPanel(private val activity:ComponentActivity,private 
             screen.load?.cancel();screen.load=work.launch {
                 try {
                     val current=cached ?: repository.videoDetails(item) ?: run {content.visibility=View.GONE;message("Il titolo non è più disponibile. Torna ai video per aggiornare la selezione.");return@launch}
-                    val selected=if(current.isSeries)repository.videos(VideoQuery(source=current.source,series=current.series,shelf=VideoShelf.CONTINUE,collapseSeries=false,limit=1,details=false)).rows.firstOrNull()
-                        ?: repository.videos(VideoQuery(source=current.source,series=current.series,collapseSeries=false,limit=1,details=false)).rows.firstOrNull() ?: current else current
+                    val selected=if(current.isSeries)repository.seriesPlaybackTarget(current) ?: current else current
+                    val following=if(!current.isSeries && current.seriesId.isNotBlank())repository.nextEpisode(current.source,current.id) else null
                     if(screen===screens.lastOrNull()) {
-                        value=current;target=selected;targetReady=true;stamp=nextStamp;content.visibility=View.VISIBLE;message("");bind()
+                        value=current;target=selected;nextEpisode=following;targetReady=true;stamp=nextStamp;content.visibility=View.VISIBLE;message("");bind()
                     }
                 }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){message("Impossibile aprire il titolo. Premi qui per riprovare.",true)}
             }
@@ -464,7 +494,7 @@ internal class VideoCatalogPanel(private val activity:ComponentActivity,private 
         work.launch {try {
             val channel=repository.channel(item.id,item.source) ?: run {message("Il video non è più disponibile.");return@launch}
             if(start)withContext(Dispatchers.IO){history.write(item.source,PlaybackTarget(item.id,PlaybackMode.VOD),0,item.watchedDuration.takeIf {it>0} ?: item.duration)}
-            hideKeyboard();screens.lastOrNull()?.onHide?.invoke();host.park();if(start)restartCurrent(channel);choose(channel)
+            hideKeyboard();screens.lastOrNull()?.onHide?.invoke();host.park();choose(channel)
         }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){message("Impossibile aprire il video. Riprova.",true)}}
     }
     private var previewKey=""

@@ -11,7 +11,9 @@ import org.json.JSONArray
 data class PersonalCatalogQuery(val source: String? = null, val kind: MediaKind? = null,
     val content: PlaylistContentKind? = PlaylistContentKind.LIVE, val text: String = "",
     val group: String? = null, val offset: Int = 0, val limit: Int = 200,
-    val ids: Set<String>? = null, val number:Int? = null)
+    val ids: Set<String>? = null, val number:Int? = null,
+    val favoriteOrder: Boolean = false, val includeBuiltin: Boolean = false, val includeHidden: Boolean = false,
+    internal val excluded: Set<String> = emptySet(), internal val ranks: List<String> = emptyList())
 
 internal object PlaylistCatalogIndex {
     fun create(db: SQLiteDatabase) {
@@ -49,13 +51,13 @@ internal fun PersonalPlaylistStore.ensureCatalogIndex(id: String) {
     }
 }
 
-private fun where(stored: PlaylistStored,q: PersonalCatalogQuery,prefix:String=""): Pair<String,List<String>> {
+internal fun catalogWhere(stored: PlaylistStored?,q: PersonalCatalogQuery,prefix:String=""): Pair<String,List<String>> {
     val args=mutableListOf<String>()
     val clauses=mutableListOf("r.active=1")
     q.kind?.let {clauses+="r.kind=?";args+=it.name}
     q.number?.let {clauses+="r.number=?";args+=it.toString()}
     q.content?.let { wanted ->
-        if(stored.settings.contentOverride!=null) {
+        if(stored?.settings?.contentOverride!=null) {
             if(stored.settings.contentOverride!=wanted)clauses+="0"
         } else {clauses+="r.content=?";args+=wanted.name}
     }
@@ -65,11 +67,14 @@ private fun where(stored: PlaylistStored,q: PersonalCatalogQuery,prefix:String="
     }
     q.group?.let {clauses+="r.position IN (SELECT position FROM ${prefix}record_groups WHERE group_name=?)";args+=it}
     if(q.ids!=null)clauses+="r.id IN (SELECT id FROM selected_ids)"
+    if(q.excluded.isNotEmpty() && stored?.settings?.contentOverride!=PlaylistContentKind.VOD)
+        clauses+=if(stored?.settings?.contentOverride==PlaylistContentKind.LIVE)"r.id NOT IN (SELECT id FROM hidden_ids)"
+            else "(r.content<>'LIVE' OR r.id NOT IN (SELECT id FROM hidden_ids))"
     return clauses.joinToString(" AND ") to args
 }
 private fun pattern(value:String)="%"+value.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%"
 
-private fun display(cursor:Cursor,source:String,override:PlaylistContentKind?):Channel {
+internal fun catalogDisplay(cursor:Cursor,source:String,override:PlaylistContentKind?):Channel {
     val id=cursor.getString(0)
     val array=JSONArray(cursor.getString(4))
     val groups=(0 until minOf(array.length(),20)).map {array.getString(it).take(100)}
@@ -89,11 +94,12 @@ internal fun PersonalPlaylistStore.catalog(stored:PlaylistStored,q:PersonalCatal
                 ids.forEach {statement.bindString(1,it);statement.executeInsert()}
             }
         }
-        val (filter,args)=where(stored,q)
+        prepareHidden(db,q.excluded)
+        val (filter,args)=catalogWhere(stored,q)
         val total=db.rawQuery("SELECT COUNT(*) FROM records r WHERE $filter",args.toTypedArray()).use {it.moveToFirst();it.getInt(0)}
         val rows=db.rawQuery("SELECT r.id,r.name,r.number,r.kind,r.groups_json,r.position,r.content FROM records r WHERE $filter ORDER BY r.position,r.id LIMIT ? OFFSET ?",
             (args+q.limit.coerceIn(1,200).toString()+q.offset.coerceAtLeast(0).toString()).toTypedArray()).use { cursor ->
-            buildList {while(cursor.moveToNext())add(display(cursor,stored.source.id,stored.settings.contentOverride))}
+            buildList {while(cursor.moveToNext())add(catalogDisplay(cursor,stored.source.id,stored.settings.contentOverride))}
         }
         PersonalLibraryPage(rows,total)
     }
@@ -101,7 +107,7 @@ internal fun PersonalPlaylistStore.catalog(stored:PlaylistStored,q:PersonalCatal
 internal fun PersonalPlaylistStore.displayChannel(stored:PlaylistStored,id:String):Channel? =
     SQLiteDatabase.openDatabase(file(stored.source.id).path,null,SQLiteDatabase.OPEN_READONLY).use {db->
         db.rawQuery("SELECT id,name,number,kind,groups_json,position,content FROM records WHERE active=1 AND id=?",arrayOf(id)).use {cursor->
-            if(cursor.moveToFirst())display(cursor,stored.source.id,stored.settings.contentOverride) else null
+            if(cursor.moveToFirst())catalogDisplay(cursor,stored.source.id,stored.settings.contentOverride) else null
         }
     }
 
@@ -109,6 +115,15 @@ internal fun PersonalPlaylistStore.containsId(source:String,id:String):Boolean =
     SQLiteDatabase.openDatabase(file(source).path,null,SQLiteDatabase.OPEN_READONLY).use {db->
         db.rawQuery("SELECT 1 FROM records WHERE id=?",arrayOf(id)).use {it.moveToFirst()}
     }
+
+internal fun PersonalPlaylistStore.matchingIds(source:String,ids:Set<String>):Set<String> {
+    if(ids.isEmpty())return emptySet()
+    return SQLiteDatabase.openDatabase(file(source).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
+        db.execSQL("PRAGMA temp_store=FILE");db.execSQL("CREATE TEMP TABLE referenced_ids(id TEXT PRIMARY KEY)")
+        db.compileStatement("INSERT OR IGNORE INTO referenced_ids VALUES(?)").use {s->ids.forEach {s.bindString(1,it);s.executeInsert()}}
+        db.rawQuery("SELECT r.id FROM referenced_ids selected CROSS JOIN records r ON r.id=selected.id",null).use {c->buildSet {while(c.moveToNext())add(c.getString(0))}}
+    }
+}
 
 /** Read only the indexed content column; availability must not depend on the 200-row preview. */
 internal fun PersonalPlaylistStore.contentKinds(stored:PlaylistStored):Set<PlaylistContentKind> {
@@ -122,33 +137,35 @@ internal fun PersonalPlaylistStore.contentKinds(stored:PlaylistStored):Set<Playl
 }
 
 /** Locate a playing channel without materialising the preceding rows. */
-internal fun PersonalPlaylistStore.catalogPosition(stored:PlaylistStored,current:Channel,ids:Set<String>?):Int =
+internal fun PersonalPlaylistStore.catalogPosition(stored:PlaylistStored,current:Channel,ids:Set<String>?,excluded:Set<String> = emptySet()):Int =
     SQLiteDatabase.openDatabase(file(stored.source.id).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
+        prepareHidden(db,excluded)
         if(ids!=null) {
             db.execSQL("PRAGMA temp_store=FILE");db.execSQL("CREATE TEMP TABLE selected_ids(id TEXT PRIMARY KEY)")
             db.compileStatement("INSERT OR IGNORE INTO selected_ids VALUES(?)").use {s->ids.forEach {s.bindString(1,it);s.executeInsert()}}
         }
         if(ids!=null && current.id !in ids)return@use 0
-        val (filter,args)=where(stored,PersonalCatalogQuery(kind=current.kind,content=current.contentKind,ids=ids))
+        val (filter,args)=catalogWhere(stored,PersonalCatalogQuery(kind=current.kind,content=current.contentKind,ids=ids,excluded=excluded))
         db.rawQuery("SELECT COUNT(*) FROM records r WHERE $filter AND (r.position<? OR (r.position=? AND r.id<?))",
             (args+current.position.toString()+current.position.toString()+current.id).toTypedArray()).use {it.moveToFirst();it.getInt(0)}
     }
 
-internal fun PersonalPlaylistStore.nextChannel(stored:PlaylistStored,current:Channel,direction:Int,ids:Set<String>?):Channel? {
-    val request=PersonalCatalogQuery(kind=current.kind,ids=ids,limit=200)
+internal fun PersonalPlaylistStore.nextChannel(stored:PlaylistStored,current:Channel,direction:Int,ids:Set<String>?,excluded:Set<String> = emptySet()):Channel? {
+    val request=PersonalCatalogQuery(kind=current.kind,ids=ids,limit=200,excluded=excluded)
     // Indexed position windows wrap once; the number of channels never determines the allocation.
     return SQLiteDatabase.openDatabase(file(stored.source.id).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
+        prepareHidden(db,excluded)
         if(ids!=null) {
             db.execSQL("PRAGMA temp_store=FILE");db.execSQL("CREATE TEMP TABLE selected_ids(id TEXT PRIMARY KEY)")
             db.compileStatement("INSERT OR IGNORE INTO selected_ids VALUES(?)").use {s->ids.forEach {s.bindString(1,it);s.executeInsert()}}
         }
-        val (filter,args)=where(stored,request)
+        val (filter,args)=catalogWhere(stored,request)
         fun find(wrap:Boolean):Channel? {
             val order=if(direction>=0)"ASC" else "DESC"
             val boundary=if(wrap)"" else " AND r.position ${if(direction>=0) ">" else "<"} ?"
             val values=if(wrap)args else args+current.position.toString()
             return db.rawQuery("SELECT r.id,r.name,r.number,r.kind,r.groups_json,r.position,r.content FROM records r WHERE $filter$boundary ORDER BY r.position $order,r.id $order LIMIT 1",values.toTypedArray()).use {c->
-                if(c.moveToFirst())display(c,stored.source.id,stored.settings.contentOverride) else null
+                if(c.moveToFirst())catalogDisplay(c,stored.source.id,stored.settings.contentOverride) else null
             }
         }
         find(false) ?: find(true)
@@ -159,10 +176,11 @@ internal fun PersonalPlaylistStore.catalogGroups(sources:List<PlaylistStored>,qu
     if(sources.isEmpty())return emptyList<String>() to 0
     return SQLiteDatabase.openDatabase(file(sources.first().source.id).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
         db.execSQL("PRAGMA temp_store=FILE")
+        prepareHidden(db,query.excluded)
         val args=mutableListOf<String>()
         val selects=sources.mapIndexed {index,stored->
             val schema=if(index==0)"main" else "catalog$index".also {db.execSQL("ATTACH DATABASE ? AS $it",arrayOf(file(stored.source.id).path))}
-            val (filter,values)=where(stored,query.copy(text="",group=null,ids=null),"$schema.")
+            val (filter,values)=catalogWhere(stored,query.copy(text="",group=null,ids=null),"$schema.")
             args+=values
             "SELECT DISTINCT g.group_name AS name FROM $schema.record_groups g JOIN $schema.records r ON r.position=g.position WHERE $filter"
         }
@@ -172,4 +190,10 @@ internal fun PersonalPlaylistStore.catalogGroups(sources:List<PlaylistStored>,qu
         val rows=db.rawQuery("$sql ORDER BY name COLLATE NOCASE,name LIMIT ? OFFSET ?",(args+query.limit.coerceIn(1,200).toString()+query.offset.coerceAtLeast(0).toString()).toTypedArray()).use {c->buildList {while(c.moveToNext())add(c.getString(0))}}
         rows to total
     }
+}
+
+internal fun prepareHidden(db:SQLiteDatabase,ids:Set<String>) {
+    if(ids.isEmpty())return
+    db.execSQL("CREATE TEMP TABLE hidden_ids(id TEXT PRIMARY KEY)")
+    db.compileStatement("INSERT OR IGNORE INTO hidden_ids VALUES(?)").use {statement->ids.forEach {statement.bindString(1,it);statement.executeInsert()}}
 }

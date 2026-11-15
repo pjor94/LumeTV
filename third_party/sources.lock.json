@@ -533,6 +533,28 @@
       "sourceNote": "Empty conflict-avoidance marker JAR, without classes. ListenableFuture implementation is supplied by the Guava sources."
     },
     {
+      "coordinate": "com.google.zxing:core:3.5.4",
+      "artifact": "core-3.5.4.jar",
+      "sha256": "71de5d89341b5fcf5dd89da7f44e84d825d0e084cdf3ec77c9abe26b0f0ceb13",
+      "source": {
+        "file": "com.google.zxing.core-3.5.4-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/com/google/zxing/core/3.5.4/core-3.5.4-sources.jar",
+        "sha256": "a611e3b63b661aeb2a81b8b4f4bde2daace1e2976adbb37917a674a0019c8fac"
+      },
+      "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "com.journeyapps:zxing-android-embedded:4.3.0",
+      "artifact": "zxing-android-embedded-4.3.0.aar",
+      "sha256": "4ab03353127c34e55cbb80fbc9a34031decbcfb1ec5e8f991944d2d494621a33",
+      "source": {
+        "file": "com.journeyapps.zxing-android-embedded-4.3.0-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/com/journeyapps/zxing-android-embedded/4.3.0/zxing-android-embedded-4.3.0-sources.jar",
+        "sha256": "44b968f9b3a4eab3a463c36eac7a80fc5457695f55fc37a95e4975b7da2c3b54"
+      },
+      "license": "Apache-2.0"
+    },
+    {
       "coordinate": "com.squareup.okhttp3:okhttp:4.12.0",
       "artifact": "okhttp-4.12.0.jar",
       "sha256": "b1050081b14bb7a3a7e55a4d3ef01b5dcfabc453b4573a4fc019767191d5f4e0",

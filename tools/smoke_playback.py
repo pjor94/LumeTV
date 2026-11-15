@@ -77,6 +77,16 @@ class Device:
     def key(self, code):
         self.run("shell", "input", "keyevent", str(code))
 
+    def select_filter(self, label):
+        # Catalog filters are collapsed in the current phone UI.
+        if label not in self.texts():
+            toggle = next((n.get("text") for n in self.nodes()
+                           if n.get("text", "").startswith("Filtri")), None)
+            if toggle is None:
+                raise AssertionError("Missing filter toggle: " + label)
+            self.click(toggle)
+        self.click(label)
+
     def session(self):
         dump = self.run("shell", "dumpsys", "media_session").decode(errors="replace")
         sections = re.split(r"(?m)^    [^ \n].*?\n", dump)
@@ -140,8 +150,8 @@ def fixture(device, port):
 
 def phone_checks(d, radio_id, tv_id, requests):
     d.launch("catalog")
-    d.wait("five touch destinations", lambda: all(any(n.get("content-desc") == name for n in d.nodes())
-           for name in ["Canali", "Radio", "Preferiti", "Guida", "Scopri"]))
+    d.wait("four primary touch destinations", lambda: all(any(n.get("content-desc") == name for n in d.nodes())
+           for name in ["Canali", "Radio", "Guida", "Scopri"]))
     d.click("Radio", description=True)
     d.wait("radio catalog is separate", lambda: "2 radio" in d.texts())
     d.click("Cerca una radio o una città", description=True)
@@ -150,7 +160,7 @@ def phone_checks(d, radio_id, tv_id, requests):
     for _ in range(4): d.key(67)
     d.click("Radio", description=True)
     d.click("Aggiungi Radio Test Uno ai preferiti", description=True)
-    d.click("Preferite")
+    d.select_filter("Preferiti")
     d.wait("radio favorites", lambda: "1 radio" in d.texts())
     d.capture("01-radio-catalog.png")
     d.launch("channel/" + radio_id)
@@ -221,14 +231,14 @@ def phone_checks(d, radio_id, tv_id, requests):
     d.key(4)  # Return from the options page to the catalog.
     d.click("Interrompi la riproduzione", description=True)
     d.wait("explicit stop ends playback", lambda: not d.playing())
-    d.click("Canali", description=True); d.click("Recenti")
+    d.click("Canali", description=True); d.select_filter("Recenti")
     d.wait("TV recents", lambda: "2 canali" in d.texts())
-    d.click("Radio", description=True); d.click("Recenti")
+    d.click("Radio", description=True); d.select_filter("Recenti")
     d.wait("radio recents are separate", lambda: "2 radio" in d.texts())
     d.run("shell", "settings", "put", "system", "font_scale", "1.3")
     # Recreate native TextViews with the new resources before judging the rendered text.
     d.stop(); d.launch("catalog")
-    d.click("Radio", description=True); d.click("Recenti")
+    d.click("Radio", description=True); d.select_filter("Recenti")
     d.wait("radio navigation at 130 percent text", lambda: any(n.get("content-desc") == "Radio" for n in d.nodes()))
     d.capture("06-radio-font-scale.png")
 
@@ -239,7 +249,11 @@ def tv_checks(d, radio_id, tv_id):
         focused = next((n for n in d.nodes() if n.get("focused") == "true"), None)
         if focused is not None and focused.get("text") == "Canali": break
         d.key(19)
-    d.key(22); d.key(23)
+    for _ in range(3):
+        focused = next((n for n in d.nodes() if n.get("focused") == "true"), None)
+        if focused is not None and focused.get("text") == "Radio": break
+        d.key(22)
+    d.key(23)
     d.wait("radio tab reached with D-pad", lambda: "Radio, in diretta." in d.texts())
     d.capture("01-radio-catalog.png")
     d.launch("channel/" + radio_id)
@@ -272,6 +286,7 @@ def main():
     parser.add_argument("--tv", required=True)
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--audio", type=Path, required=True)
+    parser.add_argument("--only", choices=["phone", "tv"], help="Repeat checks on one emulator only")
     parser.add_argument("--output", type=Path, default=ROOT / "analysis/playback-smoke")
     args = parser.parse_args()
     audio = args.audio.read_bytes()
@@ -310,7 +325,8 @@ def main():
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Handler, directory=str(args.video.resolve().parent)))
     Thread(target=server.serve_forever, daemon=True).start()
-    devices = [Device(args.adb, serial, args.output) for serial in [args.phone, args.tv]]
+    devices = [Device(args.adb, serial, args.output) for serial, mode in [(args.phone, "phone"), (args.tv, "tv")]
+               if args.only is None or args.only == mode]
     backup = {}
     scales = {}
     try:
@@ -322,8 +338,8 @@ def main():
             device.run("shell", "settings", "put", "system", "font_scale", "1.0")
             device.run("shell", "run-as", PACKAGE, "mkdir", "-p", "files", "shared_prefs")
             radio_id, tv_id = fixture(device, server.server_port)
-        phone_checks(devices[0], radio_id, tv_id, requests)
-        tv_checks(devices[1], radio_id, tv_id)
+        if args.only != "tv": phone_checks(next(d for d in devices if d.serial == args.phone), radio_id, tv_id, requests)
+        if args.only != "phone": tv_checks(next(d for d in devices if d.serial == args.tv), radio_id, tv_id)
         for device in devices:
             errors = device.run("logcat", "-d", "-s", "AndroidRuntime:E").decode(errors="replace")
             device.wait("no Android crash", lambda: "FATAL EXCEPTION" not in errors)

@@ -4,6 +4,7 @@ import android.view.KeyEvent
 import it.lumetv.core.Channel
 import it.lumetv.core.PlaybackMode
 
+data class PlaybackEpisode(val source:String,val id:String,val title:String,val season:Int?=null,val episode:Int?=null)
 /** UI state contains catalog identity, never temporary stream URLs or DRM credentials. */
 data class PlaybackSnapshot(
     val channel: Channel? = null,
@@ -22,6 +23,11 @@ data class PlaybackSnapshot(
     val duration:Long=0,
     val seekable:Boolean=false,
     val ended:Boolean=false,
+    val options: PlaybackOptionsState = PlaybackOptionsState(),
+    val nextEpisode:PlaybackEpisode?=null,
+    val nextEpisodeLoading:Boolean=false,
+    val nextEpisodeError:Boolean=false,
+    val playbackRevision:Long=0,
 )
 
 internal object PlaybackPolicy {

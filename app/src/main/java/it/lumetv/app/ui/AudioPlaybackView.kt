@@ -33,6 +33,9 @@ class AudioPlaybackView(
     retry: () -> Unit,
     returnToVideo: (() -> Unit)? = null,
 ) : FrameLayout(context) {
+    var onPlaybackOptions: () -> Unit = {}
+    private val optionsButton = if (television) TvStyle.button(context, "Opzioni riproduzione") { onPlaybackOptions() }
+        else MobileStyle.button(context, "Opzioni riproduzione") { onPlaybackOptions() }
     private val logo = ChannelLogoView(context, logos)
     private val audioFallback = ImageView(context).apply {
         setImageResource(R.drawable.ic_mobile_audio)
@@ -92,12 +95,15 @@ class AudioPlaybackView(
         secondary.addView(heart, LinearLayout.LayoutParams(-2, context.dp(48)).apply { rightMargin = context.dp(16) })
         secondary.addView(button("Interrompi", R.drawable.ic_mobile_close, stop), LinearLayout.LayoutParams(-2, context.dp(48)))
         column.addView(secondary, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(18) })
+        column.addView(optionsButton, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(12) })
         column.addView(retryButton, LinearLayout.LayoutParams(-2, -2).apply { topMargin = context.dp(12) })
         column.addView(videoButton, LinearLayout.LayoutParams(-2, -2).apply { topMargin = context.dp(12) })
         videoButton.visibility = GONE
     }
 
     fun bind(state: PlaybackSnapshot, preferred: Boolean) {
+        optionsButton.text = if (state.options.sleepRemaining > 0) "Timer · " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining) else "Opzioni riproduzione"
+        optionsButton.contentDescription = "Opzioni riproduzione" + if (state.options.sleepRemaining > 0) ", timer: " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining) else ""
         val channel = state.channel ?: return
         logo.bind(channel)
         audioFallback.visibility = if (channel.isRadio) GONE else VISIBLE

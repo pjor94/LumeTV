@@ -37,6 +37,7 @@ internal class PlaylistPages(val activity:ComponentActivity,val scope:CoroutineS
         val root=LinearLayout(activity).apply {orientation=LinearLayout.VERTICAL;isSaveEnabled=false
             if(!mobile)setPadding(activity.dp(46),activity.dp(26),activity.dp(46),activity.dp(20)) else setPadding(0,0,0,activity.dp(12))}
         val heading=TvStyle.text(activity,title,if(mobile)28f else 35f,bold=true).apply {maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;ViewCompat.setAccessibilityHeading(this,true)}
+        val subtitleView=TvStyle.text(activity,subtitle,if(mobile)14f else 15f,secondary).apply {maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END}
         val body=LinearLayout(activity).apply {orientation=LinearLayout.VERTICAL;isSaveEnabled=false
             if(mobile)setPadding(activity.dp(20),activity.dp(8),activity.dp(20),activity.dp(24))
             else if(navigation)setPadding(activity.dp(4),activity.dp(4),activity.dp(4),activity.dp(4))}
@@ -63,7 +64,7 @@ internal class PlaylistPages(val activity:ComponentActivity,val scope:CoroutineS
                     addView(button("Indietro"){back()}.apply {tag="playlist_page_back"},LinearLayout.LayoutParams(-2,-2).apply {leftMargin=activity.dp(20)})
                 }
             root.addView(header,LinearLayout.LayoutParams(-1,-2))
-            if(subtitle.isNotBlank() && (mobile || !navigation))root.addView(TvStyle.text(activity,subtitle,if(mobile)14f else 15f,secondary).apply {maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END},LinearLayout.LayoutParams(-1,-2).apply {
+            if(subtitle.isNotBlank() && (mobile || !navigation))root.addView(subtitleView,LinearLayout.LayoutParams(-1,-2).apply {
                 topMargin=activity.dp(8);if(mobile){leftMargin=activity.dp(20);rightMargin=activity.dp(20);bottomMargin=activity.dp(8)}
             })
             if(!mobile && navigation) {
