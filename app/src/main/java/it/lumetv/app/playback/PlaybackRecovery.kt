@@ -64,15 +64,16 @@ internal class PlaybackRecovery(
         }
     }
 
-    fun onBuffering() {
+    fun onBuffering(onDemand:Boolean=false) {
         if (!active || isRecovering || stalled != null) return
         onNotPlaying()
         stalled = scope.launch {
-            delay(STALL_TIMEOUT)
+            delay(if(onDemand)90_000L else STALL_TIMEOUT)
             stalled = null
-            onFailure(PlaybackFailure("La diretta impiega troppo tempo a rispondere. Riprova o scegli un altro canale.", true))
+            onFailure(PlaybackFailure(if(onDemand)"Il video impiega troppo tempo a rispondere. Riprova." else "La diretta impiega troppo tempo a rispondere. Riprova o scegli un altro canale.", true))
         }
     }
+    fun onBufferProgress(onDemand:Boolean){if(onDemand && stalled!=null){stalled?.cancel();stalled=null;onBuffering(true)}}
 
     fun onPlaying() {
         if (!active) return

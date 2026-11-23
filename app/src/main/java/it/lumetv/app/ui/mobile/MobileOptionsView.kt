@@ -16,6 +16,7 @@ import it.lumetv.app.ui.TvStyle.dp
 
 enum class MobileOption(val label: String) {
     PLAYLISTS("Le mie liste"),
+    METADATA("Informazioni sui video"),
     CHANNELS("Canali e preferiti"),
     BACKUP("Backup e ripristino"),
     INTERFACE("Interfaccia"),
@@ -71,6 +72,7 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
         }
         heading("Preferenze", first = true)
         row(MobileOption.PLAYLISTS)
+        row(MobileOption.METADATA)
         row(MobileOption.CHANNELS)
         row(MobileOption.BACKUP)
         row(MobileOption.INTERFACE)
@@ -89,6 +91,7 @@ class MobileOptionsView(context: Context, back: () -> Unit, choose: (MobileOptio
              version: String, availableVersion: String?, homeSummary: String) {
         val values = mapOf(
             MobileOption.PLAYLISTS to "Aggiungi liste M3U da URL HTTP/HTTPS o file",
+            MobileOption.METADATA to "Trama, cast e immagini da TMDB",
             MobileOption.CHANNELS to "Riordina preferiti, nascondi e ripristina canali",
             MobileOption.BACKUP to "Esporta e recupera liste, preferiti e riprese",
             MobileOption.INTERFACE to interfaceLabel,

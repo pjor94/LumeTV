@@ -7,7 +7,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class Programme(val title: String, val start: Long, val end: Long, val description: String = "",
-    val eventId:String="",val sourceId:String="",val replayAvailable:Boolean=false)
+    val eventId:String="",val sourceId:String="",val replayAvailable:Boolean=false,val guideOrigin:String="")
 
 internal interface GuideStore {
     var updated: Long

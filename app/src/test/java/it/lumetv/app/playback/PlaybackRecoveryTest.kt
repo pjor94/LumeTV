@@ -13,6 +13,14 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackRecoveryTest {
     private val temporary = PlaybackFailure("temporary", true)
+    @Test fun `VOD loading progress preserves the in-flight request and stalled VOD eventually retries`() = runTest {
+        val h=Harness(this)
+        h.recovery.onBuffering(true)
+        advanceTimeBy(60_000);runCurrent();assertEquals(0,h.retries)
+        h.recovery.onBufferProgress(true)
+        advanceTimeBy(60_000);runCurrent();assertEquals(0,h.retries)
+        advanceTimeBy(32_000);runCurrent();assertEquals(1,h.retries)
+    }
     private class Harness(scope: TestScope) {
         var online = true
         var retries = 0

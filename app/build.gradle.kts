@@ -1,9 +1,19 @@
 import java.security.MessageDigest
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     kotlin("android")
 }
+
+// Local/CI configuration only. A token bundled in an APK is extractable; never commit the real value.
+val tmdbLocal = Properties().apply {
+    rootProject.file("local.properties").takeIf {it.isFile}?.inputStream()?.use {load(it)}
+}
+val tmdbToken = providers.environmentVariable("TMDB_READ_ACCESS_TOKEN")
+    .orElse(providers.gradleProperty("tmdbReadAccessToken"))
+    .orElse(tmdbLocal.getProperty("tmdb.readAccessToken", "")).get().trim()
+require(tmdbToken.length<=2048 && tmdbToken.none {it=='\n' || it=='\r'}) {"Invalid TMDB token configuration"}
 
 android {
     namespace = "it.lumetv.app"
@@ -12,9 +22,10 @@ android {
         applicationId = "it.lumetv.app"
         minSdk = 23
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.11.0"
+        versionCode = 25
+        versionName = "0.12.0"
         testInstrumentationRunner = "it.lumetv.app.home.HomeInspection"
+        buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"" + tmdbToken.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
     }
     buildTypes {
         debug {
@@ -84,12 +95,17 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.11.1")
     implementation("androidx.media3:media3-session:1.11.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.11.1")
+    implementation("androidx.media3:media3-inspector-frame:1.11.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.1") {
+        // The extractor uses Rhino directly; its desktop JSR-223 bridge needs javax.script, absent on Android.
+        exclude(group="org.mozilla",module="rhino-engine")
+    }
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.google.zxing:core:3.5.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.tukaani:xz:1.9")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("org.json:json:20250517")

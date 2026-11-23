@@ -16,7 +16,11 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--adb',required=True);parser.add_argument('--phone',required=True);parser.add_argument('--tv',required=True)
     parser.add_argument('--video',type=Path,required=True);parser.add_argument('--font',type=float,default=1.0)
-    parser.add_argument('--operation',choices=['playlist-video-library','playlist-video-navigation','playlist-video-continuity'],default='playlist-video-library')
+    parser.add_argument('--audio',type=Path)
+    parser.add_argument('--live-trailer',action='store_true')
+    parser.add_argument('--operation',choices=['playlist-video-library','playlist-video-navigation','playlist-video-continuity','playlist-video-metadata','playlist-video-trailer'],default='playlist-video-library')
+    parser.add_argument('--apk',type=Path,default=ROOT/'app/build/outputs/apk/debug/app-debug.apk')
+    parser.add_argument('--test-apk',type=Path,default=ROOT/'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')
     parser.add_argument('--output',type=Path,default=ROOT/'analysis/video-library/native')
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'validation.json').unlink(missing_ok=True)
@@ -26,36 +30,38 @@ def main():
         if d.run('shell','getprop','ro.hardware').strip() not in {b'ranchu',b'goldfish'}:raise ValueError('Disposable emulator required')
         if d.run('shell','getprop','sys.boot_completed').strip()!=b'1':raise ValueError('Boot the emulators first')
     video=args.video.read_bytes()
+    audio=args.audio.read_bytes() if args.audio else None
     class Handler(BaseHTTPRequestHandler):
         def do_HEAD(self):
             self.send_response(200);self.send_header('Content-Type','video/mp4');self.send_header('Content-Length',str(len(video)));self.end_headers()
         def do_GET(self):
             if self.path.startswith('/unavailable.mp4'):
                 self.send_error(404);return
+            payload=audio if audio is not None and self.path.split('?')[0].endswith('/trailer-audio.m4a') else video
             start=0
             if self.headers.get('Range','').startswith('bytes='):
                 match=re.match(r'bytes=(\d+)-',self.headers['Range'])
-                if match:start=min(int(match[1]),len(video)-1)
-            self.send_response(206 if start else 200);self.send_header('Content-Type','video/mp4');self.send_header('Accept-Ranges','bytes')
-            if start:self.send_header('Content-Range',f'bytes {start}-{len(video)-1}/{len(video)}')
-            self.send_header('Content-Length',str(len(video)-start));self.end_headers()
-            try:self.wfile.write(video[start:])
+                if match:start=min(int(match[1]),len(payload)-1)
+            self.send_response(206 if start else 200);self.send_header('Content-Type','audio/mp4' if payload is audio else 'video/mp4');self.send_header('Accept-Ranges','bytes')
+            if start:self.send_header('Content-Range',f'bytes {start}-{len(payload)-1}/{len(payload)}')
+            self.send_header('Content-Length',str(len(payload)-start));self.end_headers()
+            try:self.wfile.write(payload[start:])
             except (BrokenPipeError,ConnectionResetError):pass
         def log_message(self,*unused):pass
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler);server.daemon_threads=True;Thread(target=server.serve_forever,daemon=True).start()
-    apk=ROOT/'app/build/outputs/apk/debug/app-debug.apk';sha=hashlib.sha256(apk.read_bytes()).hexdigest()
+    apk=args.apk;sha=hashlib.sha256(apk.read_bytes()).hexdigest()
     def check(d,mode):
         for name in ['report.json','failure.png','video-library-progress.json']:(d.output/name).unlink(missing_ok=True)
         d.stop();d.run('install','--no-incremental','-r',str(apk))
-        d.run('install','--no-incremental','-r','-t',str(ROOT/'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'))
+        d.run('install','--no-incremental','-r','-t',str(args.test_apk))
         d.run('shell','run-as',PACKAGE,'mkdir','-p','files','shared_prefs','cache')
         d.run('shell','run-as',PACKAGE,'rm','-rf','cache/video-library','cache/video-library-progress.json')
         fixture(d,server.server_port);d.run('shell','settings','put','system','font_scale',str(args.font));d.run('shell','input','keyevent','KEYCODE_WAKEUP');d.run('logcat','-c')
         run=subprocess.run([args.adb,'-s',d.serial,'shell','am','instrument','-w','-e','operation',args.operation,'-e','fixtureRoot',f'http://10.0.2.2:{server.server_port}',
-            '-e','mode',mode,PACKAGE+'.test/it.lumetv.app.home.HomeInspection'],capture_output=True,text=True,timeout=600)
+            '-e','mode',mode,'-e','separateTrailerAudio',str(audio is not None).lower(),'-e','realTrailer',str(args.live_trailer).lower(),PACKAGE+'.test/it.lumetv.app.home.HomeInspection'],capture_output=True,text=True,timeout=600)
         (d.output/'instrumentation.log').write_text(run.stdout+run.stderr)
         logs=d.run('logcat','-d').decode(errors='replace');(d.output/'logcat.txt').write_text(logs)
-        for name in ['00-home','01-films','02-details','03-landscape','04-series','05-episodes','06-no-cover','00-no-video','01-video-tab','02-video-active','03-video-hidden','04-landscape-navigation','05-final-navigation','01-watched','02-hidden','03-next-episode','04-resumed','05-landscape','failure']:
+        for name in ['00-home','01-films','02-details','03-landscape','04-series','05-seasons','05-unseasoned','05-all-episodes','05-episodes','05-season-landscape','06-no-cover','00-no-video','01-video-tab','02-video-active','03-video-hidden','04-landscape-navigation','05-final-navigation','01-watched','02-hidden','03-next-episode','04-resumed','05-landscape','tmdb-01-details','tmdb-01-landscape','tmdb-02-match','tmdb-03-corrected','tmdb-03-excluded','tmdb-04-settings','tmdb-05-disabled','trailer-01-details','trailer-02-playing','trailer-02-landscape','trailer-03-english','trailer-04-unavailable','trailer-05-series','trailer-06-real','failure']:
             data=d.read(f'cache/video-library/{name}.png')
             if data:(d.output/f'{name}.png').write_bytes(data)
         match=re.search(r'^INSTRUMENTATION_RESULT: snapshot=(.+)$',run.stdout,re.M)

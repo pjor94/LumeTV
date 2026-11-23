@@ -170,6 +170,7 @@ class MobileActivity : ComponentActivity() {
         backup.onIdle={if(launchQueue.pending!=null)consumeLaunchRequest()}
         companion=it.lumetv.app.ui.CompanionPhoneScreen(this,lifecycleScope)
         root.addView(companion,FrameLayout.LayoutParams(-1,-1))
+        playback.onWatchOnTv={player.snapshot.channel?.let(::watchOnTv)}
         browse.openRemote={launchGeneration++;launchQueue.consume(true);companion.show()}
         browse.manageChannels=channelManagement::show
         playbackOptions = it.lumetv.app.ui.PlaybackOptionsPanel(this, true, player) { playback.setControlsVisible(true) }
@@ -199,7 +200,9 @@ class MobileActivity : ComponentActivity() {
             load={q,o->guide.personal.search(channel,q,o)},label={it.title+" · "+java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(java.util.Date(it.start))}) {showProgramme(channel,it)}}
         lifecycleScope.launch {guide.personal.state.collect {if(catalogLoaded){updateGuideStatus();browse.reloadGuideWindow()}}}
         playback.onDemand.apply {onSeek=player::seek;onSeekBy=player::seekBy;onRestart=player::restart;onToggle={player.togglePause()};onReturnLive=player::returnToLive
-            onNextEpisode=player::playFollowingEpisode;onRetryNextEpisode=player::reloadFollowingEpisode}
+            onNextEpisode=player::playFollowingEpisode;onRetryNextEpisode=player::reloadFollowingEpisode
+            onPreviewRequest=player::requestPreview;onScrubbingChanged={player.setPreviewActive(it);playback.setScrubbing(it)}}
+        playback.canAutoHide={!playbackOptions.isShowing}
         lifecycleScope.launch {
             repository.personal.version.collect {
                 if (catalogLoaded) {
@@ -221,7 +224,9 @@ class MobileActivity : ComponentActivity() {
         }
         setContentView(root)
         catalogPanels=it.lumetv.app.ui.PersonalCatalogPanels(this,lifecycleScope)
-        catalogPanels.attachVideo(browse.videoContainer,browse::showVideo)
+        catalogPanels.beforeTrailer=player::pauseForCatalog
+        catalogPanels.watchOnTv=::watchOnTv
+        catalogPanels.attachVideo(browse.videoContainer,onVisibility=browse::showVideo)
         browse.onSectionSelected=catalogPanels::dismiss
         catalogPanels.restoreState(savedInstanceState)
         lifecycleScope.launch {repository.personal.classification.collect {state->browse.setCatalogLoadingMessage(state?.let {"Classifico ${it.name}… ${it.processed} / ${it.total} voci"})}}
@@ -263,6 +268,7 @@ class MobileActivity : ComponentActivity() {
                     catalogPanels.handleBack() -> Unit
                     playlists.handleBack() -> Unit
                     showingOptions -> closeOptions()
+                    !showingCatalog && playback.handleBack() -> Unit
                     !showingCatalog -> {showCatalog();catalogPanels.resume()}
                     browse.closeSearch() -> Unit
                     browse.section != MobileSection.CHANNELS -> browse.navigate(MobileSection.CHANNELS)
@@ -414,6 +420,24 @@ class MobileActivity : ComponentActivity() {
         else showProgramme(item.channel, item.programme)
     }
 
+    private fun watchOnTv(channel:Channel) {
+        launchGeneration++;launchQueue.consume(true)
+        programmeDialog?.dismiss();channelsDialog?.dismiss();dismissOptions()
+        val initial=player.snapshot
+        companion.watch(it.lumetv.app.ui.WatchIntent(channel,position={
+            val playing=player.snapshot
+            if(!channel.isVod)0L
+            else if(playing.channel?.id==channel.id && playing.channel?.sourceId==channel.sourceId && playing.mode==it.lumetv.core.PlaybackMode.VOD)
+                if(playing.ended)0L else playing.position
+            else kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                it.lumetv.app.data.PersonalPlaybackStore.get(this@MobileActivity).read(channel.sourceId,it.lumetv.core.PlaybackTarget(channel.id,it.lumetv.core.PlaybackMode.VOD)).resume
+            }
+        },onStarted={
+            val current=player.snapshot
+            if(initial.channel!=null && current.channel?.id==initial.channel.id && current.channel?.sourceId==initial.channel.sourceId && current.playbackRevision==initial.playbackRevision){stopPlayback();catalogPanels.resume()}
+        }))
+    }
+
     private fun selectChannel(channel: Channel, restorePause: Boolean = false,archiveEvent:String?=null) {
         launchGeneration++
         dismissOptions()
@@ -469,7 +493,7 @@ class MobileActivity : ComponentActivity() {
         failed = state.error != null
         updateLiveInfo()
         if (state.error != null) playback.showError(state.error)
-        else if (state.buffering) playback.showLoading(state.message.ifBlank { "Carico la diretta…" })
+        else if (state.buffering) playback.showLoading(state.message.ifBlank {if(state.mode==it.lumetv.core.PlaybackMode.LIVE)"Carico la diretta…" else "Carico il video…"})
         else playback.ready(state.playing)
         playback.renderState(state, repository.isFavorite(state.channel))
         if (showingCatalog) miniPlayer.bind(state, playback.video)
@@ -742,8 +766,10 @@ class MobileActivity : ComponentActivity() {
         panel.addView(top)
         panel.addView(TvStyle.text(this, programme.title, 24f, bold = true))
         panel.addView(TvStyle.text(this, "${time(programme.start)} – ${time(programme.end)}", 14f, TvStyle.accent), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        if(programme.guideOrigin=="epgshare")panel.addView(TvStyle.text(this,"Guida: EPGShare IT1",14f,TvStyle.muted),LinearLayout.LayoutParams(-1,-2).apply {topMargin=dp(8)})
         panel.addView(TvStyle.text(this, programme.description.ifBlank { "Descrizione non disponibile." }, 16f, TvStyle.muted), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18); bottomMargin = dp(20) })
         panel.addView(MobileStyle.button(this, "Guarda il canale ora", true) { programmeDialog?.dismiss(); selectChannel(channel) }, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(MobileStyle.button(this,"Guarda il canale sulla TV"){watchOnTv(channel)},LinearLayout.LayoutParams(-1,-2).apply {topMargin=dp(8)})
         if(programme.replayAvailable)panel.addView(MobileStyle.button(this,if(programme.end>System.currentTimeMillis())"Guarda dall’inizio" else "Rivedi dall’archivio",true) {
             programmeDialog?.dismiss();selectChannel(channel,archiveEvent=programme.eventId)
         },LinearLayout.LayoutParams(-1,-2).apply {topMargin=dp(8)})
@@ -830,6 +856,7 @@ class MobileActivity : ComponentActivity() {
     private fun chooseOption(option: MobileOption) {
         when (option) {
             MobileOption.PLAYLISTS -> { playlists.bindPlayback(player.snapshot.channel != null); playlists.show() }
+            MobileOption.METADATA -> it.lumetv.app.ui.VideoMetadataPanel(this,repository.personal,lifecycleScope,true).show()
             MobileOption.CHANNELS -> channelManagement.show()
             MobileOption.BACKUP -> {launchGeneration++;launchQueue.consume(true);backup.show()}
             MobileOption.COMPANION -> {launchGeneration++;launchQueue.consume(true);companion.show()}
@@ -888,12 +915,19 @@ class MobileActivity : ComponentActivity() {
 
     private fun showLicenses() {
         val documents = linkedMapOf("Crediti e sorgenti" to "THIRD_PARTY_NOTICES.md", "Lume TV · GNU GPL v3" to "LICENSE.txt",
+            "TMDB · Dati dei video" to "TMDB",
             "Apache License 2.0" to "licenses/Apache-2.0.txt", "R8 · BSD" to "licenses/BSD-3-Clause-R8.txt",
+            "jsoup · MIT" to "licenses/MIT-jsoup.txt", "Protocol Buffers · BSD" to "licenses/BSD-3-Clause-Protobuf.txt",
+            "Rhino · Licenze e avvisi" to "licenses/Rhino-LICENSE.txt",
             "Desugar JDK · GPL v2 e Classpath Exception" to "licenses/GPL-2.0-with-classpath-exception.txt",
             "Mozilla Public License 2.0" to "licenses/MPL-2.0.txt", "XZ · Pubblico dominio" to "licenses/XZ-PUBLIC-DOMAIN.txt",
             "Avvisi delle dipendenze" to "DEPENDENCY_NOTICES.txt", "OpenJDK · Informazioni aggiuntive" to "licenses/DESUGAR-ADDITIONAL_LICENSE_INFO.txt",
             "OpenJDK · Assembly Exception" to "licenses/OPENJDK-ASSEMBLY_EXCEPTION.txt")
         trackDialog(AlertDialog.Builder(this).setTitle("Licenze e avvisi").setItems(documents.keys.toTypedArray()) { _, index ->
+            if(documents.values.elementAt(index)=="TMDB") {
+                it.lumetv.app.ui.VideoMetadataPanel(this,repository.personal,lifecycleScope,true).show(creditsOnly=true)
+                return@setItems
+            }
             val text = TvStyle.text(this, assets.open(documents.values.elementAt(index)).bufferedReader().use { it.readText() }, 14f)
                 .apply { setPadding(dp(20), dp(12), dp(20), dp(12)) }
             trackDialog(AlertDialog.Builder(this).setTitle(documents.keys.elementAt(index)).setView(ScrollView(this).apply { addView(text) })

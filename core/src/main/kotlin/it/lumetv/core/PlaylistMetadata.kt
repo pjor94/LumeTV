@@ -133,7 +133,7 @@ class PlaylistDocument(val reader: java.io.Reader, val baseUrl: String, val rele
 }
 
 object PlaylistCapabilities {
-    val activeAttributes = setOf("tvg-id", "tvg-name", "tvg-logo", "group-title", "tvg-chno", "ch-number", "radio", "http-user-agent", "http-referrer", "type", "content-type", "media", "media-dir", "media-size", "poster", "poster-url", "tvg-poster", "cover", "cover-url", "backdrop", "backdrop-url", "fanart", "fanart-url", "tvg-background", "plot", "description", "tvg-description", "genre", "genres", "year", "release-year", "series-title", "series-name", "show-title", "tvg-series", "series-id", "show-id", "season", "season-number", "episode", "episode-number")
+    val activeAttributes = setOf("tvg-id", "tvg-name", "tvg-logo", "group-title", "tvg-chno", "ch-number", "radio", "http-user-agent", "http-referrer", "type", "content-type", "media", "media-dir", "media-size", "poster", "poster-url", "tvg-poster", "cover", "cover-url", "backdrop", "backdrop-url", "fanart", "fanart-url", "tvg-background", "plot", "description", "tvg-description", "genre", "genres", "year", "release-year", "series-title", "series-name", "show-title", "tvg-series", "series-id", "show-id", "season", "season-number", "episode", "episode-number", "series-year", "tmdb-id", "tmdb_id", "tmdb-type", "imdb-id", "imdb_id")
     val storedAttributes = setOf("group-logo", "url-tvg", "x-tvg-url", "url-logo", "tvg-shift", "catchup", "catchup-type", "catchup-source", "catchup-days", "catchup-correction", "catchup-time", "timeshift", "tvg-rec", "tvg-language", "tvg-country", "parent-code", "adult", "audio-track", "video-track", "m3uautoload")
     val informativeAttributes = setOf("max-conn","billed-till","billed-msg")
     val sourceAttributes = setOf("refresh", "refresh_at")

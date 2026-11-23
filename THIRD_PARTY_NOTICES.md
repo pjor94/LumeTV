@@ -1,5 +1,11 @@
 # Crediti e licenze
 
+## TMDB · Informazioni VOD
+
+Le schede online dei video usano dati e immagini di [The Movie Database](https://www.themoviedb.org). This product uses the TMDB API but is not endorsed or certified by TMDB.
+
+Il logo TMDB proviene dal file ufficiale indicato in [docs/tmdb.md](docs/tmdb.md). La variante bianca nell’app mantiene le forme originali e segue le [condizioni di attribuzione](https://developer.themoviedb.org/docs/faq). Dati e immagini sono soggetti ai rispettivi diritti e alle condizioni TMDB; non sono distribuiti come parte del codice GPL dell’app.
+
 ## WorldLiveTV / WLTV Group
 
 Il catalogo delle sorgenti e la logica delle integrazioni usate da Lume TV derivano dal lavoro di **WorldLiveTV e WLTV Group**, autori dell’add-on Kodi `plugin.video.wltvhelper`.
@@ -31,6 +37,8 @@ Gran parte degli indirizzi del catalogo passa dal servizio Radio Garden, che rei
 
 ## Guida programmi
 
+**EPGShare IT1 — integrazione Android del 18 novembre 2026:** il feed pubblico [epg_ripper_IT1.xml.gz](https://epgshare01.online/epgshare01/epg_ripper_IT1.xml.gz) di [EPGShare01](https://epgshare01.online/) completa guida e loghi delle liste personali soltanto dopo i dati della lista e quelli Lume, riprendendo l’integrazione desktop del progetto. Feed e immagini vengono scaricati dal dispositivo nella cache locale e non sono inclusi nel pacchetto dell’app. La fonte è indicata nei dettagli dei programmi; loghi e palinsesti restano dei rispettivi titolari.
+
 I palinsesti e parte dei loghi dei canali provengono dal servizio esterno [EPG-Guide](https://epg-guide.com/). Altri loghi provengono dagli indirizzi indicati nella playlist WLTV. Dati e immagini vengono scaricati direttamente dalle sorgenti e conservati nella cache del dispositivo; non sono inclusi nella distribuzione del codice. I marchi restano dei rispettivi titolari.
 
 ## Librerie
@@ -41,10 +49,17 @@ I palinsesti e parte dei loghi dei canali provengono dal servizio esterno [EPG-G
 | Kotlin | 2.3.10 (compatibilità JDK 7/8: 1.9.10) | Apache-2.0; JetBrains e contributori |
 | kotlinx.coroutines / serialization | 1.10.2 / 1.7.3 | Apache-2.0; JetBrains e contributori |
 | OkHttp / Okio | 4.12.0 / 3.6.0 | Apache-2.0; Square e contributori |
+| NewPipe Extractor | 0.27.1 | GPL-3.0-or-later; Team NewPipe, NewPipe e.V. e contributori |
+| nanojson, fork TeamNewPipe | e9d656ddb49a412a5a0a5d5ef20ca7ef09549996 | Apache-2.0; The nanojson Authors e contributori |
+| jsoup | 1.24.1 | MIT; Copyright (c) 2009-2026 Jonathan Hedley |
+| Protocol Buffers Java Lite | 4.36.2 | BSD-3-Clause; Copyright 2008 Google Inc. |
+| Mozilla Rhino | 1.8.1 | MPL-2.0 e avvisi aggiuntivi nel file upstream `Rhino-LICENSE.txt`; Mozilla e contributori |
 | Guava / failureaccess | 33.3.1-android / 1.0.2 | Apache-2.0; Google e contributori |
 | JetBrains annotations / JSpecify | 23.0.0 / 1.0.0 | Apache-2.0; rispettivi autori |
-| desugar_jdk_libs | 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0; Oracle, Google e contributori OpenJDK |
-| desugar_jdk_libs_configuration (R8) | 2.1.5 | BSD-3-Clause; Copyright (c) 2016, the R8 project authors |
+| JSR-305 / Error Prone annotations / J2ObjC annotations | 3.0.2 / 2.28.0 / 3.0.0 | Apache-2.0; rispettivi autori |
+| Checker Framework qualifiers | 3.43.0 | MIT; Copyright 2004-present by the Checker Framework developers |
+| desugar_jdk_libs_nio | 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0; Oracle, Google e contributori OpenJDK |
+| desugar_jdk_libs_configuration_nio (R8) | 2.1.5 | BSD-3-Clause; Copyright (c) 2016, the R8 project authors |
 | Public Suffix List, inclusa in OkHttp | Copia distribuita con OkHttp 4.12.0 | MPL-2.0; contributori Public Suffix List |
 | XZ for Java | 1.9 | Pubblico dominio; Lasse Collin, Igor Pavlov, Brett Okken |
 | ZXing Core | 3.5.4 | Apache-2.0; ZXing authors |
@@ -52,6 +67,8 @@ I palinsesti e parte dei loghi dei canali provengono dal servizio esterno [EPG-G
 | JUnit, usato solo nei test | 4.13.2 | EPL-1.0; autori JUnit |
 
 Le licenze si applicano ai rispettivi componenti e non ai contenuti delle emittenti. Il progetto conserva i copyright dei sorgenti upstream; i nomi sopra riassumono i titolari, senza sostituire gli avvisi dei singoli file. Gli avvisi originali sono conservati in `app/src/main/assets/DEPENDENCY_NOTICES.txt` e nell’app.
+
+La risoluzione dei trailer usa NewPipe Extractor senza modifiche alla libreria, con un downloader e un player Android propri. Viene usato Rhino direttamente in modalità interpretata; il bridge desktop opzionale `rhino-engine` è escluso dalla build Android. I trailer vengono richiesti ai rispettivi host e non sono inclusi nell’APK o nei sorgenti. L’integrazione è indipendente da YouTube; la licenza del software non concede diritti sui video né modifica le condizioni dei servizi ospitanti.
 
 Testi integrali nell’app, in **Opzioni → Licenze e avvisi**, e nei sorgenti in `app/src/main/assets/licenses/`: Apache 2.0, GPLv2 con Classpath Exception, BSD R8, MPL 2.0, dichiarazione XZ, informazioni aggiuntive OpenJDK. La EPL 1.0 dei test è inclusa nella stessa cartella. La Classpath Exception consente il collegamento con moduli indipendenti con licenze diverse; non elimina gli obblighi relativi al componente desugar.
 

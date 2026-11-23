@@ -85,7 +85,7 @@ object VodDetectionInspection {
             if(label.startsWith("Mostra tutto:")) {
                 val target=label.substringAfter(":").trim()
                 await("collection $target is available"){main {content.findViewWithTag<RecyclerView>("video_home")?.let {(it.adapter as? it.lumetv.app.ui.VideoShelfAdapter)?.rows?.any {row->row.title==target}}==true}}
-                main {if(mobile){content.isFocusableInTouchMode=true;content.requestFocus()};val home=content.findViewWithTag<RecyclerView>("video_home");val index=(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).rows.indexOfFirst {it.title==target};(home.layoutManager as androidx.recyclerview.widget.LinearLayoutManager).scrollToPositionWithOffset(index,0)}
+                main {if(mobile){content.isFocusableInTouchMode=true;content.requestFocus()};val home=content.findViewWithTag<RecyclerView>("video_home");val adapter=home.adapter as it.lumetv.app.ui.VideoShelfAdapter;val index=adapter.positionOfShelf(adapter.rows.first {it.title==target}.key);(home.layoutManager as androidx.recyclerview.widget.LinearLayoutManager).scrollToPositionWithOffset(index,0)}
                 runner.waitForIdleSync()
             }
             await("action $label is available"){main {visible().any {matches(it,label) && it.isEnabled}}}

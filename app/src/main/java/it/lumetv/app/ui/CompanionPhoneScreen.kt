@@ -41,12 +41,14 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
     private var pairingJob:Job?=null
     private var opening:Job?=null
     private var automaticEntry=false
+    private var watchIntent:WatchIntent?=null
     private var scanning=false
     private var polling:Job?=null
     private var client:CompanionClient?=null
     private var target:SavedTelevision?=null
     private var latest:JSONObject?=null
     private var remote:CompanionRemoteView?=null
+    private var sendLists:OptionsRowView?=null
     private var repair:View?=null
     private var needsPairing=false
     private var connected=false
@@ -60,7 +62,10 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
         val selected=target
         val updated=devices.firstOrNull {it.id==selected?.endpoint?.id}
         if(selected!=null && updated!=null && (updated.host!=selected.endpoint.host || updated.port!=selected.endpoint.port)) {
-            stopPolling();latest=null;target=selected.copy(endpoint=updated.copy(name=selected.endpoint.name));startPolling()
+            val controlling=pages.contains("remote")
+            if(controlling)stopPolling()
+            latest=null;target=selected.copy(endpoint=updated.copy(name=selected.endpoint.name))
+            if(controlling)startPolling()
         }
     },{discoveryStatus?.text="Ricerca non disponibile. Usa il QR o inserisci l’indirizzo della TV."})
     var isShowing=false;private set
@@ -77,7 +82,7 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
         addView(pages,LayoutParams(-1,-1))
         pages.onChanged={pages.current?.root?.findViewWithTag<View>("playlist_page_back")?.setOnClickListener {handleBack()}}
         activity.lifecycle.addObserver(object:DefaultLifecycleObserver {
-            override fun onStart(owner:LifecycleOwner){if(isShowing){discovery.start();if(pages.current?.key=="remote")startPolling()}}
+            override fun onStart(owner:LifecycleOwner){if(isShowing){discovery.start();if(pages.contains("remote"))startPolling()}}
             override fun onStop(owner:LifecycleOwner){discovery.stop();stopPolling();dialog?.dismiss();dialog=null}
             override fun onDestroy(owner:LifecycleOwner){opening?.cancel();pairingJob?.cancel();stopPolling()}
         })
@@ -100,9 +105,13 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
             }
         }
     }
+    fun watch(request:WatchIntent) {
+        if(isShowing)hide()
+        watchIntent=request;show()
+    }
     fun hide() {
         if(!isShowing)return
-        isShowing=false;automaticEntry=false;opening?.cancel();pairingJob?.cancel();stopPolling();discovery.stop();dialog?.dismiss();dialog=null
+        isShowing=false;automaticEntry=false;watchIntent=null;opening?.cancel();pairingJob?.cancel();stopPolling();discovery.stop();dialog?.dismiss();dialog=null
         pages.reset();visibility=GONE;accessibility.forEach {(v,value)->v.importantForAccessibility=value};accessibility.clear()
         previous?.takeIf {it.isShown}?.requestFocus()
     }
@@ -224,6 +233,14 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
     private fun connect(tv:SavedTelevision) {
         automaticEntry=false;pages.reset();target=tv;latest=null;connected=false;needsPairing=false
         if(store.lastTelevision!=tv.endpoint.id)store.lastTelevision=tv.endpoint.id
+        val request=watchIntent
+        if(request!=null) {
+            watchIntent=null
+            CompanionWatchSender(pages,{target?.takeIf {it.endpoint.id==tv.endpoint.id} ?: tv},
+                it.lumetv.app.data.ChannelRepository(activity,it.lumetv.app.data.HttpClient()),request,
+                {watchIntent=request;chooseTv()}, {connect(target ?: tv)}, {selected->connect(selected);bringToFront()}).show()
+            return
+        }
         pages.push("remote","Telecomando TV",tv.endpoint.name) {page->
             page.heading.textSize=22f;page.heading.letterSpacing=0f;page.scroll.isFillViewport=true
             page.scroll.addOnLayoutChangeListener {_,left,_,right,_,oldLeft,_,oldRight,_->
@@ -241,8 +258,13 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
             repair=MobileStyle.button(activity,"Abbina di nuovo") {chooseTv();scanQr()}.apply {tag="companion_repair";visibility=GONE}
                 .also {page.body.addView(it,LinearLayout.LayoutParams(-1,-2).apply {bottomMargin=activity.dp(8)})}
             remote=CompanionRemoteView(activity,::command,::tracks,::sleep).also {page.body.addView(it,LinearLayout.LayoutParams(-1,-1))}
+            sendLists=page.row("Invia lista alla TV","Scegli una lista salvata sul telefono e controlla l’anteprima.") {
+                val selected=target
+                if(connected && selected!=null && latest?.optBoolean("playlistTransferSupported")==true)
+                    CompanionPlaylistSender(pages,selected,it.lumetv.app.data.PersonalPlaylistRepository.get(activity)).show()
+            }.apply {tag="companion_send_lists_entry";isEnabled=false}
             page.root.tag="companion_remote"
-            page.onDispose={stopPolling();remote=null;repair=null;target=null;latest=null}
+            page.onDispose={stopPolling();remote=null;sendLists=null;repair=null;target=null;latest=null}
             startPolling()
         }
     }
@@ -303,7 +325,15 @@ internal class CompanionPhoneScreen(private val activity:ComponentActivity,priva
         if(old!=null && old.optString("instance")==state.optString("instance") && old.optLong("sequence")>state.optLong("sequence"))return
         latest=state;renderRemote()
     }
-    private fun renderRemote(){repair?.visibility=if(needsPairing)VISIBLE else GONE;remote?.render(latest,connected,commanding)}
+    private fun renderRemote(){
+        repair?.visibility=if(needsPairing)VISIBLE else GONE;remote?.render(latest,connected,commanding)
+        sendLists?.apply {
+            isEnabled=connected && latest?.optBoolean("playlistTransferSupported")==true
+            alpha=if(isEnabled)1f else .5f
+            bind("Invia lista alla TV",if(connected && latest?.optBoolean("playlistTransferSupported")!=true)"Aggiorna Lume sulla TV per inviare le liste."
+                else "Scegli una lista salvata sul telefono e controlla l’anteprima.")
+        }
+    }
 
     private fun tracks(field:String,type:Int,title:String) {
         val options=latest?.optJSONObject("options") ?: return

@@ -1,16 +1,17 @@
 package it.lumetv.app.ui
 
 import android.content.res.ColorStateList
-import android.graphics.drawable.StateListDrawable
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import it.lumetv.app.R
 import it.lumetv.app.data.ChannelLogoRepository
 import it.lumetv.app.data.Programme
 import it.lumetv.app.data.ProgrammeWindow
@@ -19,10 +20,11 @@ import it.lumetv.core.Channel
 import java.util.Locale
 
 /** Compact rows for browsing over the video; focus never starts playback. */
-class LiveChannelAdapter(
+internal class LiveChannelAdapter(
     private val logos: ChannelLogoRepository,
     private val favorite: (Channel) -> Boolean,
     private val choose: (Channel) -> Unit,
+    private val liveProgramme: (String) -> LiveProgrammeLoader.Result?,
 ) : RecyclerView.Adapter<LiveChannelAdapter.Holder>() {
     var items = emptyList<Channel>()
         private set
@@ -42,8 +44,8 @@ class LiveChannelAdapter(
         val logo: ChannelLogoView,
         val name: TextView,
         val badge: TextView,
+        val heart: ImageView,
         val programme: TextView,
-        val progress: ProgressBar,
     ) : RecyclerView.ViewHolder(row)
 
     override fun getItemCount() = catalog?.size ?: items.size
@@ -83,47 +85,51 @@ class LiveChannelAdapter(
             gravity = Gravity.CENTER_VERTICAL
             isFocusable = true; isClickable = true
             descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-            setPadding(context.dp(12), context.dp(10), context.dp(12), context.dp(10))
-            layoutParams = RecyclerView.LayoutParams(-1, context.dp(78)).apply {
-                bottomMargin = context.dp(6)
+            minimumHeight = context.dp(53)
+            setPadding(context.dp(10), context.dp(6), context.dp(10), context.dp(6))
+            layoutParams = RecyclerView.LayoutParams(-1, -2).apply {
+                bottomMargin = context.dp(5)
             }
         }
-        val number = TvStyle.text(context, "", 12f, TvStyle.muted).apply {
+        val number = TvStyle.text(context, "", 12f, LiveOverlayStyle.secondary).apply {
             gravity = Gravity.CENTER
             fontFeatureSettings = "tnum"
             maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
         }
-        row.addView(number, LinearLayout.LayoutParams(context.dp(28), -2).apply { rightMargin = context.dp(8) })
-        val logo = ChannelLogoView(context, logos)
-        row.addView(logo, LinearLayout.LayoutParams(context.dp(48), context.dp(42)).apply { rightMargin = context.dp(12) })
+        row.addView(number, LinearLayout.LayoutParams(context.dp(31), -2).apply { marginEnd = context.dp(5) })
+        val logo = ChannelLogoView(context, logos, compact = true, fallbackIcon = true)
+        row.addView(logo, LinearLayout.LayoutParams(context.dp(37), context.dp(34)).apply { marginEnd = context.dp(10) })
         val description = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         val nameLine = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
-        val name = TvStyle.text(context, "", 17f, bold = true).apply {
+        val name = TvStyle.text(context, "", 16f, bold = true).apply {
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }
-        val badge = TvStyle.text(context, "", 10f, TvStyle.accent).apply {
-            setPadding(context.dp(7), 0, 0, 0)
+        val badge = TvStyle.text(context, "In visione", 11f, TvStyle.white, bold = true).apply {
+            maxLines = 1
+            setPadding(context.dp(7), context.dp(3), context.dp(7), context.dp(3))
+            background = TvStyle.rounded(0x526C88A8, context.dp(12).toFloat())
         }
-        nameLine.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
-        nameLine.addView(badge)
-        description.addView(nameLine)
-        val programme = TvStyle.text(context, "", 12f, TvStyle.muted).apply {
-            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-        }
-        description.addView(programme, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(5) })
-        val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 1000
-            progressTintList = ColorStateList.valueOf(TvStyle.accent)
-            progressBackgroundTintList = ColorStateList.valueOf(0x24FFFFFF)
+        val heart = ImageView(context).apply {
+            setImageResource(R.drawable.ic_mobile_heart)
+            imageTintList = ColorStateList.valueOf(LiveOverlayStyle.secondary)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
-        description.addView(progress, LinearLayout.LayoutParams(-1, context.dp(2)).apply { topMargin = context.dp(7) })
+        nameLine.addView(name, LinearLayout.LayoutParams(0, -2, 1f))
+        nameLine.addView(badge, LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(6) })
+        nameLine.addView(heart, LinearLayout.LayoutParams(context.dp(14), context.dp(14)).apply { marginStart = context.dp(6) })
+        description.addView(nameLine)
+        val programme = TvStyle.text(context, "", 13f, LiveOverlayStyle.secondary).apply {
+            setLines(1)
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        description.addView(programme, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(2) })
         row.addView(description, LinearLayout.LayoutParams(0, -2, 1f))
-        val holder = Holder(row, number, logo, name, badge, programme, progress)
+        val holder = Holder(row, number, logo, name, badge, heart, programme)
+        row.background = LiveOverlayStyle.focusBackground(context)
         TvStyle.buttonSemantics(row)
         row.setOnFocusChangeListener { view, focused ->
-            updateColors(holder)
-            TvStyle.focusMotion(view, focused, 1.015f)
+            TvStyle.focusMotion(view, focused, 1.012f)
         }
         row.setOnClickListener {
             val position = holder.bindingAdapterPosition
@@ -139,54 +145,35 @@ class LiveChannelAdapter(
         val channel = channelAt(position)
         if(channel==null) {
             val failed=catalog?.failedAt(position)==true
-            holder.logo.unbind();holder.logo.visibility=View.INVISIBLE;holder.number.text="";holder.badge.text=""
-            holder.name.text=if(failed)"Riprova a caricare" else "Caricamento…";holder.programme.text="";holder.progress.visibility=View.INVISIBLE
+            holder.logo.unbind();holder.logo.visibility=View.INVISIBLE;holder.number.text=""
+            holder.badge.isVisible=false;holder.heart.isVisible=false
+            holder.name.text=if(failed)"Riprova a caricare" else "Caricamento…";holder.programme.text=""
             holder.row.isClickable=failed;holder.row.contentDescription="${holder.name.text}, canale ${position+1}"
-            holder.row.background=TvStyle.focusBackground(holder.row.context);updateColors(holder);return
+            return
         }
-        holder.row.isClickable=true;holder.logo.visibility=View.VISIBLE;holder.progress.visibility=View.VISIBLE
-        val context = holder.row.context
+        holder.row.isClickable=true;holder.logo.visibility=View.VISIBLE
         val current = channel.id == currentId
         holder.number.text = channel.displayNumber?.let { String.format(Locale.ITALY, "%d", it) }.orEmpty()
         holder.logo.bind(channel)
         holder.name.text = channel.name
-        holder.badge.text = when {
-            current -> "●"
-            favorite(channel) -> "★"
-            else -> ""
-        }
-        holder.row.background = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused, android.R.attr.state_pressed), TvStyle.rounded(TvStyle.pressed, context.dp(16).toFloat()))
-            addState(intArrayOf(android.R.attr.state_pressed), TvStyle.rounded(TvStyle.raised, context.dp(16).toFloat()))
-            addState(intArrayOf(android.R.attr.state_focused), TvStyle.rounded(TvStyle.white, context.dp(16).toFloat()))
-            addState(intArrayOf(), TvStyle.rounded(if (current) 0x2699CAFF else 0x08FFFFFF,
-                context.dp(16).toFloat(), if (current) 0x6699CAFF else 0x10FFFFFF, context.dp(1)))
-        }
+        holder.badge.isVisible = current
+        holder.heart.isVisible = !current && favorite(channel)
         bindProgramme(holder, channel)
-        updateColors(holder)
     }
 
     private fun bindProgramme(holder: Holder, channel: Channel) {
-        val window = ProgrammeWindow.at(programmes[channel.epgId].orEmpty(), System.currentTimeMillis())
-        holder.programme.text = window.current?.title ?: "Programma non disponibile"
-        holder.progress.progress = window.progress
-        // Reserve the same space when the guide is missing, so every logo stays aligned.
-        holder.progress.visibility = if (window.current != null) View.VISIBLE else View.INVISIBLE
+        val paged = catalog != null
+        val cached = if (paged) liveProgramme(channel.epgId) else null
+        val title = if (paged) cached?.programme?.title
+            else ProgrammeWindow.at(programmes[channel.epgId].orEmpty(), System.currentTimeMillis()).current?.title
+        holder.programme.text = title ?: if (paged && cached == null) "" else "Guida non disponibile"
         holder.row.contentDescription = listOfNotNull(
-            channel.displayNumber?.toString(), channel.name, window.current?.title,
+            channel.displayNumber?.toString(), channel.name, title,
             "In visione".takeIf { channel.id == currentId }, "Preferito".takeIf { favorite(channel) },
         ).joinToString(", ")
     }
 
-    private fun updateColors(holder: Holder) {
-        val focused = holder.row.hasFocus()
-        holder.name.setTextColor(if (focused) TvStyle.background else TvStyle.white)
-        holder.number.setTextColor(if (focused) 0xFF505967.toInt() else TvStyle.muted)
-        holder.programme.setTextColor(if (focused) 0xFF505967.toInt() else TvStyle.muted)
-        holder.badge.setTextColor(if (focused) 0xFF235B92.toInt() else TvStyle.accent)
-        holder.progress.progressTintList = ColorStateList.valueOf(if (focused) 0xFF356DA5.toInt() else TvStyle.accent)
-        holder.progress.progressBackgroundTintList = ColorStateList.valueOf(if (focused) 0x20235B92 else 0x24FFFFFF)
-    }
+    fun refreshProgramme(position: Int) = notifyItemChanged(position, "programme")
 
     fun refreshProgrammes() {
         if (itemCount > 0) notifyItemRangeChanged(0, itemCount, "programme")

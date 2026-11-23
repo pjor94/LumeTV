@@ -271,6 +271,21 @@ internal class PersonalPlaylistStore(val directory: File) {
             if (cursor.moveToFirst()) decodeEntry(JSONObject(cursor.getString(0)), descriptor) else null
         }
     }
+    fun liveGuideEntries(stored: PlaylistStored, ids: List<String>): Map<String, PlaylistEntry> {
+        if (ids.isEmpty() || stored.settings.contentOverride == PlaylistContentKind.VOD) return emptyMap()
+        return readDb(file(stored.source.id)).use { db ->
+            val placeholders = ids.joinToString(",") { "?" }
+            val live = if (stored.settings.contentOverride == PlaylistContentKind.LIVE) "" else " AND content='LIVE'"
+            db.rawQuery("SELECT id,payload FROM records WHERE active=1 AND id IN ($placeholders)$live", ids.toTypedArray()).use { cursor ->
+                buildMap {
+                    while (cursor.moveToNext()) {
+                        put(cursor.getString(0), decodeEntry(JSONObject(cursor.getString(1)), stored.descriptor))
+                    }
+                }
+            }
+        }
+    }
+
     fun delete(id: String) {
         file(id).delete(); sidecars(file(id))
         AtomicFile(File(directory, "$id.json")).delete()
@@ -371,6 +386,60 @@ internal class PersonalPlaylistStore(val directory: File) {
             for (i in 1..3) db.execSQL("CREATE INDEX match$i ON records(identity$i)")
             return db
         } catch (error: Exception) { db.close(); throw error }
+    }
+
+    /** Transfer only active entries; receiving devices allocate their own source and channel IDs. */
+    fun writeTransfer(stored:PlaylistStored,output:java.io.OutputStream,check:()->Unit) {
+        BackupIO.writeLine(output,JSONObject().put("format","lumetv-playlist").put("version",1).put("metadata",metadata(stored)))
+        readDb(file(stored.source.id)).use {db->
+            db.rawQuery("SELECT payload FROM records WHERE active=1 ORDER BY position,id",null).use {cursor->
+                var count=0
+                while(cursor.moveToNext()) {
+                    if(count++%128==0)check()
+                    BackupIO.writeLine(output,JSONObject(cursor.getString(0)))
+                }
+            }
+        }
+    }
+
+    fun stageTransfer(input:java.io.InputStream,check:()->Unit):PlaylistDraft {
+        directory.mkdirs();checkSpace(16L*1024*1024)
+        val header=BackupIO.line(input) ?: throw IOException("La lista ricevuta è incompleta.")
+        require(header.getString("format")=="lumetv-playlist" && header.getInt("version")==1)
+        val stored=decodeMetadata(header.getJSONObject("metadata"))
+        require(stored.source.count in 1..PersonalM3uParser.MAX_ENTRIES)
+        if(stored.source.location==PlaylistLocation.URL) {
+            val uri=java.net.URI(stored.address)
+            require(stored.address.length<=8192 && uri.rawUserInfo==null && uri.rawFragment==null && PersonalPlaylistNetwork.allowed(uri,true))
+        } else require(stored.address.isEmpty())
+        val target=File(directory,".draft-${UUID.randomUUID()}.sqlite")
+        try {
+            val sample=mutableListOf<String>();var count=0;var drm=0;var http=0
+            create(target).use {db->
+                db.beginTransaction()
+                try {
+                    db.compileStatement("INSERT INTO records(id,payload,name,number,logo,kind,groups_json,position,active,seen,identity1,identity2,identity3,content) VALUES(?,?,?,?,?,?,?,?,1,0,?,?,?,?)").use {insert->
+                        while(true) {
+                            check()
+                            val row=BackupIO.line(input) ?: break
+                            require(++count<=stored.source.count)
+                            val entry=decodeEntry(row,stored.descriptor)
+                            require(entry.name.isNotBlank() && entry.position in 0..PersonalM3uParser.MAX_ENTRIES && entry.metadata.contentKind!=PlaylistContentKind.PLAYLIST)
+                            if(PersonalPlaybackConfig.validate(entry,true,stored.settings)!=null)drm++
+                            if(entry.url.startsWith("http://",true))http++
+                            bindEntry(insert,entry,PlaylistIdentity.newId(),0);insert.executeInsert()
+                            if(sample.size<5)sample+=entry.name
+                            if(count%256==0)checkSpace(8L*1024*1024)
+                        }
+                    }
+                    require(count==stored.source.count)
+                    PlaylistCatalogIndex.populate(db);db.setTransactionSuccessful()
+                }finally {db.endTransaction()}
+            }
+            return PlaylistDraft(stored.source.location,stored.address,stored.source.defaultKind,
+                PlaylistPreview(count,sample,0,0,emptyList(),http,drm),target,stored.source.allowHttp,
+                settings=stored.settings,descriptor=stored.descriptor)
+        }catch(error:Exception){target.delete();File(target.path+"-journal").delete();throw error}
     }
 
     /** Portable records, not externally supplied SQLite databases or executable SQL. */

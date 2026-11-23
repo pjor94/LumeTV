@@ -12,11 +12,15 @@ import kotlinx.coroutines.CoroutineScope
 /** Search and continuous scrolling share a bounded cache on TV and touch. */
 internal class PersonalCatalogPanels(private val activity:ComponentActivity,private val scope:CoroutineScope,private val hostOverride:CatalogPanelHost?=null) {
     private val mobile=activity is it.lumetv.app.MobileActivity
+    var watchOnTv:((Channel)->Unit)?=null
+    var beforeTrailer:()->Unit={}
     private val host get()=hostOverride ?: CatalogPanelHost.get(activity)
     private var embedded:CatalogPanelHost?=null
+    private var videoBackdrop:TvVideoBackdrop?=null
     private var visibility:(Boolean)->Unit={}
-    fun attachVideo(container:android.widget.FrameLayout,onVisibility:(Boolean)->Unit) {
+    fun attachVideo(container:android.widget.FrameLayout,backdrop:TvVideoBackdrop?=null,onVisibility:(Boolean)->Unit) {
         visibility=onVisibility
+        videoBackdrop=backdrop
         embedded=CatalogPanelHost(activity,false).also {it.tag="lume_video_page_host";container.addView(it,android.widget.FrameLayout.LayoutParams(-1,-1))}
         activity.lifecycle.addObserver(object:androidx.lifecycle.DefaultLifecycleObserver {
             override fun onDestroy(owner:androidx.lifecycle.LifecycleOwner){embedded?.close()}
@@ -33,7 +37,7 @@ internal class PersonalCatalogPanels(private val activity:ComponentActivity,priv
         if(video!=null && target.isOpen)return
         val restored=pendingVideo ?: lastVideo;pendingVideo=null
         val artwork=it.lumetv.app.data.VideoArtworkRepository(activity,repository,it.lumetv.app.data.HttpClient(),scope)
-        val panel=VideoCatalogPanel(activity,scope,repository,artwork,toggleFavorite,choose,mobile,target,restored)
+        val panel=VideoCatalogPanel(activity,scope,repository,artwork,toggleFavorite,choose,mobile,target,restored,watchOnTv,videoBackdrop,{beforeTrailer()})
         if(repository.videoSources.value.isEmpty()){panel.close();return}
         video=panel
         target.push(panel.view){lastVideo=android.os.Bundle().also(panel::save);panel.close();if(video===panel)video=null;visibility(false)}
@@ -65,19 +69,21 @@ internal class PersonalCatalogPanels(private val activity:ComponentActivity,priv
         if(pendingVideo!=null && repository.videoSources.value.isNotEmpty())library(repository,logos,favorite,toggleFavorite,choose)
     }
     fun group(repository:PersonalPlaylistRepository,query:it.lumetv.app.data.PersonalCatalogQuery,choose:(String)->Unit) {
-        groupPicker(repository,query,"Scegli il gruppo","Tutti i gruppi",choose)
+        groupPicker(repository,query,"Scegli il gruppo","Tutti i gruppi",choose=choose)
     }
-    fun category(repository:PersonalPlaylistRepository,query:it.lumetv.app.data.PersonalCatalogQuery,choose:(String)->Unit) {
-        groupPicker(repository,query,"Categorie","Tutte le categorie",choose)
+    fun category(repository:PersonalPlaylistRepository,query:it.lumetv.app.data.PersonalCatalogQuery,
+        label:(String)->String={it},choose:(String)->Unit) {
+        groupPicker(repository,query,"Categorie","Tutte le categorie",label,choose)
     }
-    private fun groupPicker(repository:PersonalPlaylistRepository,query:PersonalCatalogQuery,title:String,allLabel:String,choose:(String)->Unit) {
+    private fun groupPicker(repository:PersonalPlaylistRepository,query:PersonalCatalogQuery,title:String,allLabel:String,
+        label:(String)->String={it},choose:(String)->Unit) {
         paged(title,load={text,offset->
             val all=text.isBlank()
             val (rows,total)=repository.groups(query.copy(text=text,offset=(offset-if(all)1 else 0).coerceAtLeast(0),limit=if(all && offset==0)49 else 50))
             ((if(all && offset==0)listOf(allLabel) else emptyList())+rows) to total+if(all)1 else 0
-        },label={it},choose=choose)
+        },label=label,choose=choose)
     }
-    fun <T> paged(title:String,filters:((LinearLayout,()->Unit)->Unit)?=null,
+    fun <T> paged(title:String,filters:((LinearLayout,()->Unit)->Unit)?=null,searchHint:String?=null,
         load:suspend (String,Int)->Pair<List<T>,Int>,label:(T)->String,choose:(T)->Unit) {
         val panel=CatalogPanelStyle.column(activity,mobile,title){host.back()}
         lateinit var search:EditText
@@ -87,7 +93,7 @@ internal class PersonalCatalogPanels(private val activity:ComponentActivity,priv
         val controls=LinearLayout(activity).apply {orientation=LinearLayout.VERTICAL}
         filters?.invoke(controls){reload()}
         panel.addView(controls,LinearLayout.LayoutParams(-1,-2))
-        search=CatalogPanelStyle.search(activity,"Cerca in $title"){reload()}
+        search=CatalogPanelStyle.search(activity,searchHint ?: "Cerca in $title"){reload()}
         panel.addView(search,LinearLayout.LayoutParams(-1,activity.dp(48)))
         picker=ContinuousPicker(activity,scope,mobile,label){item->host.back();choose(item)}
         panel.addView(picker.view,LinearLayout.LayoutParams(-1,0,1f))

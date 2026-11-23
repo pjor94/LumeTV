@@ -17,15 +17,21 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import it.lumetv.app.MobileActivity
 import it.lumetv.app.TvActivity
+import it.lumetv.app.data.PersonalCatalogQuery
+import it.lumetv.app.data.PersonalGuideRepository
+import it.lumetv.app.data.PersonalGuideSettings
 import it.lumetv.app.data.PersonalPlaylistRepository
+import it.lumetv.app.data.PlaylistSettings
 import it.lumetv.app.playback.TvPlayer
 import it.lumetv.app.ui.ChannelAdapter
 import it.lumetv.app.ui.PersonalCatalogPanels
 import it.lumetv.app.ui.CatalogPanelHost
+import it.lumetv.app.ui.LiveProgrammeLoader
 import it.lumetv.app.ui.VideoCatalogPanel
 import it.lumetv.app.ui.VideoPosterAdapter
 import it.lumetv.app.ui.PersonalPlaylistsScreen
 import it.lumetv.app.ui.mobile.MobileChannelAdapter
+import it.lumetv.app.ui.mobile.MobilePlaybackView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import androidx.lifecycle.lifecycleScope
@@ -52,14 +58,16 @@ object ContinuousCatalogInspection {
         val source=io {
             repo.local();repo.state.value.forEach {repo.delete(it.id)}
             val content=buildString {
-                appendLine("#EXTM3U")
+                appendLine(if (mobile) "#EXTM3U" else "#EXTM3U url-tvg=\"$root/guide.xml\"")
                 for(i in 1..5650) {
                     appendLine("#EXTINF:${if(i>5000)120 else -1} tvg-id=\"C$i\" tvg-chno=\"$i\" group-title=\"Gruppo ${(i%300).toString().padStart(3,'0')}\",${if(i>5000)"Video" else "Canale"} ${i.toString().padStart(4,'0')}")
                     appendLine("$root/video.mp4?id=$i")
                 }
             }
-            repo.prepareFile(content.toByteArray(),allowHttp=true).use {repo.save("Scorrimento continuo",it)}
+            val settings = PlaylistSettings(guide = PersonalGuideSettings(allowHttp = !mobile))
+            repo.prepareFile(content.toByteArray(), allowHttp = true, settings = settings).use { repo.save("Scorrimento continuo", it) }
         }
+        if (!mobile) io { PersonalGuideRepository.get(context).refresh(force = true, sourceId = source) }
         context.getSharedPreferences("lume",0).edit().putString("catalog_source",source).remove("last_channel").apply()
         var activity=runner.startActivitySync(Intent(context,if(mobile)MobileActivity::class.java else TvActivity::class.java)
             .setAction(Intent.ACTION_VIEW).setData(Uri.parse("lumetv://catalog")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as ComponentActivity
@@ -78,7 +86,7 @@ object ContinuousCatalogInspection {
             if(label.startsWith("Mostra tutto:")) {
                 val target=label.substringAfter(":").trim()
                 await("collection $target is available"){main {content.findViewWithTag<RecyclerView>("video_home")?.let {(it.adapter as? it.lumetv.app.ui.VideoShelfAdapter)?.rows?.any {row->row.title==target}}==true}}
-                main {if(mobile){content.isFocusableInTouchMode=true;content.requestFocus()};val home=content.findViewWithTag<RecyclerView>("video_home");val index=(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).rows.indexOfFirst {it.title==target};(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index,0)}
+                main {if(mobile){content.isFocusableInTouchMode=true;content.requestFocus()};val home=content.findViewWithTag<RecyclerView>("video_home");val adapter=home.adapter as it.lumetv.app.ui.VideoShelfAdapter;val index=adapter.positionOfShelf(adapter.rows.first {it.title==target}.key);(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index,0)}
                 runner.waitForIdleSync()
             }
             await("action $label is available"){main {views().any {match(it,label)}}}
@@ -129,8 +137,43 @@ object ContinuousCatalogInspection {
             all(view).filterIsInstance<RecyclerView>().single()
         }
         await("personal player uses its native picker with all 5000 channels"){main {liveList.adapter?.itemCount==5000 && liveList.findViewHolderForAdapterPosition(650)?.itemView?.let {text(it,"Canale 0651")}==true}}
+        if (!mobile) {
+            val ahead = 661
+            val upcoming = io { repo.catalog(PersonalCatalogQuery(source = source, offset = ahead, limit = 1)).rows.single() }
+            val loader = main {
+                val panel = activity.javaClass.getDeclaredField("liveChannels").apply { isAccessible = true }.get(activity)
+                panel.javaClass.getDeclaredField("guide").apply { isAccessible = true }.get(panel) as LiveProgrammeLoader
+            }
+            await("the live list prepares the guide for a channel before it enters the viewport") { main {
+                (liveList.layoutManager as LinearLayoutManager).findLastVisibleItemPosition() < ahead &&
+                    loader.result(upcoming.epgId)?.programme?.title == "Programma 0662"
+            } }
+            var titleOnFirstAttach: Boolean? = null
+            val observe = object : RecyclerView.OnChildAttachStateChangeListener {
+                override fun onChildViewAttachedToWindow(view: View) {
+                    if (titleOnFirstAttach == null && liveList.getChildAdapterPosition(view) == ahead) {
+                        titleOnFirstAttach = text(view, "Programma 0662")
+                    }
+                }
+                override fun onChildViewDetachedFromWindow(view: View) = Unit
+            }
+            main { liveList.addOnChildAttachStateChangeListener(observe) }
+            repeat(ahead - 650) { runner.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_DOWN) }
+            await("the guide title is visible on the first bind while scrolling with the remote") { main {
+                titleOnFirstAttach == true && liveList.findViewHolderForAdapterPosition(ahead)?.itemView?.hasFocus() == true
+            } }
+            main { liveList.removeOnChildAttachStateChangeListener(observe) }
+            repeat(ahead - 650) { runner.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_UP) }
+            await("reverse scrolling reuses the guide and keeps the original channel playing") { main {
+                liveList.findViewHolderForAdapterPosition(650)?.itemView?.let { it.hasFocus() && text(it, "Programma 0651") } == true &&
+                    player.snapshot.channel?.name == "Canale 0651" && player.snapshot.playing
+            } }
+        }
         main {(liveList.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(750,0)}
         await("personal player picker scrolls beyond the preview"){main {liveList.findViewHolderForAdapterPosition(750)?.itemView?.let {text(it,"Canale 0751")}==true}}
+        if (!mobile) await("the guide reports an empty schedule after reading the new window") { main {
+            liveList.findViewHolderForAdapterPosition(750)?.itemView?.let { text(it, "Guida non disponibile") } == true
+        } }
         if(mobile)main {(activity.javaClass.getDeclaredField("channelsDialog").apply {isAccessible=true}.get(activity) as android.app.Dialog).dismiss()}
         else main {activity.onBackPressedDispatcher.onBackPressed()}
         main {activity.onBackPressedDispatcher.onBackPressed()}
@@ -207,7 +250,15 @@ object ContinuousCatalogInspection {
         main {videos.findViewHolderForAdapterPosition(649)!!.itemView.apply {requestFocus();performClick()}}
         click("Guarda")
         await("last video remains playable"){main {player.snapshot.channel?.name=="Video 5650" && player.snapshot.playing}}
-        main {activity.onBackPressedDispatcher.onBackPressed()}
+        main {
+            if (mobile) {
+                views().filterIsInstance<MobilePlaybackView>().single().handleBack()
+            } else {
+                val controls = views().filterIsInstance<it.lumetv.app.ui.OnDemandControls>().singleOrNull()
+                if (controls?.controlsVisible == true) activity.onBackPressedDispatcher.onBackPressed()
+            }
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
         await("Back from VOD restores its title details"){main {content.findViewWithTag<View>("video_detail")?.isShown==true}}
         main {activity.onBackPressedDispatcher.onBackPressed()}
         await("Back from details restores the grid and position"){main {videos.findViewHolderForAdapterPosition(649)?.itemView?.isShown==true}}

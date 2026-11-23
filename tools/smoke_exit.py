@@ -107,7 +107,8 @@ def main():
         return TITLE in texts(items) and label(focused(items)) == "annulla"
 
     def home():
-        return "La TV, fatta semplice." in texts()
+        return any(node.get("resource-id") == PACKAGE + ":id/tv_channel_catalog_heading"
+                   and node.get("text") == "Canali" for node in nodes())
 
     def focus_exit():
         # Reach the global navigation using only the remote, then its last action.

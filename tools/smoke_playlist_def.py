@@ -162,7 +162,7 @@ def main():
         d.capture("05-historical-guide.png")
         d.launch("catalog");click("Opzioni",description=args.mode=="phone");click("Le mie liste")
         click("Guida personale A",contains=True);click("Guida e archivio");click("Impostazioni guida")
-        d.wait("per-source guide configuration is accessible",lambda:"Attiva la guida personale" in d.texts() and any("Indirizzi XMLTV" in text for text in d.texts()))
+        d.wait("per-source guide configuration is accessible",lambda:"Attiva la guida per questa lista" in d.texts() and any("Indirizzi XMLTV" in text for text in d.texts()))
         d.capture("06-guide-settings.png");click("Annulla")
         d.run("shell","settings","put","system","font_scale","1.3")
         d.stop();d.launch("channel/"+native["vod"])

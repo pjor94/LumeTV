@@ -2,7 +2,7 @@
 
 Lume TV permette di guardare le dirette italiane sul telefono, con comandi touch, preferiti e palinsesto. La stessa APK comprende anche l’interfaccia per telecomando: se usi una TV, consulta la [guida per Android TV e Google TV](GUIDA-ANDROID-TV.md).
 
-Questa guida descrive **Lume TV 0.11.0**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV; le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
+Questa guida descrive **Lume TV 0.12.0**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 
 La funzione **Canali nella Home**, dalla versione 0.8.0, compare nelle Opzioni soltanto sui dispositivi TV, anche quando si usa l’interfaccia Smartphone. Sui telefoni non pubblica canali. Vedi la [guida per Android TV](GUIDA-ANDROID-TV.md#canali-nella-home).
 
@@ -24,11 +24,33 @@ Il telecomando indica sempre quale TV controlli. La **croce direzionale con OK c
 
 Sotto la navigazione trovi **Pausa / Riprendi**, cambio canale nelle dirette e **−10 s / +30 s** nei video. **Opzioni riproduzione** raccoglie audio, sottotitoli, qualità, timer e interruzione in una sezione espandibile. In orizzontale navigazione e riproduzione si affiancano. I comandi non disponibili restano disabilitati. La TV riproduce autonomamente e continua se chiudi questa pagina o spegni lo schermo del telefono.
 
-I moduli per configurare liste e impostazioni della TV direttamente sul telefono non sono ancora disponibili. Puoi navigare le impostazioni mostrate sullo schermo TV; le modifiche alle impostazioni locali del telefono non si applicano alla TV. Il controllo resta dentro Lume, senza aprire la Home Android o altre applicazioni.
+La modifica delle liste e delle impostazioni già presenti sulla TV tramite moduli sul telefono non è ancora disponibile. Puoi navigare le impostazioni mostrate sullo schermo TV; le modifiche alle impostazioni locali del telefono non si applicano alla TV. Il controllo resta dentro Lume, senza aprire la Home Android o altre applicazioni.
 
 Le TV autorizzate vengono ricordate e il collegamento riprende quando Lume torna disponibile. Per revocare l’autorizzazione usa **Opzioni → Collega telefono → Gestisci collegamenti** sulla TV. Non vengono trasferiti automaticamente cataloghi, liste, preferiti o avanzamenti.
 
+### Inviare una lista alla TV
+
+1. Nel **Telecomando**, scorri fino a **Invia lista alla TV**. Il nome in alto indica la TV di destinazione.
+2. Scegli una lista già salvata sul telefono da **Opzioni → Le mie liste**. Sono supportate sia le liste da URL sia quelle importate da file, anche se disattivate sul telefono.
+3. Attendi l’invio e la verifica sulla TV. Il telefono mostra il numero di voci e alcuni titoli di esempio; puoi modificare il **Nome sulla TV**.
+4. Premi **Importa sulla TV**. Al termine la lista compare in **Le mie liste** sulla TV, con nuovi identificativi locali. Un nome già presente richiede di sceglierne un altro.
+
+Vengono trasferiti le voci attive e i loro metadati, l’eventuale indirizzo di aggiornamento e le impostazioni di accesso e della guida. Preferiti, avanzamenti e associazioni manuali dei canali XMLTV restano sul dispositivo originale. La lista importata sulla TV è una copia indipendente e abilitata; la riproduzione in corso prosegue.
+
+**Annulla** prima della conferma elimina l’invio senza aggiungere liste. Dopo la conferma, **Chiudi** lascia proseguire l’importazione sulla TV. Se il collegamento si interrompe, **Riprova** riprende i blocchi già ricevuti quando ancora disponibili; **Verifica esito** controlla una conferma già inviata. Mantieni Lume aperta sulla TV e i dispositivi sulla stessa rete privata. Se la TV usa una versione precedente, aggiorna Lume per abilitare l’invio.
+
 Serve una rete privata IPv4 che consenta ai dispositivi di comunicare; la TV può usare Ethernet. Le reti ospiti con isolamento dei dispositivi possono impedire il collegamento anche tramite QR. Lume deve essere aperta sulla TV: questa funzione non accende il televisore e non avvia l’app chiusa. Disponibile dalla versione 0.11.0.
+
+### Guardare sulla TV
+
+1. Nel player tocca l’icona **Guarda sulla TV**, oppure usa il pulsante nelle schede Video e nei dettagli dei programmi.
+2. Viene proposta l’ultima TV abbinata. **Cambia TV** permette di sceglierne un’altra o di collegarla con il QR.
+3. Attendi la verifica del contenuto e controlla il nome della TV e il titolo trovato. Premi **Guarda sulla TV** per avviare la riproduzione.
+4. Quando la TV conferma che sta riproducendo, il telefono interrompe il proprio player e apre il telecomando.
+
+Per i video viene usato il punto corrente del player del telefono, oppure l’avanzamento locale se scegli dalla scheda del titolo. Nelle schede delle serie viene proposto l’episodio da riprendere o il primo non visto. L’avanzamento già presente sulla TV non sostituisce quello inviato.
+
+La funzione usa i canali integrati e le liste già disponibili sui due dispositivi. Per una lista importata da file, usa la stessa copia su telefono e TV; puoi prepararla con **Invia lista alla TV**. Se la verifica non trova una corrispondenza univoca, la schermata spiega come procedere e il telefono continua a riprodurre. **Verifica avvio** controlla l’esito di una conferma già inviata dopo un’interruzione della rete. Mantieni Lume aperta sulla TV durante il passaggio.
 
 ## In questa guida
 
@@ -63,13 +85,19 @@ Nel catalogo, **Lista** seleziona la sorgente e **Tutti i gruppi** restringe l�
 
 Limiti: **10 liste, 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento**. Il catalogo scorre in continuo; ricerca e gruppi considerano l’intera lista. Sono disponibili M3U semplice o estesa, UTF-8/Windows-1252/Latin-1, liste incluse e le forme di header, KODIPROP e ClearKey DASH/CENC documentate. HTTP invia senza cifratura indirizzi e dati di accesso; i consensi di lista, loghi e guida restano separati.
 
-**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. La voce **Video** nella barra principale compare solo con VOD in almeno una lista abilitata e apre la biblioteca con copertine, Film, Serie, ricerca e scorrimento continuo; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
+**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. Se mancano indirizzi XMLTV della lista, Lume usa la propria guida per i canali riconosciuti, cercando nell’intera sorgente EPG anche oltre il catalogo integrato. I loghi mancanti vengono completati dai dati Lume; guida e loghi forniti dalla lista mantengono la precedenza. Le esclusioni manuali e la guida disattivata restano rispettate. EPGShare IT1 completa i canali ancora senza palinsesto Lume e i loghi ancora mancanti; i programmi supplementari indicano la fonte nei dettagli. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. La voce **Video** nella barra principale compare solo con VOD in almeno una lista abilitata e apre la biblioteca con copertine, Film, Serie, ricerca e scorrimento continuo; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
 
 Gli archivi della 0.8.0 vengono migrati conservando ID, preferiti e impostazioni. Liste, guida personale e avanzamenti restano locali ed esclusi da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](personal-playlists.md).
 
 L’apertura del selettore documenti segue le normali regole di riproduzione in background del telefono.
 
 ## Video on demand
+
+Durante la riproduzione i controlli scompaiono dopo circa cinque secondi. Tocca il video per mostrarli o nasconderli; in pausa rimangono disponibili. La barra distingue avanzamento, video già caricato e parte ancora da caricare.
+
+Trascina la barra per cercare una scena: vedi il tempo selezionato e, quando disponibile, un fotogramma. Rilascia per confermare il salto; **Indietro** annulla la ricerca in corso. Il primo **Indietro** fuori dalla ricerca chiude i controlli e il successivo torna al catalogo. I comandi usano icone per play/pausa e salti di 10/30 secondi; l’ingranaggio apre **Audio e opzioni**, con tracce, sottotitoli, qualità e timer. I tre puntini di **Altro** raccolgono **Dall’inizio**, **Solo audio** e **Capitoli**, quando la lista fornisce un indice. Le icone mantengono i nomi per i lettori dello schermo.
+
+Il VOD usa una riserva di riproduzione e una cache locale temporanea con quota automatica. I dati video vengono eliminati al cambio di contenuto, alla fine o interruzione definitiva del video e alla chiusura dell’app. Pausa, ricerca delle scene e riconnessione dello stesso contenuto mantengono la cache; il mini player mantiene la sessione finché il video continua. Chiudendo l’app dalle attività recenti si interrompe anche il VOD in modalità Solo audio. Dopo una chiusura forzata, eventuali residui vengono rimossi al successivo avvio. Il caricamento anticipato dà precedenza al video che stai guardando; durata della riserva e disponibilità delle anteprime dipendono dalla sorgente e dal dispositivo. Non equivale a un download offline del film.
 
 **Dalla versione 0.11.0:** nelle schede di film ed episodi trovi **Segna come visto / Segna come non visto**. Non visto azzera la ripresa; un titolo visto propone **Riguarda**. Le scelte restano salvate anche se il vecchio player è ancora aperto.
 
@@ -104,7 +132,7 @@ Sono necessari un gestore documenti compatibile e spazio temporaneo per la verif
 
 Serve uno **smartphone con Android 6.0 o successivo**, collegato a Internet, e un’APK che includa il supporto smartphone.
 
-1. Scarica [LumeTV-0.10.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.11.0/LumeTV-0.11.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
+1. Scarica [LumeTV-0.12.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
 2. Trasferisci il file sul telefono e aprilo dal gestore file. Se Android lo richiede, autorizza quel programma a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV**.
 4. Nella sezione **Canali**, tocca il nome del canale che vuoi guardare.

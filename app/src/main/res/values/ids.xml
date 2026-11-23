@@ -1,3 +1,4 @@
 <resources>
     <item name="tv_options" type="id" />
+    <item name="tv_channel_catalog_heading" type="id" />
 </resources>

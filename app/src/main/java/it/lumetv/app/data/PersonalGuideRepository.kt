@@ -4,12 +4,15 @@ import android.content.Context
 import it.lumetv.core.ArchiveEvent
 import it.lumetv.core.CatchupUrls
 import it.lumetv.core.Channel
+import it.lumetv.core.PlaylistEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -40,17 +43,25 @@ class PersonalGuideRepository private constructor(private val app:Context) {
             if(!PersonalPlaylistStore.validId(source))return
             val dir=File(context.filesDir,"personal-guides")
             listOf("","-journal","-wal","-shm").forEach {File(dir,"$source.sqlite$it").delete()}
-            synchronized(instances){instances[context.applicationContext]?._state?.let {s->s.value=s.value.filter {it.sourceId!=source}}}
+            synchronized(instances) {
+                instances[context.applicationContext]?.let { guide ->
+                    guide._state.update { state -> state.filter { it.sourceId != source } }
+                    guide.liveRevision.update { it + 1 }
+                }
+            }
         }
         internal fun icon(context:Context,source:String,channel:String):String? =
             runCatching {PersonalGuideStore(File(context.filesDir,"personal-guides")).icon(source,channel)}.getOrNull()
     }
     private val personal=PersonalPlaylistRepository.get(app)
     private val store=PersonalGuideStore(File(app.filesDir,"personal-guides"))
+    private val public=PublicGuideFallback(app.filesDir)
     private val mutex=Mutex()
     private val http=OkHttpClient.Builder().connectTimeout(20,TimeUnit.SECONDS).readTimeout(60,TimeUnit.SECONDS).callTimeout(120,TimeUnit.SECONDS).build()
     private val _state=MutableStateFlow<List<PersonalGuideStatus>>(emptyList())
     val state=_state.asStateFlow()
+    private val liveRevision = MutableStateFlow(0L)
+    internal val liveRevisions = combine(liveRevision, public.lume.revisions, public.supplement.revisions) { _, _, _ -> Unit }
     private fun status(s:PersonalGuideStatus){_state.value=_state.value.filter {it.sourceId!=s.sourceId}+s}
 
     suspend fun refresh(force:Boolean=false,sourceId:String?=null)=withContext(Dispatchers.IO) {
@@ -105,7 +116,11 @@ class PersonalGuideRepository private constructor(private val app:Context) {
                                     if(body.contentLength()>32L*1024*1024)throw SourceException("La guida compressa supera il limite di 32 MiB.")
                                     decoded(body.byteStream()).use {xml->store.stage(xml,input,feed,url,eligible,now,::active,old.updated>0 && old.urlHash!=urlHash).use {draft->
                                         active()
-                                        input.context.whileValid {active();store.commit(id,feed,draft,GuideFeedState(feed,signature,now,now,0,response.header("ETag"),response.header("Last-Modified"),urlHash=urlHash),now,input.settings.guide.historyDays,input.settings.guide.futureHours)}
+                                        input.context.whileValid {
+                                            active()
+                                            store.commit(id,feed,draft,GuideFeedState(feed,signature,now,now,0,response.header("ETag"),response.header("Last-Modified"),urlHash=urlHash),now,input.settings.guide.historyDays,input.settings.guide.futureHours)
+                                            liveRevision.update { it + 1 }
+                                        }
                                     }}
                                 }
                             }
@@ -130,6 +145,31 @@ class PersonalGuideRepository private constructor(private val app:Context) {
         }
     }
 
+    internal suspend fun onAir(channels: List<Channel>, now: Long): Map<String, Programme> = withContext(Dispatchers.IO) {
+        val result = mutableMapOf<String, Programme>()
+        for ((source, rows) in channels.filter { it.isPersonal && !it.isVod }.take(200).groupBy { it.sourceId }) {
+            ensureActive()
+            val context = personal.requestContext(source) ?: continue
+            val settings = context.settings.guide
+            if (!settings.enabled) continue
+            val epoch = context.guideToken
+            val ids = rows.map { it.id }.distinct()
+            val entries = personal.liveGuideEntries(source, ids)
+            val local = store.onAir(source, ids, now)
+            val fallback = mutableMapOf<String, PlaylistEntry>()
+            val programmes = mutableMapOf<String, Programme>()
+            for (channel in rows) {
+                val entry = entries[channel.id] ?: continue
+                if (entry.providesGuide(settings) || channel.id in local.manual) {
+                    local.programmes[channel.id]?.let { programmes[channel.epgId] = it }
+                } else fallback[channel.epgId] = entry
+            }
+            programmes.putAll(public.onAir(fallback, now))
+            if (context.valid() && context.guideToken == epoch) result.putAll(programmes)
+        }
+        result
+    }
+
     suspend fun window(channels:List<Channel>,from:Long,until:Long):Map<String,List<Programme>> = withContext(Dispatchers.IO) {
         val result=linkedMapOf<String,List<Programme>>();val now=System.currentTimeMillis()
         for((source,items) in channels.filter {it.isPersonal && !it.isVod}.take(200).groupBy {it.sourceId}) {
@@ -139,8 +179,14 @@ class PersonalGuideRepository private constructor(private val app:Context) {
             val guide=context.settings.guide
             val data=store.window(source,items,from.coerceAtLeast(now-guide.historyDays*86_400_000L),until.coerceAtMost(now+guide.futureHours*3_600_000L))
             for(channel in items) {
-                val list=data[channel.epgId] ?: continue
                 val entry=runCatching {personal.playbackEntry(channel.id)}.getOrNull() ?: continue
+                if(entry.content==it.lumetv.core.PlaylistContentKind.VOD)continue
+                if(!entry.providesGuide() && store.manualMapping(source,channel.id)==null) {
+                    val shows=public.window(entry.entry,from.coerceAtLeast(now),until.coerceAtMost(now+guide.futureHours*3_600_000L),now)
+                    if(shows.isNotEmpty())result[channel.epgId]=shows
+                    continue
+                }
+                val list=data[channel.epgId] ?: continue
                 val spec=runCatching {CatchupUrls.spec(entry.entry.metadata,guide.archiveDays)}.getOrNull()
                 result[channel.epgId]=list.map {p->
                     val event=if(spec?.mode==it.lumetv.core.CatchupMode.VOD)store.event(source,channel.id,p.eventId) else null
@@ -162,6 +208,10 @@ class PersonalGuideRepository private constructor(private val app:Context) {
         val settings=entry.settings.guide
         if(!settings.enabled || channel.isVod)return@withContext emptyList<Programme>() to 0
         val epoch=entry.context.guideToken;val now=System.currentTimeMillis()
+        if(!entry.providesGuide() && store.manualMapping(channel.sourceId,channel.id)==null) {
+            val result=public.search(entry.entry,query,now,now+settings.futureHours*3_600_000L,offset,now)
+            return@withContext if(entry.context.valid() && epoch==entry.context.guideToken)result else emptyList<Programme>() to 0
+        }
         val spec=runCatching {CatchupUrls.spec(entry.entry.metadata,settings.archiveDays)}.getOrNull()
         val (events,total)=store.searchPage(channel.sourceId,channel.id,query,now-settings.historyDays*86_400_000L,now+settings.futureHours*3_600_000L,offset)
         if(!entry.context.valid() || epoch!=entry.context.guideToken)return@withContext emptyList<Programme>() to 0
@@ -169,11 +219,11 @@ class PersonalGuideRepository private constructor(private val app:Context) {
     }
     suspend fun map(source:String,channel:String,feed:Int?,xml:String="")=withContext(Dispatchers.IO) {
         val context=personal.requestContext(source) ?: throw SourceException("La lista non è disponibile.")
-        context.invalidateGuide();mutex.withLock {context.whileValid {store.mapping(source,channel,feed,xml)}}
+        context.invalidateGuide();mutex.withLock {context.whileValid {store.mapping(source,channel,feed,xml);liveRevision.update { it + 1 }}}
     }
     suspend fun clear(source:String)=withContext(Dispatchers.IO) {
         val context=personal.requestContext(source) ?: return@withContext
-        context.invalidateGuide();mutex.withLock {context.whileValid {store.clear(source);_state.value=_state.value.filter {it.sourceId!=source}}}
+        context.invalidateGuide();mutex.withLock {context.whileValid {store.clear(source);_state.value=_state.value.filter {it.sourceId!=source};liveRevision.update { it + 1 }}}
     }
     internal fun storedFeedCount(source:String)=store.feeds(source).size
     internal fun storedCounts(source:String)=store.count(source)

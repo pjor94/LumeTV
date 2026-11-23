@@ -33,18 +33,27 @@ internal object BackupPersonalData {
         return JSONObject().put("favorites",JSONArray(prefs.getStringSet("favorites",emptySet()).orEmpty().toList()))
             .put("series",JSONArray(prefs.getStringSet("video_saved_series",emptySet()).orEmpty().toList()))
             .put("layout",layoutJson(layout)).put("owners",JSONObject())
+            .put("metadata",if(context.getDatabasePath("video-metadata.sqlite").isFile)VideoMetadataStore(context).use {it.manualChoices()} else JSONArray())
     }
     fun references(value:JSONObject):Set<String> = buildSet {
         addAll(strings(value.getJSONArray("favorites")));addAll(strings(value.getJSONObject("layout").getJSONArray("order")))
         val hidden=value.getJSONObject("layout").getJSONArray("hidden")
         require(hidden.length()<=BackupIO.MAX_ITEMS)
         for(i in 0 until hidden.length())add(hidden.getJSONObject(i).getString("id"))
+        val metadata=value.optJSONArray("metadata") ?: JSONArray();require(metadata.length()<=5000)
+        for(i in 0 until metadata.length())metadata.getJSONObject(i).getString("key").takeIf {it.startsWith("i:")}?.let {add(it.substring(2))}
         require(size<=BackupIO.MAX_ITEMS && all(BackupIO::validChannel))
     }
     fun validate(value:JSONObject,sources:Set<String>) {
+        VideoMetadataStore.validateChoices(value.optJSONArray("metadata") ?: JSONArray(),sources)
         val ids=references(value);val owners=value.getJSONObject("owners")
         require(owners.length()<=BackupIO.MAX_ITEMS && owners.keys().asSequence().toSet()==ids)
         ids.forEach {require(owners.getString(it) in builtinSources || owners.getString(it) in sources)}
+        val choices=value.optJSONArray("metadata") ?: JSONArray()
+        for(i in 0 until choices.length()) {
+            val row=choices.getJSONObject(i);val key=row.getString("key")
+            if(key.startsWith("i:"))require(owners.getString(key.substring(2))==row.getString("source"))
+        }
         val layout=value.getJSONObject("layout");require(layout.getInt("version")==1)
         val hidden=layout.getJSONArray("hidden");val seen=hashSetOf<String>()
         for(i in 0 until hidden.length()) {
@@ -66,6 +75,13 @@ internal object BackupPersonalData {
             .put("series",JSONArray(strings(value.getJSONArray("series")).filter {it.substringBefore(':') in sources}))
             .put("owners",JSONObject(owners))
             .put("layout",JSONObject().put("version",1).put("order",JSONArray(order)).put("hidden",kept).put("owners",JSONObject()))
+        resolved.put("metadata",JSONArray().apply {
+            val choices=value.optJSONArray("metadata") ?: JSONArray()
+            for(i in 0 until choices.length()) {
+                val row=choices.getJSONObject(i);val key=row.getString("key");val source=row.getString("source")
+                if(source in sources && (key.startsWith("s:") || owners[key.removePrefix("i:")]==source))put(row)
+            }
+        })
         val used=references(resolved)
         return resolved.put("owners",JSONObject(owners.filterKeys {it in used}))
     }

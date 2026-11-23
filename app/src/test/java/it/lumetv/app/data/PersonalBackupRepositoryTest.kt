@@ -84,6 +84,26 @@ class PersonalBackupRepositoryTest {
             assertEquals(1,repo.state.value.size)
         }
     }
+    @Test fun `manual metadata associations survive portable backup without exporting downloaded details`()=runTest {
+        app.deleteDatabase("video-metadata.sqlite")
+        val repo=repo();val source=source(repo);val row=items(repo,source).first();val lookup=repo.videoLookup(row)!!
+        VideoMetadataStore(app).use {store->
+            store.save(lookup,VideoStoredMatch(42,emptyList(),true,false,Long.MAX_VALUE),
+                TmdbMetadata(42,VodMediaType.MOVIE,"Cinema",2023,"Downloaded synopsis"),System.currentTimeMillis()){true}
+        }
+        val manager=manager(repo);val file=manager.export(password)
+        manager.prepare(file,password).use {preview->
+            assertEquals(1,preview.personal.getJSONArray("metadata").length())
+            assertFalse(preview.personal.toString().contains("Downloaded synopsis"))
+            repo.delete(source)
+            manager.restore(preview,BackupSelection.ALL)
+            val restored=repo.videoLookup(items(repo,source).first())!!
+            VideoMetadataStore(app).use {store->
+                assertEquals(42,store.match(restored)!!.id);assertTrue(store.match(restored)!!.manual)
+                assertNull(store.details(VodMediaType.MOVIE,42))
+            }
+        }
+    }
     @Test fun `individual list choices keep unrelated data and skip unavailable references`()=runTest {
         val repo=repo();val a=source(repo,"Uno");val b=source(repo,"Due");val row=items(repo,b).first()
         history.write(b,target(row),42_000,180_000);prefs.edit().putStringSet("favorites",setOf(row.id)).commit()

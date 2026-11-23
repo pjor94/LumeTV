@@ -19,7 +19,7 @@ internal data class CompanionRequest(val method:String,val path:String,val heade
 }
 internal data class CompanionResponse(val status:Int=200,val body:JSONObject=JSONObject())
 
-/** Bounded HTTP/1.1 over TLS. No files, redirects, URL fetching, CORS, or arbitrary Android intents. */
+/** Bounded JSON frames over TLS, including playlist chunks. No redirects, CORS or arbitrary intents. */
 internal class CompanionHttp(identity:CompanionIdentity,address:String,requestedPort:Int=0,private val handle:(CompanionRequest)->CompanionResponse):AutoCloseable {
     private val listener=(try {identity.tls.serverSocketFactory.createServerSocket(requestedPort,8,InetAddress.getByName("0.0.0.0"))}
         catch(error:java.net.BindException){if(requestedPort==0)throw error;identity.tls.serverSocketFactory.createServerSocket(0,8,InetAddress.getByName("0.0.0.0"))} as SSLServerSocket).apply {

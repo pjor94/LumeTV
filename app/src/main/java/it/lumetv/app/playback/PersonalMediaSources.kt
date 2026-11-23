@@ -35,6 +35,7 @@ internal object PersonalMediaSources {
 
     fun create(context:Context,stream:ResolvedStream,item:MediaItem,mediaClient:OkHttpClient,licenseClient:OkHttpClient,
                requestsContext:PersonalRequestContext?=null,
+               mediaWrapper:(DataSource.Factory)->DataSource.Factory={it},
                httpAllowed:()->Boolean):MediaSource {
         if(stream.drm?.scheme==DrmScheme.CLEARKEY && stream.mimeType!="application/dash+xml")
             throw SourceException("ClearKey personale richiede uno stream DASH con cifratura CENC.")
@@ -45,7 +46,7 @@ internal object PersonalMediaSources {
             return DefaultDataSource.Factory(context,http(client,headers))
         }
         val manifest=requests(stream.manifestHeaders ?: stream.headers,PlaylistResource.MANIFEST)
-        val segments=requests(stream.headers,PlaylistResource.MEDIA)
+        val segments=mediaWrapper(requests(stream.headers,PlaylistResource.MEDIA))
         val keyBase=requests(stream.hlsKey?.headers ?: stream.headers,PlaylistResource.KEY)
         val keys=ResolvingDataSource.Factory(keyBase) { spec ->
             val parameters=stream.hlsKey?.parameters.orEmpty()

@@ -10,6 +10,6 @@ internal object PersonalGuideFeedback {
         status?.error?.isNotBlank()==true->"${status.error} Controlla Guida e archivio in Le mie liste e riprova ad aggiornare."
         status!=null && status.updated>0 && status.matched==0->"Guida scaricata, ma nessun canale associato. Controlla Associa canali in Le mie liste, Guida e archivio."
         status!=null && status.updated>0->"Nessun programma in questa fascia. Cambia giorno o aggiorna la guida."
-        else->"Nessun programma disponibile. Controlla la guida in Le mie liste, Guida e archivio, quindi aggiorna."
+        else->"Nessun programma disponibile. Aggiorna la guida in Le mie liste, Guida e archivio. Le liste senza XMLTV usano Lume e poi EPGShare IT1 per i canali riconosciuti."
     }
 }

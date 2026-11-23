@@ -18,6 +18,8 @@ import it.lumetv.app.data.PlaylistResource
 import it.lumetv.app.ui.PersonalPlaylistsScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -169,6 +171,88 @@ object PlaylistPagesInspection {
         verify("Back closes the source chooser without selecting"){!screen.isShowing}
         var selected="";main {screen.chooseSource("builtin",false,null){selected=it}};click("Catalogo Lume")
         verify("source selection closes its page and invokes the catalog callback"){selected=="builtin" && !screen.isShowing}
+        val fallbackFixture=io {
+            val now=System.currentTimeMillis()
+            val date=java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss Z").withZone(java.time.ZoneOffset.UTC)
+            fun stamp(time:Long)=date.format(java.time.Instant.ofEpochMilli(time))
+            val xml="<tv><channel id=\"rai1\"><display-name>Rai 1</display-name></channel>"+
+                "<channel id=\"lume-extra.it\"><display-name>Canale fuori catalogo</display-name><icon src=\"https://public.example.com/lume-extra.png\"/></channel>"+
+                "<programme channel=\"rai1\" start=\"${stamp(now-60_000)}\" stop=\"${stamp(now+3_600_000)}\"><title>Programma integrato</title></programme>"+
+                "<programme channel=\"lume-extra.it\" start=\"${stamp(now-60_000)}\" stop=\"${stamp(now+3_600_000)}\"><title>Programma fuori catalogo</title></programme></tv>"
+            val shared=it.lumetv.app.data.CatalogGuideStore(context.filesDir)
+            shared.stage(xml.byteInputStream(),setOf("rai1"),now).use {shared.commit(it)}
+            val extraXml="<tv><channel id=\"Sky.Uno.it\"><display-name>Sky Uno</display-name><icon src=\"https://public.example.com/epgshare.png\"/></channel>"+
+                "<channel id=\"lume-extra.it\"><display-name>Canale fuori catalogo</display-name></channel>"+
+                "<programme channel=\"Sky.Uno.it\" start=\"${stamp(now-60_000)}\" stop=\"${stamp(now+3_600_000)}\"><title>Programma EPGShare</title><desc>Programmazione supplementare di prova.</desc></programme>"+
+                "<programme channel=\"lume-extra.it\" start=\"${stamp(now-60_000)}\" stop=\"${stamp(now+3_600_000)}\"><title>Supplemento senza precedenza</title></programme></tv>"
+            it.lumetv.app.data.CatalogGuideStore(context.filesDir,it.lumetv.app.data.PublicGuideFeed.EPGSHARE).let {extra->
+                extra.stage(extraXml.byteInputStream(),emptySet(),now).use {extra.commit(it)}
+            }
+            val draft=repo.prepareFile(("#EXTM3U\n#EXTINF:-1 tvg-id=\"lume-extra.it\",Canale fuori catalogo\nhttps://media.example.com/live.m3u8\n"+
+                "#EXTINF:-1 tvg-id=\"SkyUno.it\",Sky Uno\nhttps://media.example.com/sky.m3u8").toByteArray(),
+                settings=it.lumetv.app.data.PlaylistSettings(access=mapOf(PlaylistResource.LOGO to it.lumetv.app.data.PlaylistAccessRule(mapOf("X-Logo" to "private-access")))))
+            val source=try{repo.save("Ripiego Lume",draft)}finally{draft.close()}
+            val channel=repo.local().single {it.sourceId==source && it.name=="Canale fuori catalogo"}
+            val extraChannel=repo.local().single {it.sourceId==source && it.name=="Sky Uno"}
+            val guide=PersonalGuideRepository.get(context)
+            verify("native guide resolves a personal channel outside the built-in catalog from the full public index") {
+                io {guide.window(listOf(channel),now,now+3_600_000)[channel.epgId]?.single()?.title=="Programma fuori catalogo"}
+            }
+            verify("public guide results remain searchable without personal XMLTV") {io {guide.search(channel,"fuori").second==1}}
+            val extraShow=guide.window(listOf(extraChannel),now,now+3_600_000)[extraChannel.epgId]!!.single()
+            verify("EPGShare completes the native personal guide after Lume has no matching schedule"){extraShow.title=="Programma EPGShare" && extraShow.guideOrigin=="epgshare" && !extraShow.replayAvailable}
+            verify("secondary programmes never replace a known Lume schedule on an empty search"){io {guide.search(channel,"Supplemento").second==0}}
+            val requests=java.util.Collections.synchronizedList(mutableListOf<okhttp3.Request>())
+            for(url in listOf("https://public.example.com/lume-extra.png","https://public.example.com/epgshare.png")) {
+                val key=java.security.MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString(""){"%02x".format(it)}
+                listOf(".image",".json").forEach {File(context.filesDir,"channel-artwork/$key$it").delete()}
+            }
+            val image=java.io.ByteArrayOutputStream().also {out->Bitmap.createBitmap(4,4,Bitmap.Config.ARGB_8888).apply {eraseColor(android.graphics.Color.BLUE)}.compress(Bitmap.CompressFormat.PNG,100,out)}.toByteArray()
+            val client=okhttp3.OkHttpClient.Builder().addInterceptor {chain->
+                val request=chain.request();requests+=request
+                okhttp3.Response.Builder().request(request).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("Native fixture")
+                    .body(image.toResponseBody("image/png".toMediaType())).build()
+            }.build()
+            val scope=kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()+Dispatchers.Default)
+            try {
+                val logos=it.lumetv.app.data.ChannelLogoRepository(context,it.lumetv.app.data.HttpClient(client),scope)
+                var color=0
+                kotlinx.coroutines.withTimeout(15_000){logos.request(channel){color=it?.bitmap?.getPixel(0,0) ?: 0}.join()}
+                verify("native logo fallback loads artwork for a channel outside the built-in catalog"){color==android.graphics.Color.BLUE}
+                verify("public logo requests contain no personal logo access headers"){requests.size==1 && requests.single().header("X-Logo")==null}
+                requests.clear()
+                kotlinx.coroutines.withTimeout(15_000){logos.request(extraChannel){color=it?.bitmap?.getPixel(0,0) ?: 0}.join()}
+                verify("secondary public logo fills the missing Lume artwork without personal headers"){color==android.graphics.Color.BLUE && requests.size==1 && requests.single().url.encodedPath=="/epgshare.png" && requests.single().header("X-Logo")==null}
+            }finally {scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()}
+            guide.map(source,channel.id,-1)
+            verify("native manual exclusion disables the public guide fallback"){io {guide.window(listOf(channel),now,now+3_600_000).isEmpty()}}
+            guide.map(source,channel.id,null)
+            guide.map(source,extraChannel.id,-1)
+            verify("manual exclusion also blocks the supplemental schedule"){io {guide.window(listOf(extraChannel),now,now+3_600_000).isEmpty()}}
+            guide.map(source,extraChannel.id,null)
+            Triple(source,extraChannel,extraShow)
+        }
+        main {screen.show()};click("Ripiego Lume");click("Guida e archivio")
+        verify("guide overview explains the ordered Lume and EPGShare fallback"){text("prima in Lume, poi in EPGShare IT1")}
+        capture("11-lume-fallback")
+        click("Impostazioni guida")
+        verify("guide settings label controls personal and fallback guide together"){text("Attiva la guida per questa lista") && text("poi in EPGShare IT1")}
+        capture("12-lume-fallback-settings")
+        main {screen.hide()}
+        val programmeDialog=main {
+            if(mobile) {
+                MobileActivity::class.java.getDeclaredMethod("showProgramme",it.lumetv.core.Channel::class.java,it.lumetv.app.data.Programme::class.java).apply {isAccessible=true}
+                    .invoke(activity,fallbackFixture.second,fallbackFixture.third)
+                MobileActivity::class.java.getDeclaredField("programmeDialog").apply {isAccessible=true}.get(activity) as android.app.Dialog
+            }else {
+                val guideView=TvActivity::class.java.getDeclaredField("guideView").apply {isAccessible=true}.get(activity) as it.lumetv.app.ui.GuideView
+                guideView.showProgramme(fallbackFixture.second,fallbackFixture.third)
+                it.lumetv.app.ui.GuideView::class.java.getDeclaredField("dialog").apply {isAccessible=true}.get(guideView) as android.app.Dialog
+            }
+        }
+        verify("native programme details identify EPGShare as their public source") {main {all(programmeDialog.window!!.decorView).filterIsInstance<TextView>().any {it.text.toString()=="Guida: EPGShare IT1"}}}
+        capture("13-epgshare-programme")
+        main {programmeDialog.dismiss()};io {repo.delete(fallbackFixture.first)}
         return JSONObject().put("passed",true).put("checks",JSONArray(checks)).put("mode",args.getString("mode"))
     }
 }

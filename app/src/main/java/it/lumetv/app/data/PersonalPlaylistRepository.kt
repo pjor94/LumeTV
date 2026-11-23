@@ -84,6 +84,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     private val directory = File(app.filesDir, "personal-playlists")
     private val index = AtomicFile(File(directory, "index.json"))
     private val store = PersonalPlaylistStore(directory)
+    private val watchCatalog=WatchCatalog(store)
     private val mutex = Mutex()
     private val imports = Semaphore(1)
     private val sources = linkedMapOf<String, PlaylistStored>()
@@ -110,6 +111,42 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
     fun cachedVideos(query:VideoQuery,preview:Boolean=false):VideoPage?=videoData.cached(if(preview)query.copy(offset=0,limit=16) else query,preview)
     internal fun videoPositions(page:VideoPage)=videoData.positions(page)
     internal fun videoArtworkEpoch(source:String):String?=videoData.epoch(source)?.let {epoch->requestContext(source)?.let {"$epoch:${it.token}"}}
+    private var metadataServiceOverride:TmdbService?=null
+    private val metadataDelegate=lazy {metadataServiceOverride?.let {VideoMetadataRepository(app,this,it)} ?: VideoMetadataRepository(app,this)}
+    internal fun configureVideoMetadataForTests(service:TmdbService){check(!metadataDelegate.isInitialized());metadataServiceOverride=service}
+    internal val videoMetadata get()=metadataDelegate.value
+    internal fun metadataRestored(){if(metadataDelegate.isInitialized())videoMetadata.refreshFromStore()}
+    internal fun videoArtworkRevision(item:VideoItem)=if(metadataDelegate.isInitialized())videoMetadata.artworkRevision(item) else "0:0"
+    internal fun validVideoLookup(input:VideoLookup)=videoData.epoch(input.source)==input.epoch && requestContext(input.source)!=null
+    internal suspend fun videoLookup(item:VideoItem):VideoLookup? {
+        load()
+        return videoData.readSource(item.source){stored,signal->
+            val entry=android.database.sqlite.SQLiteDatabase.openDatabase(store.file(item.source).path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db->
+                db.rawQuery("SELECT payload FROM records WHERE id=? AND active=1",arrayOf(item.id),signal).use {c->
+                    if(c.moveToFirst())store.decodeEntry(JSONObject(c.getString(0)),stored.descriptor) else null
+                }
+            } ?: return@readSource null
+            val query=it.lumetv.core.VodTitleMatcher.from(entry) ?: return@readSource null
+            val attributes=entry.metadata.defaults+entry.metadata.attributes
+            VideoLookup(item.source,VideoMetadataRepository.localKey(item),videoData.epoch(item.source) ?: return@readSource null,query,
+                listOf("poster","poster-url","tvg-poster","cover","cover-url").any {!attributes[it].isNullOrBlank()},
+                listOf("backdrop","backdrop-url","fanart","fanart-url","tvg-background").any {!attributes[it].isNullOrBlank()})
+        }
+    }
+    internal fun clearOnlineArtwork() {
+        File(app.filesDir,"video-artwork").listFiles().orEmpty().filter {it.name.contains("-tmdb-")}.forEach(File::delete)
+        _videoSources.value.forEach {VideoArtworkRepository.invalidateSource(this,it)}
+    }
+    internal suspend fun videoArtworkReference(item:VideoItem,backdrop:Boolean):VideoArtworkReference? {
+        val local=videoArtwork(item,backdrop)?.let {VideoArtworkReference(it.url,it.cacheKey,it)}
+        if(!metadataDelegate.isInitialized() || !videoMetadata.enabled || !videoMetadata.configured)return local
+        val input=videoLookup(item) ?: return local
+        if(local!=null && (if(backdrop)input.explicitBackdrop else input.explicitPoster))return local
+        val metadata=videoMetadata.cached(input) ?: return local
+        val url=TmdbClient.imageUrl(if(backdrop)metadata.backdropPath else metadata.posterPath,backdrop) ?: return local
+        val key=java.security.MessageDigest.getInstance("SHA-256").digest(url.toByteArray()).joinToString(""){"%02x".format(it)}
+        return VideoArtworkReference(url,"tmdb-$key")
+    }
 
     private fun classificationProgress(name:String,processed:Int,total:Int){_classification.value=PlaylistClassificationProgress(name,processed,total)}
     @Volatile private var loaded = false
@@ -253,6 +290,20 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
                 .mapNotNull {store.displayChannel(it,id)}.firstOrNull()
         }}
     }
+    internal suspend fun watchReference(channel:Channel):WatchReference {
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            val task=kotlinx.coroutines.currentCoroutineContext();task.ensureActive()
+            val stored=sources[channel.sourceId]?.takeIf {it.source.enabled} ?: throw WatchMatchException("watch_missing")
+            if(personalization.isHidden(channel))throw WatchMatchException("watch_missing")
+            watchCatalog.reference(stored,channel){task.ensureActive()}
+        }}
+    }
+    internal suspend fun resolveWatch(reference:WatchReference):Channel {
+        load();return withContext(Dispatchers.IO){mutex.withLock {
+            val task=kotlinx.coroutines.currentCoroutineContext()
+            watchCatalog.resolve(sources.values.filter {it.source.enabled},reference,personalization::isHidden){task.ensureActive()}
+        }}
+    }
     suspend fun next(current:Channel,direction:Int,ids:Set<String>?=null):Channel? {
         load();return withContext(Dispatchers.IO){mutex.withLock {
             sources[current.sourceId]?.takeIf {it.source.enabled}?.let {stored->
@@ -288,6 +339,16 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             }
         }}
     }
+    internal suspend fun liveGuideEntries(source: String, ids: List<String>): Map<String, PlaylistEntry> {
+        load()
+        return withContext(Dispatchers.IO) {
+            mutex.withLock {
+                val stored = sources[source]?.takeIf { it.source.enabled } ?: return@withLock emptyMap()
+                store.liveGuideEntries(stored, ids)
+            }
+        }
+    }
+
     internal suspend fun playbackEntry(id:String):PersonalEntrySnapshot {
         load();return withContext(Dispatchers.IO) {mutex.withLock {
             val pair=sources.values.asSequence().filter {it.source.enabled}.mapNotNull {s->store.entry(s.source.id,id)?.let {s to it}}.firstOrNull()
@@ -308,6 +369,12 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             val key=java.security.MessageDigest.getInstance("SHA-256").digest(identity.toByteArray()).joinToString("") {"%02x".format(it)}
             PersonalArtwork(url.toString(),key,headers,context)
         }}
+    }
+    internal suspend fun fallbackArtwork(channel:Channel):PersonalEntrySnapshot? {
+        val snapshot=runCatching {playbackEntry(channel.id)}.getOrNull() ?: return null
+        if(snapshot.content==PlaylistContentKind.VOD || snapshot.entry.logo.isNotBlank() ||
+            !PersonalGuideRepository.icon(app,channel.sourceId,channel.id).isNullOrBlank())return null
+        return snapshot.takeIf {it.context.valid()}
     }
 
     private suspend fun load():Unit { if(loaded)return;withContext(Dispatchers.IO) { mutex.withLock {
@@ -343,6 +410,29 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
         publish(emptySet())
         loaded=true
     } }}
+
+    internal suspend fun exportPlaylist(id:String):ExportedPlaylist {
+        load()
+        var exported:File?=null
+        try {return withContext(Dispatchers.IO){mutex.withLock {
+            val stored=sources[id] ?: throw IOException("La lista non è più disponibile.")
+            if(stored.source.count==0)throw IOException("La lista non contiene voci da inviare.")
+            val work=File(app.cacheDir,"playlist-transfers-out").apply {mkdirs()}
+            work.listFiles().orEmpty().filter {System.currentTimeMillis()-it.lastModified()>3_600_000}.forEach(File::delete)
+            val target=File.createTempFile("playlist-",".gz",work);exported=target
+            val task=kotlinx.coroutines.currentCoroutineContext()
+            PersonalPlaylistTransfer.output(target).use {store.writeTransfer(stored,it){task.ensureActive()}}
+            ExportedPlaylist(target,stored.source.name,stored.source.count)
+        }}}catch(error:Exception){exported?.delete();throw error}
+    }
+
+    internal suspend fun prepareTransferredPlaylist(file:File):PlaylistDraft {
+        load();var draft:PlaylistDraft?=null
+        try {return imports.withPermit {withContext(Dispatchers.IO){
+            val task=kotlinx.coroutines.currentCoroutineContext()
+            PersonalPlaylistTransfer.input(file).use {store.stageTransfer(it){task.ensureActive()}}.also {draft=it}
+        }}}catch(error:Exception){draft?.close();throw error}
+    }
 
     suspend fun prepareUrl(address: String, defaultKind: MediaKind = MediaKind.TV, allowHttp: Boolean = false,
                            settings: PlaylistSettings = PlaylistSettings(),
@@ -493,6 +583,7 @@ class PersonalPlaylistRepository(context: Context, private val fetcher: Playlist
             sources.remove(id);registered-=id;store.delete(id);catalogs.remove(id)
             PersonalGuideRepository.removeFiles(app,id)
             PersonalPlaybackStore.get(app).removeSource(id)
+            if(metadataDelegate.isInitialized())videoMetadata.removeSource(id) else VideoMetadataStore(app).use {it.removeSource(id)}
             clearArtworkFiles(id)
             prefs.edit().putStringSet("video_saved_series",prefs.getStringSet("video_saved_series",emptySet()).orEmpty().filterNot {it.startsWith("$id:")}.toSet()).commit()
             clearReferences(removed);publish(emptySet())

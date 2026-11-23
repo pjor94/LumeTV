@@ -12,6 +12,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import it.lumetv.app.data.Programme
+import it.lumetv.app.data.ProgrammeWindow
 import it.lumetv.app.data.ChannelLogoRepository
 import it.lumetv.core.Channel
 import it.lumetv.app.ui.TvStyle.dp
@@ -34,6 +35,9 @@ class ChannelAdapter(
     var sourceNames = emptyMap<String, String>()
     var programmes: Map<String, List<Programme>> = emptyMap()
     var guideMode = false
+    var channelCards = false
+    var selectedChannelId: String? = null
+    var onChannelFocus: (Channel, Int) -> Unit = { _, _ -> }
     var currentId: String? = null
     var guidePlaceholder = "Guida assente per questo canale · OK per la diretta"
 
@@ -41,6 +45,7 @@ class ChannelAdapter(
                  val show: TextView, val logo: ChannelLogoView) : RecyclerView.ViewHolder(card)
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+        if (viewType == LIVE_CARD) return createLiveCard(parent)
         val context = parent.context
         val card = LinearLayout(context).apply {
             id = View.generateViewId()
@@ -92,19 +97,103 @@ class ChannelAdapter(
         return Holder(card, number, badge, name, show, logo)
     }
 
-    override fun getItemViewType(position: Int) = if (guideMode) 1 else 0
+    private fun createLiveCard(parent: ViewGroup): Holder {
+        val context = parent.context
+        val config = context.resources.configuration
+        val compact = config.screenWidthDp < 740
+        val cardHeight = when {
+            config.fontScale > 1.15f -> 53
+            compact -> 48
+            else -> 50
+        }
+        val card = LinearLayout(context).apply {
+            id = View.generateViewId()
+            gravity = Gravity.CENTER_VERTICAL
+            isFocusable = true
+            isClickable = true
+            isLongClickable = true
+            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+            TvStyle.buttonSemantics(this)
+            val inset = context.dp(if (compact) 6 else 9)
+            setPadding(inset, 0, inset, 0)
+            layoutParams = RecyclerView.LayoutParams(-1, context.dp(cardHeight)).apply {
+                setMargins(context.dp(4), context.dp(3), context.dp(4), context.dp(3))
+            }
+            background = StateListDrawable().apply {
+                val radius = context.dp(10).toFloat()
+                addState(intArrayOf(android.R.attr.state_pressed),
+                    TvStyle.rounded(0xFF344862.toInt(), radius, TvStyle.accent, context.dp(1)))
+                addState(intArrayOf(android.R.attr.state_focused),
+                    TvStyle.rounded(0xFF22364B.toInt(), radius, TvStyle.accent, context.dp(2)))
+                addState(intArrayOf(android.R.attr.state_selected),
+                    TvStyle.rounded(0xFF1D2B3C.toInt(), radius, 0x806CAADC.toInt(), context.dp(1)))
+                addState(intArrayOf(), TvStyle.rounded(0xFF1A202B.toInt(), radius, 0x22C9DCF5, context.dp(1)))
+            }
+        }
+        val logo = ChannelLogoView(context, logos, compact = true, fallbackIcon = true)
+        val tileSize = context.dp(if (compact) 26 else 33)
+        card.addView(logo, LinearLayout.LayoutParams(tileSize, tileSize).apply {
+            marginEnd = context.dp(if (compact) 6 else 8)
+        })
+        val copy = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        val name = TvStyle.text(context, "", if (compact) 12f else 14f, bold = true).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val number = TvStyle.text(context, "", if (compact) 9f else 10f, TvStyle.muted).apply {
+            maxLines = 1
+            fontFeatureSettings = "tnum"
+            maxWidth = context.dp(if (compact) 23 else 35)
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val badge = TvStyle.text(context, "", 10f, TvStyle.accent, bold = true)
+        copy.addView(LinearLayout(context).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(name, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(badge)
+            addView(number, LinearLayout.LayoutParams(-2, -2).apply { marginStart = context.dp(4) })
+        }, LinearLayout.LayoutParams(-1, -2))
+        val show = TvStyle.text(context, "", if (compact) 11f else 12f, TvStyle.muted).apply {
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        copy.addView(show, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(2) })
+        card.addView(copy, LinearLayout.LayoutParams(0, -2, 1f))
+        val holder = Holder(card, number, badge, name, show, logo)
+        card.setOnFocusChangeListener { view, focused ->
+            show.setTextColor(if (focused) TvStyle.white else TvStyle.muted)
+            TvStyle.focusMotion(view, focused, 1.015f)
+            if (focused) notifyChannelFocus(holder)
+        }
+        return holder
+    }
+
+    private fun notifyChannelFocus(holder: Holder) {
+        val position = holder.bindingAdapterPosition
+        if (position != RecyclerView.NO_POSITION) channelAt(position)?.let { onChannelFocus(it, position) }
+    }
+
+    override fun getItemViewType(position: Int) = when {
+        guideMode -> 1
+        channelCards -> LIVE_CARD
+        else -> 0
+    }
     override fun getItemCount() = items.size+(catalog?.size ?: 0)
     override fun getItemId(position: Int) = if(position<items.size)items[position].id.take(15).toLong(16) else Long.MIN_VALUE+position
     override fun onBindViewHolder(holder: Holder, position: Int) {
         catalog?.ensure(position-items.size)
         val channel = channelAt(position)
+        val liveCard = holder.itemViewType == LIVE_CARD
         if(channel==null) {
             val failed=catalog?.failedAt(position-items.size)==true
             holder.logo.unbind();holder.logo.visibility=View.INVISIBLE
             holder.number.text="";holder.badge.text="";holder.show.text=""
             holder.name.text=if(failed)"Riprova a caricare" else "Caricamento…"
-            holder.name.textSize=21f
-            holder.card.background=TvStyle.focusBackground(holder.card.context)
+            holder.card.isSelected = false
+            if (!liveCard) {
+                holder.name.textSize = 21f
+                holder.card.background = TvStyle.focusBackground(holder.card.context)
+            }
             holder.card.contentDescription="${holder.name.text}, canale ${position+1}"
             holder.card.setOnClickListener {if(failed)holder.bindingAdapterPosition.takeIf {it>=items.size}?.let {catalog?.retry(it-items.size)}}
             holder.card.isClickable=failed
@@ -114,34 +203,48 @@ class ChannelAdapter(
         holder.logo.visibility=View.VISIBLE
         holder.card.isClickable=true
         val context = holder.card.context
-        val sourceLabel = (if (channel.isPersonal) sourceNames[channel.sourceId] ?: "Lista personale" else channel.family).uppercase(Locale.ITALY)
-        holder.number.text = if (channel.displayNumber == null) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)
+        holder.number.text = if (liveCard) channel.displayNumber?.let { "%02d".format(Locale.ITALY, it) }.orEmpty() else {
+            val sourceLabel = (if (channel.isPersonal) sourceNames[channel.sourceId] ?: "Lista personale" else channel.family).uppercase(Locale.ITALY)
+            if (channel.displayNumber == null) sourceLabel else "%02d   /   %s".format(channel.number, sourceLabel)
+        }
+        if (liveCard) {
+            val config = holder.card.resources.configuration
+            val showNumber = holder.number.text.isNotEmpty() && !(config.screenWidthDp < 740 && config.fontScale > 1.15f)
+            holder.number.visibility = if (showNumber) View.VISIBLE else View.GONE
+        }
         holder.badge.text = when {
+            liveCard && channel.id == currentId -> "●"
             favorite(channel) -> "★"
             channel.id == currentId -> "●"
             else -> ""
         }
         holder.name.text = channel.name
         val secondaryColor = if (holder.card.hasFocus()) TvStyle.white else TvStyle.muted
-        holder.number.setTextColor(secondaryColor)
+        holder.number.setTextColor(if (liveCard && channel.id == currentId) TvStyle.accent else secondaryColor)
         holder.show.setTextColor(secondaryColor)
-        holder.name.textSize = when { guideMode -> 23f; channel.name.length > 18 -> 17f; channel.name.length > 12 -> 19f; else -> 21f }
+        if (!liveCard) {
+            holder.name.textSize = when { guideMode -> 23f; channel.name.length > 18 -> 17f; channel.name.length > 12 -> 19f; else -> 21f }
+        }
         holder.logo.bind(channel)
         bindProgramme(holder, channel)
-        val tint = tint(channel)
-        fun panel(focused: Boolean, pressed: Boolean = false) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-            intArrayOf(if (pressed) TvStyle.raised else if (focused) brighten(tint) else tint,
-                if (pressed || focused) TvStyle.raised else TvStyle.surface)).apply {
-            cornerRadius = context.dp(18).toFloat()
-            setStroke(context.dp(1), if (pressed) TvStyle.accent else if (focused) TvStyle.white else 0x12FFFFFF)
-        }
-        holder.card.background = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_pressed), panel(false, pressed = true))
-            addState(intArrayOf(android.R.attr.state_focused), panel(true))
-            addState(intArrayOf(), panel(false))
+        if (!liveCard) {
+            val tint = tint(channel)
+            fun panel(focused: Boolean, pressed: Boolean = false) = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(if (pressed) TvStyle.raised else if (focused) brighten(tint) else tint,
+                    if (pressed || focused) TvStyle.raised else TvStyle.surface)).apply {
+                cornerRadius = context.dp(18).toFloat()
+                setStroke(context.dp(1), if (pressed) TvStyle.accent else if (focused) TvStyle.white else 0x12FFFFFF)
+            }
+            holder.card.background = StateListDrawable().apply {
+                addState(intArrayOf(android.R.attr.state_pressed), panel(false, pressed = true))
+                addState(intArrayOf(android.R.attr.state_focused), panel(true))
+                addState(intArrayOf(), panel(false))
+            }
         }
         holder.card.setOnClickListener { choose(channel) }
         holder.card.setOnLongClickListener { toggleFavorite(channel); true }
+        if (liveCard && holder.card.hasFocus()) onChannelFocus(channel, position)
+        holder.card.isSelected = liveCard && channel.id == selectedChannelId
     }
 
     override fun onViewRecycled(holder: Holder) {
@@ -161,13 +264,18 @@ class ChannelAdapter(
 
     private fun bindProgramme(holder: Holder, channel: Channel) {
         val now = System.currentTimeMillis()
-        val shows = programmes[channel.epgId].orEmpty().filter { it.end > now }
-        val current = shows.firstOrNull { it.start <= now }
-        val next = shows.firstOrNull { it.start > now }
+        val window = ProgrammeWindow.at(programmes[channel.epgId].orEmpty(), now)
+        val current = window.current
+        val next = window.next
         val label = if (guideMode) {
             listOfNotNull(current?.let { "ORA  ${it.title}" }, next?.let { "${time(it.start)}  ${it.title}" })
                 .joinToString("\n").ifBlank { guidePlaceholder }
-        } else current?.title ?: if(channel.isVod)"Video" else if (channel.isRadio) channel.group.ifBlank { "Ascolta la radio" } else "In diretta"
+        } else current?.title ?: when {
+            holder.itemViewType == LIVE_CARD -> "Guida non disponibile"
+            channel.isVod -> "Video"
+            channel.isRadio -> channel.group.ifBlank { "Ascolta la radio" }
+            else -> "In diretta"
+        }
         if (holder.show.text.toString() != label) holder.show.text = label
         holder.card.contentDescription = listOfNotNull(
             channel.displayNumber?.toString(), channel.name, holder.show.text.toString(),
@@ -196,4 +304,6 @@ class ChannelAdapter(
     }
     private fun brighten(color: Int) = Color.rgb((Color.red(color) * 1.35).toInt(), (Color.green(color) * 1.35).toInt(), (Color.blue(color) * 1.35).toInt())
     private fun time(value: Long) = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(value))
+
+    private companion object { const val LIVE_CARD = 2 }
 }

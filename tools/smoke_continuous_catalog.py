@@ -2,6 +2,7 @@
 """Verify continuous native catalogs on disposable phone/TV emulators with local media only."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import functools
 import hashlib
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -12,6 +13,16 @@ import shutil
 import subprocess
 from threading import Thread
 from smoke_playback import Device, ROOT, PACKAGE, fixture
+
+
+def write_guide_fixture(path):
+    now = datetime.now(timezone.utc)
+    start = (now - timedelta(hours=1)).strftime('%Y%m%d%H%M%S %z')
+    end = (now + timedelta(hours=2)).strftime('%Y%m%d%H%M%S %z')
+    channels = [f'<channel id="C{i}"><display-name>Canale {i:04}</display-name></channel>' for i in range(640, 701)]
+    programmes = [f'<programme channel="C{i}" start="{start}" stop="{end}"><title>Programma {i:04}</title></programme>'
+                  for i in range(640, 701)]
+    path.write_text('<tv>' + ''.join(channels + programmes) + '</tv>', encoding='utf-8')
 
 
 def main():
@@ -31,6 +42,7 @@ def main():
         if d.run('shell','getprop','sys.boot_completed').strip()!=b'1':raise ValueError('Boot the emulators first')
     resources=args.output/'fixtures';resources.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(args.video,resources/'video.mp4')
+    write_guide_fixture(resources / 'guide.xml')
     class Handler(SimpleHTTPRequestHandler):
         def log_message(self,*unused):pass
     server=ThreadingHTTPServer(('127.0.0.1',0),functools.partial(Handler,directory=str(resources)))

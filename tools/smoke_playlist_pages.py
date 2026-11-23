@@ -68,6 +68,10 @@ def main():
         for path in d.run("shell", "run-as", PACKAGE, "find", directory, "-type", "f", check=False).decode().splitlines():
             if re.fullmatch(r"files/personal-(?:playlists|guides)/[A-Za-z0-9_.-]+", path): private[path] = d.read(path)
     private["files/personal-watch.sqlite"] = d.read("files/personal-watch.sqlite")
+    for name in ["catalog-guide.sqlite", "epgshare-guide.sqlite"]:
+        for suffix in ["", ".bak", "-journal", "-wal", "-shm"]:
+            path = "files/" + name + suffix
+            private[path] = d.read(path)
     settings = {key:d.run("shell","settings","get","system",key).decode().strip() for key in ["font_scale","user_rotation","accelerometer_rotation"]}
     try:
         d.run("shell", "settings", "put", "system", "font_scale", str(args.font))
@@ -95,6 +99,7 @@ def main():
         d.stop()
         for key,value in settings.items(): d.run("shell","settings","put","system",key,value)
         d.run("shell","run-as",PACKAGE,"rm","-rf","files/personal-playlists","files/personal-guides","files/personal-watch.sqlite")
+        d.run("shell","run-as",PACKAGE,"rm","-f",*["files/"+n+s for n in ["catalog-guide.sqlite", "epgshare-guide.sqlite"] for s in ["", ".bak", "-journal", "-wal", "-shm"]])
         d.run("shell","run-as",PACKAGE,"mkdir","-p","files/personal-playlists","files/personal-guides")
         for path,data in private.items(): d.write(path,data)
         for path,data in backup.items(): d.write(path,data)

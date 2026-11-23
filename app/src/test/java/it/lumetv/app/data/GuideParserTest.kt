@@ -6,6 +6,14 @@ import org.kxml2.io.KXmlParser
 import java.time.Instant
 
 class GuideParserTest {
+    @Test fun `UTF8 BOM is consumed even when the input arrives one byte at a time`() {
+        val xml="\uFEFF<?xml version=\"1.0\" encoding=\"UTF-8\"?><tv><programme channel=\"rai1\" start=\"20261027130000 +0000\" stop=\"20261027140000 +0000\"><title>Con BOM</title></programme></tv>"
+        val input=object:java.io.FilterInputStream(xml.byteInputStream()) {
+            override fun read(b:ByteArray,o:Int,l:Int)=`in`.read(b,o,minOf(l,1))
+        }
+        val shows=XmlTvGuideParser.parse(input,setOf("rai1"),Instant.parse("2026-10-27T13:30:00Z").toEpochMilli(),KXmlParser())
+        assertEquals("Con BOM",shows["rai1"]?.single()?.title)
+    }
     @Test fun `future schedule retains descriptions, prefers Italian and removes duplicate entries`() {
         val entry = """<programme channel="rai1" start="20261027200000 +0000" stop="20261027210000 +0000">
             <title lang="it">Film</title><desc lang="it">Una serata speciale &amp; una storia.</desc><desc lang="en">A story.</desc></programme>"""

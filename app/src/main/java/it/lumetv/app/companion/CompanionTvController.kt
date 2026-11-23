@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import it.lumetv.app.playback.TvPlayer
+import it.lumetv.app.data.resolveWatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,12 +22,18 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 
 /** Listener lifetime is precisely the visible TV activity, including catalog and settings. */
-internal class CompanionTvController(private val activity:ComponentActivity,private val scope:CoroutineScope,player:TvPlayer,zap:(Int)->Unit,navigate:(String)->Unit) {
+internal class CompanionTvController(private val activity:ComponentActivity,private val scope:CoroutineScope,player:TvPlayer,zap:(Int)->Unit,navigate:(String)->Unit,
+    repository:it.lumetv.app.data.ChannelRepository,openWatch:(it.lumetv.core.Channel,Long)->Unit) {
     val store=CompanionStore(activity)
     val name=CompanionProtocol.display("TV · "+Build.MODEL,80)
     private val handler=Handler(Looper.getMainLooper())
     private val manager=activity.getSystemService(NsdManager::class.java)
     private val playback=CompanionPlayback(player,zap,navigate)
+    private val playlists=CompanionPlaylistReceiver(activity,scope)
+    private val watch=CompanionWatchReceiver(scope,{reference->repository.resolveWatch(reference)},
+        {action->onMain(action)}, {player.snapshot}, {owner->
+            CompanionProtocol.authorizeControl(active && store.enabled,store.peers().any {CompanionProtocol.same(it.tokenHash,owner)})
+        },openWatch)
     private var identity:CompanionIdentity?=null
     @Volatile private var pairing:CompanionPairing?=null
     @Volatile private var server:CompanionHttp?=null
@@ -62,7 +69,7 @@ internal class CompanionTvController(private val activity:ComponentActivity,priv
     fun decide(ticket:String,allow:Boolean){
         try {pairing?.decide(ticket,allow)}catch(_:CompanionFailure){pairing?.decide(ticket,false);message="Rimuovi un telefono autorizzato prima di aggiungerne un altro.";changed()}
     }
-    fun revoke(id:String){store.revoke(id);changed()}
+    fun revoke(id:String){val peer=store.peers().firstOrNull {it.id==id};store.revoke(id);peer?.let {playlists.revoke(it.tokenHash);watch.revoke(it.tokenHash)};changed()}
     private suspend fun reconcile() {
         if(!active || !store.enabled){if(server!=null)stop();return}
         val address=runCatching {CompanionNetwork.address(activity)}.getOrNull()
@@ -99,6 +106,8 @@ internal class CompanionTvController(private val activity:ComponentActivity,priv
     }
     private fun stop() {
         listenerGeneration++
+        playlists.reset()
+        watch.reset()
         server?.close();server=null;endpoint=null
         advertisement?.let {runCatching {manager.unregisterService(it)}};advertisement=null
         multicast?.let {runCatching {it.release()}};multicast=null
@@ -119,15 +128,28 @@ internal class CompanionTvController(private val activity:ComponentActivity,priv
                     if(request.path=="/v1/state")playback.state() else playback.command(CompanionProtocol.digest(request.token.toByteArray()),request.body)
                 }
             }
-            else -> throw CompanionFailure(404,"not_found")
+            else -> if(request.method=="POST" && request.path in PLAYLIST_PATHS) {
+                CompanionProtocol.authorizeControl(active && store.enabled && serving==listenerGeneration,store.authorized(request.token))
+                playlists.request(CompanionProtocol.digest(request.token.toByteArray()),request.path.substringAfterLast('/'),request.body) {
+                    CompanionProtocol.authorizeControl(active && store.enabled && serving==listenerGeneration,store.authorized(request.token))
+                }
+            } else if(request.method=="POST" && request.path in WATCH_PATHS) {
+                CompanionProtocol.authorizeControl(active && store.enabled && serving==listenerGeneration,store.authorized(request.token))
+                watch.request(CompanionProtocol.digest(request.token.toByteArray()),request.path.substringAfterLast('/'),request.body)
+            } else throw CompanionFailure(404,"not_found")
         }
         return CompanionResponse(body=data)
     }
     private fun <T> onMain(action:()->T):T {
+        if(Looper.myLooper()==Looper.getMainLooper())return action()
         val task=FutureTask(action);handler.post(task)
         try {return task.get(2,TimeUnit.SECONDS)}
         catch(e:java.util.concurrent.ExecutionException){throw e.cause ?: e}
         catch(_:java.util.concurrent.TimeoutException){throw CompanionFailure(503,"tv_busy")}
         finally {handler.removeCallbacks(task);task.cancel(false)}
+    }
+    private companion object {
+        val PLAYLIST_PATHS=setOf("start","chunk","prepare","status","import","cancel").map {"/v1/playlists/$it"}.toSet()
+        val WATCH_PATHS=setOf("resolve","start","status","cancel").map {"/v1/watch/$it"}.toSet()
     }
 }

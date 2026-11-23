@@ -69,12 +69,18 @@ class TvPlayer(context: Context, @Suppress("UNUSED_PARAMETER") http: HttpClient)
     }
     fun returnToLive(){service?.returnToLive()}
     fun resumePlayback(){service?.resume()}
+    fun selectAt(channel:Channel,mobile:Boolean,position:Long) {
+        val action={service?.selectAt(channel,mobile,position);Unit}
+        if(service==null)pending=action else action()
+    }
     fun selectArchive(channel:Channel,eventId:String,mobile:Boolean) {
         val action={service?.selectArchive(channel,eventId,mobile);Unit}
         if(service==null)pending=action else action()
     }
     fun seek(position:Long){service?.seek(position)}
     fun seekBy(delta:Long){service?.seekBy(delta)}
+    fun setPreviewActive(value:Boolean){service?.setPreviewActive(value)}
+    fun requestPreview(position:Long,answer:(android.graphics.Bitmap?)->Unit){service?.requestPreview(position,answer) ?: answer(null)}
     fun restart(){service?.restart()}
     fun reopenVideo(){service?.reopenVideo()}
     fun playFollowingEpisode(currentId:String,nextId:String){service?.playFollowingEpisode(currentId,nextId)}

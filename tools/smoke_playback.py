@@ -19,7 +19,7 @@ PACKAGE = "it.lumetv.app"
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ["files/channels.m3u", "files/radios.json", "files/guide.json",
          "shared_prefs/lume.xml", "shared_prefs/guide.xml", "shared_prefs/interface.xml",
-         "shared_prefs/app_updates.xml", "shared_prefs/discovery.xml"]
+         "shared_prefs/app_updates.xml", "shared_prefs/discovery.xml", "shared_prefs/epgshare_guide.xml"]
 
 
 class Device:
@@ -140,7 +140,8 @@ def fixture(device, port):
     device.write("files/channels.m3u", ("\n".join(playlist) + "\n").encode())
     device.write("files/radios.json", json.dumps(radio).encode())
     device.write("files/guide.json", json.dumps(guide).encode())
-    device.write("shared_prefs/guide.xml", f'<map><long name="updated" value="{now}"/><int name="policy_version" value="1"/><int name="logo_metadata_version" value="1"/></map>'.encode())
+    device.write("shared_prefs/guide.xml", f'<map><long name="updated" value="{now}"/><int name="policy_version" value="1"/><int name="logo_metadata_version" value="1"/><int name="catalog_metadata_version" value="2"/></map>'.encode())
+    device.write("shared_prefs/epgshare_guide.xml", f'<map><long name="retry" value="{now + 3600000}"/></map>'.encode())
     device.write("shared_prefs/lume.xml", f'<map><long name="catalog_updated" value="{now}"/><long name="radios_updated" value="{now}"/></map>'.encode())
     device.write("shared_prefs/app_updates.xml", b'<map><boolean name="automatic" value="false"/></map>')
     device.write("shared_prefs/interface.xml", b'<map/>')
@@ -243,8 +244,49 @@ def phone_checks(d, radio_id, tv_id, requests):
     d.capture("06-radio-font-scale.png")
 
 
+def is_tv_channel_catalog(nodes):
+    return any(node.get("resource-id") == PACKAGE + ":id/tv_channel_catalog_heading"
+               and node.get("text") == "Canali" for node in nodes)
+
+
 def tv_checks(d, radio_id, tv_id):
     d.launch("catalog")
+    def focused_channel(number):
+        return any(n.get("focused") == "true" and n.get("content-desc", "").startswith(
+            f"{number}, TV Test {number},") for n in d.nodes())
+
+    def featured_channel(number):
+        return any(n.get("content-desc") == f"Guarda TV Test {number}" for n in d.nodes())
+
+    def preview_channel(number):
+        return any(n.get("content-desc") == f"Apri TV Test {number} a schermo intero. In visione" for n in d.nodes())
+
+    d.wait("catalog focuses the first channel and shows its programme", lambda: focused_channel(1) and featured_channel(1))
+    d.key(23)
+    d.wait("one OK on a channel opens the full player", lambda: d.playing("TV Test 1") and not is_tv_channel_catalog(d.nodes()))
+    d.key(4)
+    d.wait("Back restores the channel grid and active preview", lambda: focused_channel(1) and preview_channel(1))
+    d.key(22)
+    d.wait("D-pad updates programme details without retuning", lambda: focused_channel(2) and featured_channel(2)
+           and d.playing("TV Test 1") and preview_channel(1))
+    d.capture("00-channel-catalog-preview.png")
+    d.key(22)
+    d.wait("Right moves through the grid before reaching the side panel", lambda: focused_channel(3))
+    d.key(22)
+    d.wait("Right from the last column reaches the selected channel action", lambda: any(
+        n.get("focused") == "true" and n.get("content-desc") == "Guarda TV Test 3" for n in d.nodes()))
+    d.key(21)
+    d.wait("Left from the side panel restores the same tile", lambda: focused_channel(3) and d.playing("TV Test 1"))
+    d.key(21)
+    d.wait("the second channel is focused for direct playback", lambda: focused_channel(2))
+    d.click("Apri TV Test 1 a schermo intero. In visione", description=True)
+    d.wait("expanding the preview opens the active live channel", lambda: d.playing("TV Test 1") and not is_tv_channel_catalog(d.nodes()))
+    d.key(4)
+    d.wait("Back from the preview restores the selected tile", lambda: focused_channel(2) and preview_channel(1))
+    d.key(23)
+    d.wait("OK on the newly focused channel opens it immediately", lambda: d.playing("TV Test 2") and not is_tv_channel_catalog(d.nodes()))
+    d.key(4)
+    d.wait("Back keeps focus on the second channel", lambda: focused_channel(2) and preview_channel(2))
     for _ in range(6):
         focused = next((n for n in d.nodes() if n.get("focused") == "true"), None)
         if focused is not None and focused.get("text") == "Canali": break
@@ -257,7 +299,8 @@ def tv_checks(d, radio_id, tv_id):
     d.wait("radio tab reached with D-pad", lambda: "Radio, in diretta." in d.texts())
     d.capture("01-radio-catalog.png")
     d.launch("channel/" + radio_id)
-    d.wait("TV radio playback", lambda: d.playing("Radio Test Uno"))
+    d.wait("TV radio playback focuses Pause", lambda: d.playing("Radio Test Uno") and any(
+        n.get("focused") == "true" and n.get("content-desc") == "Pausa" for n in d.nodes()))
     d.key(23)
     d.wait("radio pause with focused remote button", lambda: d.playing(paused=True))
     d.key(23)

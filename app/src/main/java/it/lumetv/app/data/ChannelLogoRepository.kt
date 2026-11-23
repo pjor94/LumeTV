@@ -36,6 +36,8 @@ data class LogoArtwork(val bitmap: Bitmap, val lightSurface: Boolean)
 class ChannelLogoRepository internal constructor(context: Context, private val http: HttpClient, private val scope: CoroutineScope,
     private val artworkAddressAllowed:(java.net.InetAddress)->Boolean=LogoPolicy::publicAddress) {
     private val personal=PersonalPlaylistRepository.get(context)
+    private val public=PublicGuideFallback(context.applicationContext.filesDir)
+    private val channels=ChannelRepository(context,http)
     private val directory = File(context.applicationContext.filesDir, "channel-artwork")
     private val index = AtomicFile(File(directory, "index.json"))
     private val indexLock = Any()
@@ -50,7 +52,11 @@ class ChannelLogoRepository internal constructor(context: Context, private val h
     private val inFlight = mutableMapOf<String, Deferred<Cached?>>()
     private val retryAfter = ConcurrentHashMap<String, Long>()
     private val downloads = Semaphore(3)
-    private val fetcher = LogoFetcher(http.client)
+    private val fetcher = LogoFetcher(http.client,addressAllowed=artworkAddressAllowed)
+    init {
+        scope.launch {public.lume.revisions.collect {version.update {it+1}}}
+        scope.launch {public.supplement.revisions.collect {version.update {it+1}}}
+    }
     init {scope.launch {
         personal.local()
         var observed=personal.state.value.associate {it.id to personal.requestContext(it.id)?.token}
@@ -98,38 +104,51 @@ class ChannelLogoRepository internal constructor(context: Context, private val h
 
     /** Callback always runs on the activity's main scope; recycled views cancel only their subscription. */
     fun request(channel: Channel, display: (LogoArtwork?) -> Unit): Job = scope.launch {
+        var fallback:PersonalEntrySnapshot?=null
         if(channel.isPersonal) {
             val artwork=personal.artwork(channel)
-            if(artwork==null) {display(null);return@launch}
-            val key="personal:${channel.sourceId}:"+artwork.cacheKey
-            val context=artwork.context
-            if(!context.valid()) {display(null);return@launch}
-            val cached=withContext(Dispatchers.IO) {cached(key)}
-            if(cached!=null && context.valid()) {
-                display(cached.artwork)
-                if(LogoPolicy.fresh(cached.checked,System.currentTimeMillis()))return@launch
-            }
-            if((retryAfter[key] ?: 0)>System.currentTimeMillis()) {if(cached==null)display(null);return@launch}
-            val task=requests.withLock {
-                inFlight[key] ?: scope.async(Dispatchers.IO) {
-                    val client=context.client(http.client,artwork.url,PlaylistResource.LOGO,artwork.headers.keys)
-                    val personalFetcher=LogoFetcher(client,allowed={context.allowed(java.net.URI(it.toString()),PlaylistResource.LOGO)},
-                        redirectAllowed={_,to->context.allowed(java.net.URI(to.toString()),PlaylistResource.LOGO)},addressAllowed=artworkAddressAllowed)
-                    download(artwork.url,cached,key,personalFetcher,artwork.headers,context::valid,context)
-                }.also {deferred ->
-                    inFlight[key]=deferred
-                    deferred.invokeOnCompletion {scope.launch {requests.withLock {if(inFlight[key]===deferred)inFlight.remove(key)}}}
+            if(artwork==null) {
+                fallback=personal.fallbackArtwork(channel)
+                if(fallback==null) {display(null);return@launch}
+            } else {
+                val key="personal:${channel.sourceId}:"+artwork.cacheKey
+                val context=artwork.context
+                if(!context.valid()) {display(null);return@launch}
+                val cached=withContext(Dispatchers.IO) {cached(key)}
+                if(cached!=null && context.valid()) {
+                    display(cached.artwork)
+                    if(LogoPolicy.fresh(cached.checked,System.currentTimeMillis()))return@launch
                 }
+                if((retryAfter[key] ?: 0)>System.currentTimeMillis()) {if(cached==null)display(null);return@launch}
+                val task=requests.withLock {
+                    inFlight[key] ?: scope.async(Dispatchers.IO) {
+                        val client=context.client(http.client,artwork.url,PlaylistResource.LOGO,artwork.headers.keys)
+                        val personalFetcher=LogoFetcher(client,allowed={context.allowed(java.net.URI(it.toString()),PlaylistResource.LOGO)},
+                            redirectAllowed={_,to->context.allowed(java.net.URI(to.toString()),PlaylistResource.LOGO)},addressAllowed=artworkAddressAllowed)
+                        download(artwork.url,cached,key,personalFetcher,artwork.headers,context::valid,context)
+                    }.also {deferred ->
+                        inFlight[key]=deferred
+                        deferred.invokeOnCompletion {scope.launch {requests.withLock {if(inFlight[key]===deferred)inFlight.remove(key)}}}
+                    }
+                }
+                val result=task.await()
+                display(result?.artwork?.takeIf {context.valid()})
+                return@launch
             }
-            val result=task.await()
-            display(result?.artwork?.takeIf {context.valid()})
-            return@launch
         }
-        val urls = LogoPolicy.candidates(channel, sources)
+        val guard=fallback?.context
+        fun valid()=guard?.valid()!=false
+        val urls = if(fallback!=null) {
+            val entry=fallback.entry
+            val builtins=try {channels.backupBuiltins()}catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}catch(_:Exception){emptyList()}
+            val builtin=CatalogGuideMatch.builtin(entry,builtins.filter {it.kind==channel.kind && !it.isVod})
+            withContext(Dispatchers.IO) {public.logos(entry,builtin?.let {LogoPolicy.candidates(it,sources)} ?: emptyList(),System.currentTimeMillis())}
+        } else LogoPolicy.candidates(channel, sources)
         for (url in urls) {
+            if(!valid()){display(null);return@launch}
             val cached = withContext(Dispatchers.IO) { cached(url) }
             if (cached != null) {
-                display(cached.artwork)
+                display(cached.artwork.takeIf {valid()})
                 if (LogoPolicy.fresh(cached.checked, System.currentTimeMillis())) return@launch
             }
             if ((retryAfter[url] ?: 0) > System.currentTimeMillis()) {
@@ -145,7 +164,7 @@ class ChannelLogoRepository internal constructor(context: Context, private val h
                 }
             }
             val result = task.await()
-            if (result != null) { display(result.artwork); return@launch }
+            if (result != null) { display(result.artwork.takeIf {valid()}); return@launch }
         }
         display(null)
     }

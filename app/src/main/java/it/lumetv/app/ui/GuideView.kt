@@ -361,6 +361,7 @@ class GuideView(
         panel.addView(TvStyle.text(context, show.title, 27f, bold = true), LayoutParams(-1, -2).apply { topMargin = context.dp(10) })
         panel.addView(TvStyle.text(context, programmeTime(show) + "  ·  " + ((show.end - show.start) / GuideSchedule.MINUTE) + " min", 14f, TvStyle.muted),
             LayoutParams(-1, -2).apply { topMargin = context.dp(10) })
+        if(show.guideOrigin=="epgshare")panel.addView(TvStyle.text(context,"Guida: EPGShare IT1",14f,TvStyle.muted),LayoutParams(-1,-2).apply {topMargin=context.dp(8)})
         if (show.description.isNotBlank()) {
             val description = TvStyle.text(context, show.description, 16f).apply { setLineSpacing(context.dp(3).toFloat(), 1f) }
             val scroll = object : ScrollView(context) {

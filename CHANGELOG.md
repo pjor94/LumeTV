@@ -1,5 +1,81 @@
 # Changelog
 
+## 0.12.0 · Libreria Video, trailer e Guarda sulla TV — 2026-11-23
+
+### Libreria Video
+
+- Raccolte e schede di film e serie riorganizzate. Su Android TV, l’anteprima della home segue il titolo selezionato e **Dettagli** apre la sua scheda.
+- **Nuovi arrivi** compare quando almeno un film del gruppo dedicato è disponibile nelle liste selezionate. **Tutte le categorie** apre il selettore delle categorie della libreria.
+- **Stagioni ed episodi** apre una stagione alla volta, con una barra di selezione visibile su TV e smartphone. Viene scelta la stagione dell'episodio da riprendere, oppure la prima disponibile; **Altri episodi** raccoglie le voci senza stagione e **Tutte le stagioni** resta accessibile. La selezione si conserva tornando dal dettaglio e ricreando l'attività.
+
+### Trailer VOD nel player Lume TV — 2026-11-22
+
+- Trailer nelle nuove schede di film e serie su smartphone e TV: prima italiano, poi inglese, preferendo i video ufficiali nella stessa lingua. Lingua indicata sul pulsante e nel player; pulsante assente senza candidati supportati.
+- Riproduzione interna Media3 con i controlli VOD attuali, pausa della riproduzione precedente e sessione separata da cronologia, ripresa e stato visto. Indietro e fine trailer riportano alla scheda, conservando il focus TV.
+- Risoluzione YouTube tramite NewPipe Extractor, avviata soltanto su richiesta. Altri candidati e inglese vengono provati quando un video non è disponibile; errori e ripetizione restano dentro l’app. Collegamenti temporanei esclusi da cache persistenti, backup e log.
+- Riferimenti trailer scaricati insieme ai dettagli TMDB. Aggiornamento delle vecchie schede senza cancellare le associazioni manuali.
+
+### Player VOD e precaricamento — 2026-11-21
+
+- Cache video limitata alla sessione: cancellazione al cambio di contenuto, fine video, stop definitivo e chiusura dell’app. La pulizia aspetta la chiusura dei lettori e dei download; ogni nuova sessione ha uno spazio distinto. Recupero dei residui al successivo avvio dopo una chiusura forzata. Pausa, ricerca e riconnessione dello stesso video mantengono i dati già caricati.
+
+- Controlli TV con sfumatura sul video, titolo leggibile e timeline che distingue avanzamento, buffer e parte ancora da caricare. Scomparsa dopo cinque secondi senza interazioni; corretta anche la riattivazione continua del timer sul telefono.
+- Comandi a icone per riproduzione, salti di 10/30 secondi, audio, capitoli e prossimo episodio. Nome del comando sul focus TV ed etichette accessibili sul telefono; azioni principali visibili anche in verticale con testo ingrandito.
+- Sottotitoli tenuti sopra i controlli e le anteprime, conservando la dimensione del testo. La ricerca delle scene sul telefono lascia spazio ai sottotitoli e mantiene visibili tempo, miniatura e azioni.
+- Ricerca con cursore separato: frecce per esplorare, OK per confermare e Indietro per annullare. Sul telefono il rilascio del trascinamento conferma. Il primo Indietro chiude i controlli prima di tornare al catalogo; Dall’inizio è nel menu Altro.
+- Buffer VOD distinto dalla diretta, soglie di avvio/ripartenza di tre/sei secondi e riserva fino a due minuti entro il budget della memoria. Cache dei media con quota automatica fino a 512 MiB; precaricamento aggiuntivo sospeso durante ricerca, pausa e carenza di buffer.
+- Anteprime WebVTT, anche con sprite, e fotogrammi estratti dai video compatibili tramite Media3. Cache delle miniature limitata e decoder separato, chiuso quando termina la ricerca. Ricerca per tempo sempre disponibile in assenza di immagini.
+- Capitoli WebVTT quando indicati dalla lista. Le richieste delle immagini e dei capitoli rispettano gli accessi e il consenso HTTP dei loghi; manifest, chiavi e licenze mantengono i propri percorsi di rete.
+
+Collaudo: 578 test JVM superati e 5 controlli facoltativi esclusi; 48 controlli VOD, 66 su audio/sottotitoli/timer, 151 sul catalogo e 107 sulla continuità tra emulatori smartphone e TV con testo al 130%. Verificati fotogrammi reali, spazio dei sottotitoli, ricerca senza salti intermedi, tasti multimediali, rotazione e interruzione di rete di sette secondi senza rebuffer nel video di prova. Verificati anche stato visto/non visto, ripresa, fine video, prossimo episodio e conservazione del timer. Revisione nativa completata; build Debug, Release e AndroidTest riuscite, Android Lint senza errori. La resa e la velocità delle sorgenti sui dispositivi fisici restano da verificare.
+
+### EPGShare IT1 dopo la guida Lume
+
+- Portata da desktop la sorgente supplementare EPGShare IT1 per le liste personali senza guida propria: copre soltanto i canali privi di un palinsesto Lume nell’intervallo conservato. La ricerca o un giorno senza risultati non cambiano sorgente.
+- Loghi supplementari solo quando mancano riferimenti personali e Lume. Associazioni specifiche verificate per Eurosport, DAZN Eurosport, Solo Calcio e Sky Uno Plus; conflitti di identità, regioni e differite incompatibili restano esclusi.
+- Cache gzip condivisa ma separata, richieste condizionali ogni quattro ore e rinnovo completo dopo dodici ore. Pause HTTP 429, errori e annullamenti conservano la copia valida; nessun accesso alle sessioni personali.
+- Origine EPGShare IT1 indicata nei dettagli dei programmi e nei crediti. Riproduzione originale, esclusioni, guide configurate e funzioni dell’archivio mantengono le proprie regole.
+
+Collaudo: 10 test EPGShare e regressione UTF-8 con BOM; suite completa con 556 test superati e 4 controlli facoltativi esclusi. Verificato il feed pubblico scaricato il 18 novembre 2026: 195 canali, importazione nell’indice Android e associazione di Sky Uno e Sky Cinema Uno. Superati 119 controlli nativi su emulatori smartphone e TV con testo al 130%, comprese priorità, logo supplementare, esclusione manuale e attribuzione nei dettagli. Build Debug, Release e AndroidTest completate; Android Lint senza errori. La copertura del feed varia nel tempo e non implica un’associazione per ogni canale delle liste personali.
+
+### Guida e loghi Lume per le liste personali
+
+- Guida automatica per le dirette personali senza indirizzi XMLTV propri, usando l’intera sorgente EPG del Catalogo Lume, anche per canali assenti dal catalogo integrato. Indice condiviso su disco e finestre lette su richiesta.
+- Associazione tramite ID o nome univoco, con regioni e differite distinte. Guide configurate, disattivazione ed esclusioni manuali restano prioritarie.
+- Loghi del catalogo o dell’EPG completa soltanto quando mancano sia il logo della lista sia l’icona della sua guida. Accessi pubblici separati da header e cookie personali; immagini VOD invariate.
+- Ricerca programmi e aggiornamento manuale disponibili anche senza configurare una guida personale. Download incompleti e annullamenti conservano la copia valida precedente.
+
+Collaudo: 7 test dedicati, suite JVM completa con 545 test superati e 4 controlli live facoltativi esclusi, 109 controlli nativi tra emulatori smartphone e TV con testo al 130%. Verificati 720 canali oltre le anteprime, priorità delle guide e dei loghi personali, nomi ambigui, esclusioni, revoca delle liste, recupero dopo XML incompleto e isolamento degli accessi. Build Debug, Release e AndroidTest completate; Android Lint senza errori. Il controllo della sorgente pubblica ha ricevuto HTTP 429: il numero attuale di canali non è stato confermato né il download ritentato.
+
+### Guarda sulla TV
+
+- Pulsante nel player smartphone, nelle schede di film e serie e nei dettagli dei programmi. Si sceglie la TV abbinata, si verifica la disponibilità del contenuto e si conferma **Guarda sulla TV**.
+- Supporto ai canali integrati e ai contenuti delle liste già presenti su entrambi i dispositivi, anche dopo **Invia lista alla TV**: la corrispondenza usa la sorgente e i dati di riproduzione, conservando gli identificativi locali distinti. Risultati mancanti o ambigui richiedono una nuova verifica.
+- I video partono dal punto del telefono, anche quando sulla TV è salvato un avanzamento diverso. Il telefono attende che la TV stia riproducendo il contenuto richiesto prima di interrompere il proprio player e aprire il telecomando.
+- Richieste legate al telefono autorizzato, conferme idempotenti e controllo delle modifiche alla riproduzione TV durante l’attesa. **Verifica avvio** recupera un esito dopo un’interruzione della rete; errori e contenuti mancanti mantengono attiva la visione locale.
+
+Collaudo del passaggio: 9 test JVM dedicati e 220 controlli nativi tra emulatori smartphone e Android TV, con testo al 130%. Verificati diretta, ripresa dal telefono a 42 secondi con avanzamento TV a 90 secondi, lista mancante, finestre TV aperte e richieste precedenti ancora in attesa. Compilazioni Debug, Release e AndroidTest completate; Android Lint senza errori.
+
+### Invia lista alla TV
+
+- Dal telecomando smartphone, **Invia lista alla TV** trasferisce una lista già salvata da URL o file alla TV abbinata. Include tutte le voci attive, i metadati, l’indirizzo per gli aggiornamenti e le impostazioni di accesso e della guida.
+- L’anteprima viene preparata sulla TV e mostrata sul telefono; **Importa sulla TV** è la conferma esplicita. Il nome è modificabile, le liste già presenti non vengono sostituite e la riproduzione sulla TV prosegue.
+- Trasferimento compresso a blocchi sul collegamento TLS esistente, con verifica SHA-256, isolamento tra telefoni, ripresa degli invii interrotti e conferme idempotenti. Annullamento, scadenza e revoca eliminano i dati temporanei; ogni copia riceve nuovi identificativi locali.
+- Preferiti, avanzamenti, abbinamenti dei dispositivi e dati delle altre liste non fanno parte dell’invio. Le vecchie versioni sulla TV indicano la necessità di un aggiornamento.
+
+Collaudo dell’invio: 7 test JVM dedicati e 187 controlli nativi tra emulatori smartphone e Android TV, con testo al 130% e una lista da 650 voci. Verificati anteprima, annullamento, conflitto del nome, importazione esplicita, conservazione degli accessi, riproduzione TV ininterrotta e recupero dopo il cambio di indirizzo della TV. Un test dedicato forza l’errore di scrittura dell’indice dopo lo spostamento della copia temporanea e verifica il successivo invio senza duplicazioni.
+
+### Informazioni VOD da TMDB
+
+- Schede di film e serie completate con trama in italiano, cast, regia o ideazione, generi e immagini. Il token è configurato nella build del progetto; gli utenti non devono inserire chiavi.
+- Ricerca all’apertura della scheda, associazioni prudenti e correzione manuale per gli omonimi. Cache persistente separata dalle playlist, riuso offline e scelte manuali incluse nei backup.
+- **Opzioni → Informazioni sui video** gestisce attivazione e cache; crediti TMDB disponibili anche in **Licenze e avvisi**. Build senza token e indisponibilità del servizio mantengono utilizzabili i dati locali.
+
+### Diretta su Android TV
+
+- Pannello laterale con logo, numero e programma in onda. Il telecomando evidenzia il canale selezionato e l’etichetta **In visione** indica quello già aperto.
+- **OK** o **INFO** apre il riepilogo del programma in onda e di quello successivo. **Dettagli** mostra la descrizione scorrevole durante la riproduzione. La freccia destra apre le opzioni di riproduzione.
+
 ## 0.11.0 · Telecomando TV, backup e continuità di visione — 2026-11-15
 
 ### Collega TV e smartphone

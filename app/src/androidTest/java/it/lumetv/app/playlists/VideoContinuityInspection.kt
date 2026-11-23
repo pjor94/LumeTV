@@ -67,15 +67,33 @@ object VideoContinuityInspection {
         fun all(view:View):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap {all(view.getChildAt(it))} else emptyList()
         fun visible()=all(content).filter {it.isShown}
         fun click(label:String){await("action: $label") {visible().lastOrNull {it.isClickable && it.isEnabled && (it is TextView && it.text.toString()==label || it.contentDescription?.toString()==label || it.contentDescription?.toString()?.startsWith("$label:")==true)}?.let {if(!mobile)it.requestFocus();it.performClick()}==true}}
-        fun clickTag(tag:String){await("action: $tag"){content.findViewWithTag<View>(tag)?.takeIf {it.isShown && it.isEnabled}?.let {if(!mobile)it.requestFocus();it.performClick()}==true}}
-        fun back()=main {activity.onBackPressedDispatcher.onBackPressed()}
+        fun clickTag(tag:String){await("action: $tag"){
+            val action=content.findViewWithTag<View>(tag)
+            if(!mobile && action!=null && !action.isShown)
+                content.findViewWithTag<View>("video_more_actions")?.takeIf {it.isShown && it.isEnabled}?.performClick()
+            action?.takeIf {it.isShown && it.isEnabled}?.let {if(!mobile)it.requestFocus();it.performClick()}==true
+        }}
+        fun back()=main {
+            val playingPage=field("showingCatalog")==false
+            activity.onBackPressedDispatcher.onBackPressed()
+            // This flow returns to details; the transport has its own first-Back dismissal.
+            if(playingPage && field("showingCatalog")==false)activity.onBackPressedDispatcher.onBackPressed()
+        }
         fun watch(item:VideoItem)=io {history.read(source,target(item))}
         fun launch(item:VideoItem){main {context.startActivity(Intent(context,if(mobile)MobileActivity::class.java else TvActivity::class.java)
             .setAction(Intent.ACTION_VIEW).setData(Uri.parse("lumetv://channel/${item.id}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))}}
         await("Video is available"){content.findViewWithTag<View>("Video")?.isShown==true}
         main {content.findViewWithTag<View>("Video")!!.performClick()}
         await("video library opens inside the app shell"){content.findViewWithTag<View>(VideoCatalogPanel.TAG)?.isShown==true}
-        await("the Continue movie can be opened"){visible().lastOrNull {it.isClickable && it.contentDescription?.toString()?.startsWith("Film di prova,")==true}?.let {if(!mobile)it.requestFocus();it.performClick()}==true}
+        if(!mobile)await("the movie in Continue receives focus"){
+            visible().firstOrNull {it.isClickable && it.contentDescription?.toString()?.startsWith("Film di prova,")==true}
+                ?.requestFocus()==true
+        }
+        await("the Continue movie details can be opened"){visible().lastOrNull {
+            val name=it.contentDescription?.toString().orEmpty()
+            it.isClickable && if(mobile)name.startsWith("Film di prova,") else name=="Dettagli di Film di prova"
+        }?.let {if(!mobile)it.requestFocus();it.performClick()}==true}
+        if(!mobile)clickTag("video_more_actions")
         await("movie details offer resume and manual watched state"){content.findViewWithTag<View>("video_watched")?.isShown==true && (content.findViewWithTag<TextView>("video_play")?.text?.toString()=="Riprendi")}
         capture("01-watched")
         clickTag("video_watched")
@@ -150,7 +168,7 @@ object VideoContinuityInspection {
         verify("the sleep timer continues across episode changes"){player.snapshot.options.sleepRemaining in 1..remaining}
         await("following episode order is numeric and source isolated"){player.snapshot.nextEpisode?.id==tenth.id}
         if(!mobile) {
-            main {player.seek(40_000);visible().filterIsInstance<TextView>().last {it.isClickable && it.text.toString()=="−10 s"}.requestFocus()}
+            main {player.seek(40_000);visible().last {it.isClickable && it.contentDescription=="Indietro di 10 secondi"}.requestFocus()}
             runner.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_CENTER)
             await("TV OK activates the focused seek button without restarting the episode"){player.snapshot.position in 28_000..33_000 && player.snapshot.channel?.id==second.id && player.snapshot.wantsToPlay}
         }

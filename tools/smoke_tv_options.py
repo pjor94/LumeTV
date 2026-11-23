@@ -9,7 +9,7 @@ import re
 from threading import Thread
 import time
 
-from smoke_playback import Device, FILES, PACKAGE, ROOT, fixture
+from smoke_playback import Device, FILES, PACKAGE, ROOT, fixture, is_tv_channel_catalog
 
 
 def main():
@@ -73,7 +73,7 @@ def main():
         d.run("shell", "run-as", PACKAGE, "mkdir", "-p", "files", "shared_prefs")
         radio, tv = fixture(d, server.server_port)
         d.launch("catalog")
-        d.wait("TV catalog ready", lambda: "La TV, fatta semplice." in d.texts())
+        d.wait("TV catalog ready", lambda: is_tv_channel_catalog(d.nodes()))
         d.key(19)
         for _ in range(6):
             if focus() in ["Canali", "Radio", "Cosa guardare", "Guida TV", "Opzioni", "Esci"]: break

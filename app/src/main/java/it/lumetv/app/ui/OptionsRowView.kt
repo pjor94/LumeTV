@@ -18,6 +18,7 @@ internal class OptionsRowView(context:Context,private val mobile:Boolean,label:S
     val summaryView=TvStyle.text(context,summary,14f,TvStyle.muted)
     val label:String get()=titleView.text.toString()
     var onFocused:(()->Unit)?=null
+    private var liveAppearance = false
     init {
         id=generateViewId();gravity=Gravity.CENTER_VERTICAL
         minimumHeight=context.dp(if(mobile)72 else 64)
@@ -42,7 +43,9 @@ internal class OptionsRowView(context:Context,private val mobile:Boolean,label:S
         },LayoutParams(context.dp(24),context.dp(24)).apply {leftMargin=context.dp(16)})
         setOnClickListener {action()}
         setOnFocusChangeListener {view,focused->
-            if(!mobile){
+            if(liveAppearance) {
+                TvStyle.focusMotion(view, focused, 1.012f)
+            } else if(!mobile){
                 titleView.setTextColor(if(focused)TvStyle.background else TvStyle.white)
                 summaryView.setTextColor(if(focused)TvStyle.raised else TvStyle.muted)
                 TvStyle.focusMotion(view,focused,1.015f)
@@ -51,6 +54,23 @@ internal class OptionsRowView(context:Context,private val mobile:Boolean,label:S
         }
         bind(label,summary)
     }
+
+    fun useLiveAppearance(hasSubmenu: Boolean) {
+        liveAppearance = true
+        minimumHeight = context.dp(47)
+        setPadding(context.dp(12), context.dp(7), context.dp(12), context.dp(7))
+        background = LiveOverlayStyle.focusBackground(context)
+        titleView.textSize = 16f
+        titleView.setTextColor(TvStyle.white)
+        summaryView.textSize = 13f
+        summaryView.setTextColor(LiveOverlayStyle.secondary)
+        if (hasSubmenu) addView(ImageView(context).apply {
+            setImageResource(R.drawable.ic_mobile_chevron)
+            imageTintList = ColorStateList.valueOf(LiveOverlayStyle.secondary)
+            importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LayoutParams(context.dp(16), context.dp(16)).apply { marginStart = context.dp(10) })
+    }
+
     fun bind(label:String,summary:String="") {
         titleView.text=label;summaryView.text=summary
         summaryView.visibility=if(summary.isBlank())GONE else VISIBLE

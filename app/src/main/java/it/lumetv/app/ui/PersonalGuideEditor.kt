@@ -17,10 +17,11 @@ internal class PersonalGuideEditor(private val pages:PlaylistPages,private val r
             val status=page.text("")
             page.onRefresh={
                 val state=guide.state.value.firstOrNull {it.sourceId==source.id}
-                status.text=state?.let {"${it.matched} canali associati · ${it.programmes} programmi salvati"+
+                status.text=if(repository.requestContext(source.id)?.settings?.guide?.enabled==false)"La guida di questa lista è disattivata."
+                    else state?.let {"${it.matched} canali associati · ${it.programmes} programmi salvati"+
                     (if(it.refreshing)"\nAggiornamento in corso…" else if(it.updated>0)"\nUltimo aggiornamento: "+DateFormat.getDateTimeInstance().format(Date(it.updated)) else "")+
                     (if(it.error.isNotBlank())"\n\n${it.error}" else "")}
-                    ?: "La guida usa gli indirizzi XMLTV della lista. Puoi aggiungerli o sostituirli nelle impostazioni."
+                    ?: "La lista ha la precedenza. Senza indirizzi XMLTV, la guida cerca prima in Lume, poi in EPGShare IT1."
             };page.onRefresh?.invoke()
             page.row("Impostazioni guida","Indirizzi XMLTV, lingua, orari e consenso HTTP"){load(page,source){config->settings(source,config)}}
             page.row("Archivio","Disponibilità, dall’inizio e margini"){load(page,source){settings->archive(source,settings)}}
@@ -46,7 +47,16 @@ internal class PersonalGuideEditor(private val pages:PlaylistPages,private val r
         pages.scope.launch {try {
             guide.refresh(true,id);page.onRefresh?.invoke()
             val result=guide.state.value.firstOrNull {it.sourceId==id}
-            page.message(result?.error?.takeIf(String::isNotBlank) ?: if(result==null)"Configura un indirizzo XMLTV nelle impostazioni della guida." else "Guida aggiornata.",result?.error?.isNotBlank()==true)
+            if(result==null) {
+                if(!repository.settings(id).guide.enabled)page.message("La guida di questa lista è disattivata.")
+                else {
+                    val shared=GuideRepository(pages.activity,HttpClient())
+                    shared.refreshCatalog(true)
+                    val available=shared.publicGuideAvailable()
+                    page.message(if(available)"Guida condivisa disponibile per i canali riconosciuti."
+                        else "Guide Lume ed EPGShare non disponibili. Riprova più tardi.",!available)
+                }
+            } else page.message(result.error.takeIf(String::isNotBlank) ?: "Guida aggiornata.",result.error.isNotBlank())
         }catch(cancelled:CancellationException){throw cancelled}catch(error:Exception){page.message(PlaylistPages.safeMessage(error),true)}finally {refreshing-=id}}
     }
     private fun load(page:PlaylistPages.Page,source:PersonalPlaylistSource,show:(PlaylistSettings)->Unit) {
@@ -55,9 +65,9 @@ internal class PersonalGuideEditor(private val pages:PlaylistPages,private val r
     private fun settings(source:PersonalPlaylistSource,initial:PlaylistSettings) {
         pages.push("guide-settings","Impostazioni guida",source.name){page->
             val config=initial.guide
-            val enabled=page.toggle("Attiva la guida personale",config.enabled)
+            val enabled=page.toggle("Attiva la guida per questa lista",config.enabled)
             val urls=page.field("Indirizzi XMLTV · uno per riga",config.urls.joinToString("\n"),16*8193,true)
-            page.text("Vuoto: usa gli indirizzi indicati nella lista. Sono supportati XML, gzip e xz.")
+            page.text("Vuoto: usa gli indirizzi della lista; se assenti, cerca prima in Lume, poi in EPGShare IT1. Formati: XML, gzip e xz.")
             val http=page.toggle("Consenti HTTP per questa guida",config.allowHttp)
             page.text("Con HTTP, indirizzi e dati di accesso viaggiano senza cifratura. Il consenso riguarda solo questa guida.")
             val language=page.field("Lingua dei programmi",config.language)

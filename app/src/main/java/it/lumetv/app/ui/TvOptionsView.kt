@@ -16,6 +16,7 @@ import it.lumetv.app.ui.TvStyle.dp
 
 enum class TvOption(val label: String, val description: String) {
     PLAYLISTS("Le mie liste", "Aggiungi e gestisci liste personali M3U per TV e radio, tramite indirizzo HTTP/HTTPS o file."),
+    METADATA("Informazioni sui video", "Gestisci trama, cast e immagini da TMDB e le schede conservate sul dispositivo."),
     CHANNELS("Canali e preferiti", "Riordina i preferiti di TV e radio. Nascondi i canali dal catalogo, dalla guida e dal cambio canale; ripristinali dalla vista Nascosti."),
     BACKUP("Backup e ripristino", "Crea un file protetto da password con liste, preferiti e riprese. Verifica l’anteprima e scegli i dati da recuperare mantenendo quelli già presenti."),
     INTERFACE("Interfaccia", "Scegli la disposizione TV o smartphone, oppure lascia il riconoscimento automatico."),
@@ -89,6 +90,7 @@ class TvOptionsView(context: Context, choose: (TvOption) -> Unit) : FrameLayout(
 
     fun bind(interfaceLabel: String, favoritesOnly: Boolean, auraAllowed: Boolean, version: String, availableVersion: String?, homeSummary: String) {
         val values = mapOf(TvOption.PLAYLISTS to "Liste M3U sul dispositivo", TvOption.CHANNELS to "Ordine e canali nascosti", TvOption.INTERFACE to interfaceLabel,
+            TvOption.METADATA to "Trama, cast e immagini da TMDB",
             TvOption.BACKUP to "Liste, preferiti, riprese e preferenze",
             TvOption.ZAPPING to if (favoritesOnly) "Solo preferiti" else "Tutti i canali",
             TvOption.COMPANION to "Telecomando dal telefono sulla rete di casa",

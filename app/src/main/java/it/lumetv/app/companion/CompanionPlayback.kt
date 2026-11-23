@@ -25,7 +25,7 @@ internal class CompanionPlayback(private val player:TvPlayer,private val zap:(In
         fun tracks(values:List<PlaybackTrackOption>)=JSONArray().apply {values.take(24).forEach {
             put(JSONObject().put("key",it.key).put("label",CompanionProtocol.display(it.label,80)).put("selected",it.selected))
         }}
-        return JSONObject().put("version",1).put("instance",boot).put("sequence",++sequence).put("session",session).put("navigationSupported",true).put("transitioning",transitioning()).put("active",s.channel!=null)
+        return JSONObject().put("version",1).put("instance",boot).put("sequence",++sequence).put("session",session).put("navigationSupported",true).put("playlistTransferSupported",true).put("watchSupported",true).put("transitioning",transitioning()).put("active",s.channel!=null)
             .put("title",CompanionProtocol.display(s.title.ifBlank {s.channel?.name.orEmpty()}))
             .put("channel",CompanionProtocol.display(s.channel?.name.orEmpty()))
             .put("programme",CompanionProtocol.display(s.nowPlaying))

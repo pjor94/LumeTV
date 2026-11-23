@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class VodMetadataTest {
+    @Test fun `VOD sidecar references survive playlist parsing without rewriting signed URLs`() {
+        val entry=item("Film","type=\"movie\" preview-vtt=\"https://media.example.com/t.vtt?token=a%2Fb\" chapters-vtt=\"https://media.example.com/c.vtt\"")
+        val value=VodMetadata.from(entry)
+        assertEquals("https://media.example.com/t.vtt?token=a%2Fb",value.previewVtt)
+        assertEquals("https://media.example.com/c.vtt",value.chaptersVtt)
+        assertFalse(value.toString().contains("token"))
+    }
     private fun item(name:String,attrs:String="",url:String="https://example.org/video.mp4")=PersonalM3uParser.parse("#EXTM3U\n#EXTINF:-1 $attrs,$name\n$url").entries.single()
     @Test fun `explicit presentation metadata preserves playback identity and original names`() {
         val entry=item("Un film (2023)","type=\"movie\" plot=\"Una storia\" genre=\"Dramma,Avventura\" year=\"2023\" poster=\"https://example.org/poster.jpg\"")

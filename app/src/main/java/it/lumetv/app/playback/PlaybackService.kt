@@ -115,11 +115,26 @@ class PlaybackService : MediaSessionService() {
     private var followingError=false
     private lateinit var trackOptions: PlaybackTrackController
     private lateinit var sleepTimer: SleepTimer
+    private lateinit var loadControl:PlaybackLoadControl
+    private var vodTransfer:VodPlaybackSession?=null
+    private var vodPreviews:VodPreviewProvider?=null
+    private var vodCache:VodMediaCache.Session?=null
+    private var vodCacheTarget:Pair<String,PlaybackTarget>?=null
+    private val constrainedPreloadSources=mutableSetOf<String>()
+    private var rebufferCount=0
+    private var rebufferElapsed=0L
+    private var rebufferStarted=0L
+    private var playedContent=false
+    private var seekingContent=false
+    private var previewActive=false
+    private var lastBufferProgress=0L
+    private var chapters:List<VodChapter> = emptyList()
     @Volatile var snapshot = PlaybackSnapshot()
         private set
 
     override fun onCreate() {
         super.onCreate()
+        scope.launch(Dispatchers.IO){runCatching {VodMediaCache.get(this@PlaybackService).startupCleanup.join()}}
         repository = ChannelRepository(this, http)
         personalResolver=PersonalPlaybackResolver(this,repository.personal,http.client)
         history=PersonalPlaybackStore.get(this)
@@ -141,9 +156,9 @@ class PlaybackService : MediaSessionService() {
             onWaiting = { waiting("Connessione assente · Riprendo quando torna la rete…") },
             onScheduled = { attempt, maximum -> waiting("Riconnetto… Tentativo $attempt di $maximum") },
             onExhausted = { fail(it) })
+        loadControl=PlaybackLoadControl(this)
         player = ExoPlayer.Builder(this)
-            .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(12_000, 40_000, 1_000, 2_000)
-                .setTargetBufferBytes(24 * 1024 * 1024).setPrioritizeTimeOverSizeThresholds(true).build())
+            .setLoadControl(loadControl)
             .build().apply {
                 setHandleAudioBecomingNoisy(true)
                 setWakeMode(C.WAKE_MODE_NETWORK)
@@ -153,8 +168,13 @@ class PlaybackService : MediaSessionService() {
                     override fun onRenderedFirstFrame() = debug("first_frame")
                     override fun onPlaybackStateChanged(state: Int) {
                         debug("state=$state")
+                        if(state==Player.STATE_BUFFERING && playedContent && !seekingContent && desiredPlaying && rebufferStarted==0L) {
+                            rebufferCount++;rebufferStarted=SystemClock.elapsedRealtime()
+                            protectPlaybackTransfers()
+                        }
+                        if(state==Player.STATE_READY){finishRebuffer();seekingContent=false}
                         if (!switching) {
-                            if (state == Player.STATE_BUFFERING && desiredPlaying) recovery.onBuffering()
+                            if (state == Player.STATE_BUFFERING && desiredPlaying) recovery.onBuffering(target.mode!=PlaybackMode.LIVE)
                             if (state == Player.STATE_READY) {
                                 message = ""; error = null
                                 if (player.currentMediaItem?.mediaId == selected?.id) changingChannel = false
@@ -164,6 +184,7 @@ class PlaybackService : MediaSessionService() {
                                     recovery.onFailure(PlaybackFailure("La diretta si è interrotta. Riprova o scegli un’altra emittente.", true))
                                 else if(target.mode!=PlaybackMode.LIVE) {
                                     ended=true;capturePosition(true);desiredPlaying=false;recovery.stop();message="Riproduzione terminata"
+                                    discardVodCache()
                                 }
                             }
                         }
@@ -178,6 +199,7 @@ class PlaybackService : MediaSessionService() {
                     }
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         if (isPlaying) {
+                            playedContent=true
                             if(!historyActive && loaded && target.mode!=PlaybackMode.LIVE) {
                                 historyActive=true
                                 val channel=selected;val watch=historySession
@@ -191,6 +213,7 @@ class PlaybackService : MediaSessionService() {
                         publish()
                     }
                     override fun onPlayerError(exception: PlaybackException) {
+                        protectPlaybackTransfers()
                         debug("error=${exception.errorCodeName}")
                         val status = generateSequence<Throwable>(exception) { it.cause }
                             .filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>().firstOrNull()?.responseCode
@@ -271,7 +294,18 @@ class PlaybackService : MediaSessionService() {
         network.start()
         scope.launch {
             var ticks=0
-            while(true){delay(1000);if(target.mode!=PlaybackMode.LIVE && selected!=null){if(++ticks%5==0)capturePosition();publish()}}
+            while(true){delay(1000);if(target.mode!=PlaybackMode.LIVE && selected!=null){
+                if(++ticks%5==0)capturePosition()
+                val buffered=player.contentBufferedPosition
+                if(buffered>lastBufferProgress && player.playbackState==Player.STATE_BUFFERING)recovery.onBufferProgress(target.mode!=PlaybackMode.LIVE)
+                lastBufferProgress=buffered
+                val videoRate=player.videoFormat?.bitrate ?: -1
+                val bandwidth=androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(this@PlaybackService).bitrateEstimate
+                vodTransfer?.update(player.isPlaying && !previewActive && selected?.sourceId !in constrainedPreloadSources && player.totalBufferedDuration>=loadControl.preloadReserveMs(videoRate) &&
+                    (videoRate<=0 || bandwidth>videoRate*1.5),
+                    player.currentManifest,player.currentPosition,player.videoFormat,player.audioFormat,player.currentPeriodIndex)
+                publish()
+            }}
         }
     }
 
@@ -297,7 +331,11 @@ class PlaybackService : MediaSessionService() {
     fun selectArchive(channel:Channel,eventId:String,mobile:Boolean) {
         if(channel.isPersonal && eventId.isNotEmpty())selectTarget(channel,mobile,channel.isRadio,true,PlaybackTarget(channel.id,PlaybackMode.ARCHIVE,eventId))
     }
-    private fun selectTarget(channel:Channel,mobile:Boolean,audio:Boolean,play:Boolean,nextTarget:PlaybackTarget,useSaved:Boolean=false) {
+    fun selectAt(channel:Channel,mobile:Boolean,position:Long) {
+        require(position>=0 && (channel.isVod || position==0L))
+        selectTarget(channel,mobile,channel.isRadio,true,PlaybackTarget(channel.id,if(channel.isVod)PlaybackMode.VOD else PlaybackMode.LIVE),initialPosition=position)
+    }
+    private fun selectTarget(channel:Channel,mobile:Boolean,audio:Boolean,play:Boolean,nextTarget:PlaybackTarget,useSaved:Boolean=false,initialPosition:Long?=null) {
         if (channel.isPersonal && !repository.personal.available(channel.sourceId)) return
         val samePosition=position().takeIf {loaded && !ended && selected?.sourceId==channel.sourceId && nextTarget==target &&
             (!useSaved || historySession?.let(history::isCurrent)==true)}
@@ -305,7 +343,8 @@ class PlaybackService : MediaSessionService() {
         history.release(historySession)
         historySession=if(channel.isPersonal && nextTarget.mode!=PlaybackMode.LIVE)history.session(channel.sourceId,nextTarget) else null
         historyPrepared=false;historyActive=false;clearFollowingEpisode()
-        target=nextTarget;contentTitle=channel.name;contentDuration=0;baseOffset=0;resumePosition=samePosition;regenerate=false;loaded=false;ended=false
+        target=nextTarget;contentTitle=channel.name;contentDuration=0;baseOffset=0;resumePosition=initialPosition ?: samePosition;regenerate=false;loaded=false;ended=false
+        finishRebuffer();rebufferCount=0;rebufferElapsed=0;playedContent=false;seekingContent=false;previewActive=false;lastBufferProgress=0;chapters=emptyList()
         changingChannel = selected != null && selected?.id != channel.id
         this.mobile = mobile
         audioOnly = channel.isRadio || audio
@@ -330,11 +369,13 @@ class PlaybackService : MediaSessionService() {
         switching = true
         trackOptions.reset()
         player.stop(); player.clearMediaItems()
+        vodTransfer?.close();vodTransfer=null;vodPreviews?.close();vodPreviews=null
+        if(vodCacheTarget!=(channel.sourceId to target))discardVodCache()
         switching = false
         error = null
         message = "Apro ${channel.name}…"
         publish()
-        if (desiredPlaying) recovery.onBuffering()
+        if (desiredPlaying) recovery.onBuffering(target.mode!=PlaybackMode.LIVE)
         resolveJob = scope.launch {
             try {
                 if (refreshPersonalBeforeRetry && channel.isPersonal) {
@@ -362,10 +403,11 @@ class PlaybackService : MediaSessionService() {
                 if(stream.personal && repository.personal.requestContext(channel.sourceId)?.token!=stream.personalNetworkToken)
                     throw it.lumetv.app.data.SourceException("La configurazione della lista è cambiata. Riapri il canale.")
                 personalPolicyToken=stream.personalNetworkToken;seekingAllowed=stream.seekable!=false
+                loadControl.mode=target.mode
                 player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
                     .setContentType(if (channel.isRadio) C.AUDIO_CONTENT_TYPE_MUSIC else C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
                 applyTrackPreferences()
-                player.setMediaSource(source(stream, channel),if(result?.target?.mode==PlaybackMode.LIVE)C.TIME_UNSET else result?.startPosition ?: C.TIME_UNSET)
+                player.setMediaSource(source(stream, channel,result?.metadata),if(result?.target?.mode==PlaybackMode.LIVE)C.TIME_UNSET else result?.startPosition ?: C.TIME_UNSET)
                 loaded=true;ended=false
                 player.prepare()
                 player.playWhenReady = desiredPlaying
@@ -388,7 +430,7 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private fun source(stream: ResolvedStream, channel: Channel): androidx.media3.exoplayer.source.MediaSource {
+    private fun source(stream: ResolvedStream, channel: Channel,details:it.lumetv.core.VodMetadata?=null): androidx.media3.exoplayer.source.MediaSource {
         val factory = DefaultMediaSourceFactory(DefaultDataSource.Factory(this,
             PersonalMediaSources.http(streamHttp, stream.headers)))
         val drm = DefaultDrmSessionManagerProvider().apply {
@@ -404,8 +446,34 @@ class PlaybackService : MediaSessionService() {
                     .setForceDefaultLicenseUri(stream.personal && it.licenseUrl.isNotBlank()).build())
             }
         }.build()
-        return if(stream.personal) PersonalMediaSources.create(this,stream,item,streamHttp,http.client,repository.personal.requestContext(channel.sourceId)) { repository.personal.allowsHttp(channel.sourceId) }
-            else factory.createMediaSource(item)
+        val context=if(stream.personal)repository.personal.requestContext(channel.sourceId) else null
+        fun create(mediaItem:MediaItem,wrap:(androidx.media3.datasource.DataSource.Factory)->androidx.media3.datasource.DataSource.Factory):androidx.media3.exoplayer.source.MediaSource =
+            if(stream.personal)PersonalMediaSources.create(this,stream,mediaItem,streamHttp,http.client,context,wrap){repository.personal.allowsHttp(channel.sourceId)}
+            else DefaultMediaSourceFactory(wrap(DefaultDataSource.Factory(this,PersonalMediaSources.http(streamHttp,stream.headers))))
+                .setDrmSessionManagerProvider(drm).createMediaSource(mediaItem)
+        val result=create(item){upstream->
+            if(target.mode!=PlaybackMode.VOD)upstream else {
+                val cache=runCatching {VodMediaCache.get(this)}.getOrNull()
+                if(cache==null)upstream else {
+                    val ownership=vodCache ?: cache.session().also {vodCache=it;vodCacheTarget=channel.sourceId to target}
+                    val namespace=ownership.namespace(VodMediaCache.digest(channel.sourceId+"|"+context?.token.orEmpty()+"|"+stream.url+"|"+stream.headers.toSortedMap().toString()))
+                    VodPlaybackSession(scope,cache,namespace,upstream,android.net.Uri.parse(stream.url),ownership){context?.valid()!=false}
+                        .also {vodTransfer=it}.playbackFactory
+                }
+            }
+        }
+        if(target.mode==PlaybackMode.VOD) {
+            val transfer=vodTransfer
+            val previewFactory=object:androidx.media3.exoplayer.source.MediaSource.Factory by factory {
+                override fun createMediaSource(mediaItem:MediaItem)=create(mediaItem){transfer?.previewFactory ?: it}
+            }
+            val headers=it.lumetv.core.PlaylistHeaders.merge(stream.headers.filterKeys {it.equals("User-Agent",true)},context?.settings?.rule(it.lumetv.app.data.PlaylistResource.LOGO)?.headers.orEmpty())
+            vodPreviews=VodPreviewProvider(this,scope,http,context,headers,details,item,previewFactory,
+                stream.drm==null && seekingAllowed,{
+                    selected?.id==channel.id && context?.valid()!=false && (player.playbackState==Player.STATE_ENDED || player.playbackState==Player.STATE_READY && player.totalBufferedDuration>=10_000)
+                },{values->chapters=values;publish()})
+        }
+        return result
     }
 
     private fun metadata(channel: Channel): MediaMetadata = MediaMetadata.Builder().setTitle(contentTitle.ifBlank {channel.name})
@@ -424,6 +492,7 @@ class PlaybackService : MediaSessionService() {
         changingChannel = false
         desiredPlaying = false
         recovery.stop(); resolveJob?.cancel(); generation++
+        vodTransfer?.suspendPreload();finishRebuffer()
         message = ""
         player.pause()
         publish()
@@ -441,7 +510,7 @@ class PlaybackService : MediaSessionService() {
         else {
             if (target.mode==PlaybackMode.LIVE && seekingAllowed && player.isCurrentMediaItemLive && player.isCurrentMediaItemSeekable) player.seekToDefaultPosition()
             player.play()
-            if (player.playbackState == Player.STATE_BUFFERING) recovery.onBuffering()
+            if (player.playbackState == Player.STATE_BUFFERING) recovery.onBuffering(target.mode!=PlaybackMode.LIVE)
         }
         publish()
     }
@@ -454,6 +523,7 @@ class PlaybackService : MediaSessionService() {
         generation++; resolveJob?.cancel(); recovery.stop()
         selected = null; desiredPlaying = false; message = ""; error = null; nowPlaying = ""
         player.stop(); player.clearMediaItems()
+        discardVodCache();chapters=emptyList();finishRebuffer()
         publish()
         stopSelf()
     }
@@ -536,10 +606,12 @@ class PlaybackService : MediaSessionService() {
 
     private fun fail(text: String) {
         capturePosition();loaded=false
+        finishRebuffer();vodTransfer?.suspendPreload();vodPreviews?.cancel()
         changingChannel = false
         recovery.stop(); resolveJob?.cancel()
         error = text; message = ""
         player.stop()
+        discardVodCache()
         publish()
     }
 
@@ -550,7 +622,12 @@ class PlaybackService : MediaSessionService() {
             player.playbackState == Player.STATE_READY, audioOnly,
             PlaybackPolicy.canContinueInBackground(mobile, selected, audioOnly), message, error, nowPlaying,
             target.mode,contentTitle,position(),duration(),target.mode!=PlaybackMode.LIVE && seekingAllowed && (regenerate || player.isCurrentMediaItemSeekable),ended,
-            trackOptions.snapshot(sleepTimer.remaining),following,followingLoading,followingError,generation.toLong())
+            trackOptions.snapshot(sleepTimer.remaining),following,followingLoading,followingError,generation.toLong(),
+            bufferedPosition=if(loaded && target.mode!=PlaybackMode.LIVE)(if(vodTransfer?.fullyCached()==true)duration() else player.contentBufferedPosition+baseOffset).coerceIn(0,duration().coerceAtLeast(0)) else 0,
+            bufferedDuration=if(loaded)player.totalBufferedDuration.coerceAtLeast(0) else 0,
+            rebufferCount=rebufferCount,rebufferDuration=rebufferElapsed+if(rebufferStarted>0)SystemClock.elapsedRealtime()-rebufferStarted else 0,
+            downloadBitrate=androidx.media3.exoplayer.upstream.DefaultBandwidthMeter.getSingletonInstance(this).bitrateEstimate,
+            chapters=chapters,preloadedBytes=vodTransfer?.preloadedBytes ?: 0)
         if (next != snapshot) {
             snapshot = next
             observers.toList().forEach { it(next) }
@@ -558,13 +635,14 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (!snapshot.backgroundAllowed || !desiredPlaying) stopPlayback()
+        if (target.mode==PlaybackMode.VOD || !snapshot.backgroundAllowed || !desiredPlaying) stopPlayback()
     }
 
     override fun onDestroy() {
         capturePosition()
         history.release(historySession)
         sleepTimer.cancel()
+        discardVodCache()
         recovery.stop(); network.stop(); scope.cancel(); observers.clear()
         session.release(); player.release()
         super.onDestroy()
@@ -582,11 +660,25 @@ class PlaybackService : MediaSessionService() {
     fun seek(position:Long) {
         if(target.mode==PlaybackMode.LIVE || !seekingAllowed || selected==null)return
         val wanted=position.coerceIn(0,(duration()-1).coerceAtLeast(0))
-        ended=false;message=""
-        if(loaded && player.isCurrentMediaItemSeekable && wanted>=baseOffset){player.seekTo(wanted-baseOffset);resumePosition=wanted;capturePosition();publish()}
+        val finished=ended
+        ended=false;message="";seekingContent=true;previewActive=false;vodTransfer?.suspendPreload();finishRebuffer()
+        if(finished && target.mode==PlaybackMode.VOD){resumePosition=wanted;loaded=false;open()}
+        else if(loaded && player.isCurrentMediaItemSeekable && wanted>=baseOffset){player.seekTo(wanted-baseOffset);resumePosition=wanted;capturePosition();publish()}
         else if(regenerate){capturePosition();resumePosition=wanted;loaded=false;open()}
     }
     fun seekBy(delta:Long)=seek(position()+delta)
+    private fun discardVodCache(){
+        vodTransfer?.close();vodTransfer=null;vodPreviews?.close();vodPreviews=null
+        vodCache?.close();vodCache=null;vodCacheTarget=null
+    }
+    private fun finishRebuffer(){if(rebufferStarted>0){rebufferElapsed+=SystemClock.elapsedRealtime()-rebufferStarted;rebufferStarted=0}}
+    private fun protectPlaybackTransfers(){
+        val transfer=vodTransfer ?: return
+        if(transfer.preloadedBytes>0)selected?.sourceId?.let(constrainedPreloadSources::add)
+        transfer.protectPlayback();vodPreviews?.cancel()
+    }
+    fun setPreviewActive(value:Boolean){previewActive=value;if(value)vodTransfer?.suspendPreload() else vodPreviews?.cancel()}
+    fun requestPreview(position:Long,answer:(android.graphics.Bitmap?)->Unit){vodPreviews?.request(position,answer) ?: answer(null)}
     fun restart(){if(target.mode!=PlaybackMode.LIVE){
         history.release(historySession);historySession=selected?.takeIf {it.isPersonal}?.let {history.session(it.sourceId,target)};historyPrepared=false;historyActive=false
         resumePosition=0;loaded=false;ended=false;desiredPlaying=true;recovery.start();open()

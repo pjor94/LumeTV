@@ -321,6 +321,17 @@
       "license": "Apache-2.0"
     },
     {
+      "coordinate": "androidx.media3:media3-effect:1.11.1",
+      "artifact": "media3-effect-1.11.1.aar",
+      "sha256": "aacaf7d4cc410ee0e4fe731a1d1b156d22ce263a45bc6bf17a6dbd6f2182f0ab",
+      "source": {
+        "file": "androidx.media3.media3-effect-1.11.1-sources.jar",
+        "url": "https://dl.google.com/dl/android/maven2/androidx/media3/media3-effect/1.11.1/media3-effect-1.11.1-sources.jar",
+        "sha256": "a452414ffe8dbc89bf7958120694e061603babb919517b13b79849a01a91685d"
+      },
+      "license": "Apache-2.0"
+    },
+    {
       "coordinate": "androidx.media3:media3-exoplayer-dash:1.11.1",
       "artifact": "media3-exoplayer-dash-1.11.1.aar",
       "sha256": "eda5ca5879d1016b2f6cb7a79fd8bef864017a3e62e8ece8c25b3a595373920c",
@@ -361,6 +372,17 @@
         "file": "androidx.media3.media3-extractor-1.11.1-sources.jar",
         "url": "https://dl.google.com/dl/android/maven2/androidx/media3/media3-extractor/1.11.1/media3-extractor-1.11.1-sources.jar",
         "sha256": "547129d7df7ef9cc3d2622036d3880ab205e5fe3241095049b39c6632c64bc4a"
+      },
+      "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "androidx.media3:media3-inspector-frame:1.11.1",
+      "artifact": "media3-inspector-frame-1.11.1.aar",
+      "sha256": "6b51fd8df4b0b982e6c48bba286abe48d14b52ef01a5700a8720ff00af729c96",
+      "source": {
+        "file": "androidx.media3.media3-inspector-frame-1.11.1-sources.jar",
+        "url": "https://dl.google.com/dl/android/maven2/androidx/media3/media3-inspector-frame/1.11.1/media3-inspector-frame-1.11.1-sources.jar",
+        "sha256": "623c69e50a7eaf5eda9855bef8c9a1ee59151595b34afd59e313d702a37a2710"
       },
       "license": "Apache-2.0"
     },
@@ -475,8 +497,20 @@
       "license": "Apache-2.0"
     },
     {
-      "coordinate": "com.android.tools:desugar_jdk_libs:2.1.5",
-      "artifact": "desugar_jdk_libs-2.1.5.jar",
+      "coordinate": "com.android.tools:desugar_jdk_libs_configuration_nio:2.1.5",
+      "artifact": "desugar_jdk_libs_configuration_nio-2.1.5.jar",
+      "sha256": "7db51661cd07d1fd5cf12769a75ba201910624bb3801c09363dd3cb28e31c51b",
+      "source": {
+        "file": "r8-desugar-configuration-2.1.5.tar",
+        "url": "https://r8.googlesource.com/r8/+archive/c331a820ddae7dea41f41a04375b784486d0f705.tar.gz",
+        "sha256": "ef068dd6996ce24772b5df8bc1d8cb2cc84770adb31f3c4efba80b6033cbe076",
+        "normalization": "gitiles-tar-v1"
+      },
+      "license": "BSD-3-Clause"
+    },
+    {
+      "coordinate": "com.android.tools:desugar_jdk_libs_nio:2.1.5",
+      "artifact": "desugar_jdk_libs_nio-2.1.5.jar",
       "sha256": "d8044befae095781b9a80bf1faa92edc30382d75d437476784c1bf991598a976",
       "source": {
         "file": "desugar_jdk_libs-2.1.5.zip",
@@ -486,17 +520,48 @@
       "license": "GPL-2.0-only WITH Classpath-exception-2.0"
     },
     {
-      "coordinate": "com.android.tools:desugar_jdk_libs_configuration:2.1.5",
-      "artifact": "desugar_jdk_libs_configuration-2.1.5.jar",
-      "sha256": "7bc9051b3a1ec19806311dcb6aa9b9ba7ef9c22caa6f4810da55bde285fb7770",
-      "license": "BSD-3-Clause",
+      "coordinate": "com.github.TeamNewPipe:NewPipeExtractor:v0.27.1",
+      "artifact": "NewPipeExtractor-v0.27.1.jar",
+      "sha256": "154fd5efc333d8fdc9cc60abac12d42cd6bf49c8df2f93c5a850fd60c8d7534a",
       "source": {
-        "file": "r8-desugar-configuration-2.1.5.tar",
-        "url": "https://r8.googlesource.com/r8/+archive/c331a820ddae7dea41f41a04375b784486d0f705.tar.gz",
-        "sha256": "ef068dd6996ce24772b5df8bc1d8cb2cc84770adb31f3c4efba80b6033cbe076",
-        "normalization": "gitiles-tar-v1"
+        "file": "NewPipeExtractor-v0.27.1.zip",
+        "url": "https://codeload.github.com/TeamNewPipe/NewPipeExtractor/zip/refs/tags/v0.27.1",
+        "sha256": "2094803a89403f73f723636ee01549dc5e091c66d6e6761ccf1402962af60f5c"
       },
-      "sourceNote": "R8 revision preparing desugar configuration 2.1.5. Includes conversion/wrapper Java sources, configuration and build scripts."
+      "license": "GPL-3.0-or-later"
+    },
+    {
+      "coordinate": "com.github.TeamNewPipe:nanojson:e9d656ddb49a412a5a0a5d5ef20ca7ef09549996",
+      "artifact": "nanojson-e9d656ddb49a412a5a0a5d5ef20ca7ef09549996.jar",
+      "sha256": "d495881a322b3c72e5d43284afd7d7021520028ca8b7c6ba861e3fd8d90614d5",
+      "source": {
+        "file": "nanojson-e9d656ddb49a412a5a0a5d5ef20ca7ef09549996.zip",
+        "url": "https://codeload.github.com/TeamNewPipe/nanojson/zip/e9d656ddb49a412a5a0a5d5ef20ca7ef09549996",
+        "sha256": "1c1beef8184bd10709e12b7875437e18f96b3b72c574f3bb924afd38a30b90e8"
+      },
+      "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "com.google.code.findbugs:jsr305:3.0.2",
+      "artifact": "jsr305-3.0.2.jar",
+      "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7",
+      "source": {
+        "file": "com.google.code.findbugs.jsr305-3.0.2-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2-sources.jar",
+        "sha256": "1c9e85e272d0708c6a591dc74828c71603053b48cc75ae83cce56912a2aa063b"
+      },
+      "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "com.google.errorprone:error_prone_annotations:2.28.0",
+      "artifact": "error_prone_annotations-2.28.0.jar",
+      "sha256": "f3fc8a3a0a4020706a373b00e7f57c2512dd26d1f83d28c7d38768f8682b231e",
+      "source": {
+        "file": "com.google.errorprone.error_prone_annotations-2.28.0-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.28.0/error_prone_annotations-2.28.0-sources.jar",
+        "sha256": "2936e9b315d790d8a6364f0574bcec9c8b2d78688b317e1765c4a16f9ef80632"
+      },
+      "license": "Apache-2.0"
     },
     {
       "coordinate": "com.google.guava:failureaccess:1.0.2",
@@ -531,6 +596,28 @@
         "sha256": "1933a9fb7ee8535749600d7298fa9511589631010e90907db8459797c31238ca"
       },
       "sourceNote": "Empty conflict-avoidance marker JAR, without classes. ListenableFuture implementation is supplied by the Guava sources."
+    },
+    {
+      "coordinate": "com.google.j2objc:j2objc-annotations:3.0.0",
+      "artifact": "j2objc-annotations-3.0.0.jar",
+      "sha256": "88241573467ddca44ffd4d74aa04c2bbfd11bf7c17e0c342c94c9de7a70a7c64",
+      "source": {
+        "file": "com.google.j2objc.j2objc-annotations-3.0.0-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/3.0.0/j2objc-annotations-3.0.0-sources.jar",
+        "sha256": "bd60019a0423c3a025ef6ab24fe0761f5f45ffb48a8cca74a01b678de1105d38"
+      },
+      "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "com.google.protobuf:protobuf-javalite:4.36.2",
+      "artifact": "protobuf-javalite-4.36.2.jar",
+      "sha256": "8f4f93d08cb37130ecb0bc69d376d7d27c36ff04ddb1bb27430b06caa9fa062e",
+      "source": {
+        "file": "com.google.protobuf.protobuf-javalite-4.36.2-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/com/google/protobuf/protobuf-javalite/4.36.2/protobuf-javalite-4.36.2-sources.jar",
+        "sha256": "b60178ff7e8899df001b520703d46f62d10aef7def1fd2c03549a69781f17eff"
+      },
+      "license": "BSD-3-Clause"
     },
     {
       "coordinate": "com.google.zxing:core:3.5.4",
@@ -575,6 +662,17 @@
         "sha256": "870a42a7b468af8fd24d67b7b62e5861aab398c56f15a80b10642e7001564e2f"
       },
       "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "org.checkerframework:checker-qual:3.43.0",
+      "artifact": "checker-qual-3.43.0.jar",
+      "sha256": "3fbc2e98f05854c3df16df9abaa955b91b15b3ecac33623208ed6424640ef0f6",
+      "source": {
+        "file": "org.checkerframework.checker-qual-3.43.0-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/org/checkerframework/checker-qual/3.43.0/checker-qual-3.43.0-sources.jar",
+        "sha256": "d6bdee58964cd05aabfca4e44947d3cbdada6bf617ed618b62b3b0d5a21de339"
+      },
+      "license": "MIT"
     },
     {
       "coordinate": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10",
@@ -632,6 +730,17 @@
       "license": "Apache-2.0"
     },
     {
+      "coordinate": "org.jetbrains.kotlinx:kotlinx-coroutines-guava:1.10.2",
+      "artifact": "kotlinx-coroutines-guava-1.10.2.jar",
+      "sha256": "d54c4c9f9f2d3612afa5801daf70a7b68687f78d8936360341f1a89b535abfee",
+      "source": {
+        "file": "org.jetbrains.kotlinx.kotlinx-coroutines-guava-1.10.2-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-guava/1.10.2/kotlinx-coroutines-guava-1.10.2-sources.jar",
+        "sha256": "988ad4424350cfc88e92e06dd9a5ec0420c6f663872fe7bf455bcd8169e3ebd6"
+      },
+      "license": "Apache-2.0"
+    },
+    {
       "coordinate": "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.7.3",
       "artifact": "kotlinx-serialization-core-jvm-1.7.3.jar",
       "sha256": "f0adde45864144475385cf4aa7e0b7feb27f61fcf9472665ed98cc971b06b1eb",
@@ -654,6 +763,17 @@
       "license": "Apache-2.0"
     },
     {
+      "coordinate": "org.jsoup:jsoup:1.24.1",
+      "artifact": "jsoup-1.24.1.jar",
+      "sha256": "fabbb4aaf7fb5340aed0613826ecd110427999d765d8e0367cedde2950d7097c",
+      "source": {
+        "file": "org.jsoup.jsoup-1.24.1-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/org/jsoup/jsoup/1.24.1/jsoup-1.24.1-sources.jar",
+        "sha256": "c3fb396a945371e62dd3749e18e8cf235532353d5c98ff67681914a36a61e92e"
+      },
+      "license": "MIT"
+    },
+    {
       "coordinate": "org.jspecify:jspecify:1.0.0",
       "artifact": "jspecify-1.0.0.jar",
       "sha256": "1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab",
@@ -663,6 +783,17 @@
         "sha256": "adf0898191d55937fb3192ba971826f4f294292c4a960740f3c27310e7b70296"
       },
       "license": "Apache-2.0"
+    },
+    {
+      "coordinate": "org.mozilla:rhino:1.8.1",
+      "artifact": "rhino-1.8.1.jar",
+      "sha256": "98a06d42bdd69da15bf9c2a7812b4cfe648ca9e64fe8baaeb502a32b0ed2c8ac",
+      "source": {
+        "file": "org.mozilla.rhino-1.8.1-sources.jar",
+        "url": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.8.1/rhino-1.8.1-sources.jar",
+        "sha256": "2303a0e5aa222faae0b95865c25442da89ec14c0fc81ac1608f2a6095e3d2459"
+      },
+      "license": "MPL-2.0"
     },
     {
       "coordinate": "org.tukaani:xz:1.9",

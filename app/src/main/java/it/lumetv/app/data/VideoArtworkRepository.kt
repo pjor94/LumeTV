@@ -16,6 +16,11 @@ import java.net.InetAddress
 import java.net.URI
 import java.util.UUID
 
+internal data class VideoArtworkReference(val url:String,val cacheKey:String,val personal:PersonalArtwork?=null) {
+    fun valid()=personal?.context?.valid() ?: true
+    override fun toString()="VideoArtworkReference()"
+}
+
 /** Each view owns a subscription; the bounded cache and shared requests belong to the application repository. */
 internal class VideoArtworkRepository(context:Context,private val repository:PersonalPlaylistRepository,
     http:HttpClient,scope:CoroutineScope,addressAllowed:(InetAddress)->Boolean=LogoPolicy::publicAddress) {
@@ -28,9 +33,9 @@ internal class VideoArtworkRepository(context:Context,private val repository:Per
         }
     }
     fun request(item:VideoItem,backdrop:Boolean=false,targetPx:Int=if(backdrop)1280 else 768,display:(Bitmap?)->Unit):Job=subscriptions.launch {
-        val epoch=repository.videoArtworkEpoch(item.source) ?: run {display(null);return@launch}
+        val epoch=currentEpoch(item) ?: run {display(null);return@launch}
         val key="${item.source}|$epoch|${item.id}|$backdrop|${targetPx.coerceIn(64,1280)}"
-        fun valid()=repository.videoArtworkEpoch(item.source)==epoch
+        fun valid()=currentEpoch(item)==epoch
         val hit=engine.memory.get(key)
         if(hit!=null && valid()) {
             VideoPerformance.count("art_memory_hit");display(hit.bitmap)
@@ -47,10 +52,11 @@ internal class VideoArtworkRepository(context:Context,private val repository:Per
         }finally {observer.cancel();engine.release(flight)}
     }
     fun close(){jobs.cancel()}
-    fun bindingKey(item:VideoItem,backdrop:Boolean,targetPx:Int)="${item.key}|${item.id}|${repository.videoArtworkEpoch(item.source)}|$backdrop|$targetPx"
+    private fun currentEpoch(item:VideoItem)=repository.videoArtworkEpoch(item.source)?.let {it+":"+repository.videoArtworkRevision(item)}
+    fun bindingKey(item:VideoItem,backdrop:Boolean,targetPx:Int)="${item.key}|${item.id}|${currentEpoch(item)}|$backdrop|$targetPx"
     private data class Cached(val bitmap:Bitmap,val until:Long)
     private class Transfer(val task:Deferred<ByteArray>,var readers:Int=0)
-    private class Lookup(val task:Deferred<PersonalArtwork?>,var readers:Int=0)
+    private class Lookup(val task:Deferred<VideoArtworkReference?>,var readers:Int=0)
     private class Flight(val key:String) {
         val bitmap=MutableStateFlow<Bitmap?>(null)
         val done=CompletableDeferred<Unit>()
@@ -68,7 +74,7 @@ internal class VideoArtworkRepository(context:Context,private val repository:Per
         private val active=mutableMapOf<String,Flight>()
         private val transfers=mutableMapOf<String,Transfer>()
         private val lookups=mutableMapOf<String,Lookup>()
-        private val references=object:LinkedHashMap<String,PersonalArtwork?>(128,.75f,true){override fun removeEldestEntry(entry:MutableMap.MutableEntry<String,PersonalArtwork?>?)=size>1024}
+        private val references=object:LinkedHashMap<String,VideoArtworkReference?>(128,.75f,true){override fun removeEldestEntry(entry:MutableMap.MutableEntry<String,VideoArtworkReference?>?)=size>1024}
         private val retry=object:LinkedHashMap<String,Long>(128,.75f,true){override fun removeEldestEntry(entry:MutableMap.MutableEntry<String,Long>?)=size>1024}
         private val diskGate=Any()
         private var disk:LinkedHashMap<String,Long>?=null
@@ -87,17 +93,17 @@ internal class VideoArtworkRepository(context:Context,private val repository:Per
             if(flight.readers==0 && active[flight.key]===flight){active.remove(flight.key);flight.job.cancel()}
         }
         private suspend fun load(flight:Flight,item:VideoItem,epoch:String,backdrop:Boolean,target:Int) {
-            fun valid()=repository.videoArtworkEpoch(item.source)==epoch
+            fun valid()=repository.videoArtworkEpoch(item.source)?.let {it+":"+repository.videoArtworkRevision(item)}==epoch
             val reference="${item.source}|$epoch|${item.id}|$backdrop"
             val resolved=synchronized(gate){if(references.containsKey(reference))true to references[reference] else false to null}
             val art=if(resolved.first)resolved.second else {
                 val lookup=synchronized(gate){
-                    (lookups[reference] ?: Lookup(work.async(start=CoroutineStart.LAZY){repository.videoArtwork(item,backdrop)}).also {lookups[reference]=it;it.task.start()}).also {it.readers++}
+                    (lookups[reference] ?: Lookup(work.async(start=CoroutineStart.LAZY){repository.videoArtworkReference(item,backdrop)}).also {lookups[reference]=it;it.task.start()}).also {it.readers++}
                 }
                 try {lookup.task.await().also {if(valid())synchronized(gate){references[reference]=it}}}
                 finally {synchronized(gate){lookup.readers--;if(lookup.readers==0 && lookups[reference]===lookup){lookups.remove(reference);lookup.task.cancel()}}}
             }
-            if(art==null || !valid() || !art.context.valid())return
+            if(art==null || !valid() || !art.valid())return
             val diskKey=item.source+"-"+art.cacheKey+if(backdrop)"-b" else "-p"
             val file=File(directory,"$diskKey.image")
             val cached=memory.get(flight.key)
@@ -113,24 +119,28 @@ internal class VideoArtworkRepository(context:Context,private val repository:Per
             }
             if(synchronized(gate){(retry[diskKey] ?: 0)>System.currentTimeMillis()})return
             // Network permits never block a disk hit or decoding a different cached image.
-            currentCoroutineContext().ensureActive();if(!valid() || !art.context.valid())return
+            currentCoroutineContext().ensureActive();if(!valid() || !art.valid())return
             try {
                 val bytes=transfer(diskKey,art,::valid)
                 val bitmap=decodes.withPermit {VideoPerformance.measure("art_decode"){decode(bytes,target)}}
-                currentCoroutineContext().ensureActive();if(!valid() || !art.context.valid())return
-                write(file,bytes,valid={valid() && art.context.valid()})
+                currentCoroutineContext().ensureActive();if(!valid() || !art.valid())return
+                write(file,bytes,valid={valid() && art.valid()})
                 memory.put(flight.key,Cached(bitmap,System.currentTimeMillis()+FRESH));flight.bitmap.value=bitmap
             }catch(cancelled:CancellationException){throw cancelled}catch(_:Exception){synchronized(gate){retry[diskKey]=System.currentTimeMillis()+60_000}}
         }
-        private suspend fun transfer(key:String,art:PersonalArtwork,valid:()->Boolean):ByteArray {
+        private suspend fun transfer(key:String,art:VideoArtworkReference,valid:()->Boolean):ByteArray {
             val transfer=synchronized(gate) {
                 (transfers[key] ?: Transfer(work.async(start=CoroutineStart.LAZY){downloads.withPermit {
-                    check(valid() && art.context.valid());VideoPerformance.count("art_network")
-                    val context=art.context
-                    val client=context.client(http.client,art.url,PlaylistResource.LOGO,art.headers.keys)
-                    val fetcher=LogoFetcher(client,allowed={context.allowed(URI(it.toString()),PlaylistResource.LOGO)},
-                        redirectAllowed={_,to->context.allowed(URI(to.toString()),PlaylistResource.LOGO)},addressAllowed=addressAllowed)
-                    fetcher.fetch(art.url.toHttpUrl(),headers=art.headers).bytes ?: throw java.io.IOException("Artwork unavailable")
+                    check(valid() && art.valid());VideoPerformance.count("art_network")
+                    val personal=art.personal
+                    val fetcher=if(personal!=null) {
+                        val context=personal.context
+                        LogoFetcher(context.client(http.client,art.url,PlaylistResource.LOGO,personal.headers.keys),
+                            allowed={context.allowed(URI(it.toString()),PlaylistResource.LOGO)},
+                            redirectAllowed={_,to->context.allowed(URI(to.toString()),PlaylistResource.LOGO)},addressAllowed=addressAllowed)
+                    }else LogoFetcher(http.client,allowed={it.isHttps && it.host=="image.tmdb.org"},
+                        redirectAllowed={_,to->to.isHttps && to.host=="image.tmdb.org"},addressAllowed=addressAllowed)
+                    fetcher.fetch(art.url.toHttpUrl(),headers=personal?.headers.orEmpty()).bytes ?: throw java.io.IOException("Artwork unavailable")
                 }}).also {transfers[key]=it;it.task.start()}).also {it.readers++}
             }
             try {return transfer.task.await()}finally {synchronized(gate){

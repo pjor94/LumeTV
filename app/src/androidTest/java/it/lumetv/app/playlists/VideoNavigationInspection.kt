@@ -16,6 +16,7 @@ import it.lumetv.app.MobileActivity
 import it.lumetv.app.TvActivity
 import it.lumetv.app.data.PersonalPlaylistRepository
 import it.lumetv.app.data.PlaylistSettings
+import it.lumetv.app.data.VIDEO_ARRIVALS_GROUP
 import it.lumetv.app.ui.VideoCatalogPanel
 import it.lumetv.core.PlaylistContentKind
 import kotlinx.coroutines.Dispatchers
@@ -59,7 +60,15 @@ object VideoNavigationInspection {
         fun video()=content.findViewWithTag<View>(VideoCatalogPanel.TAG)?.isShown==true
         fun grid()=content.findViewWithTag<RecyclerView>("video_grid_results")?.takeIf {it.isShown}
         fun clickTab(label:String){await("navigation $label is reachable"){main {tab(label)?.takeIf {it.isShown && it.isEnabled}?.let {if(!mobile)it.requestFocus();it.performClick()}==true}}}
-        fun click(label:String){await("action $label is reachable"){main {visible().filterIsInstance<TextView>().lastOrNull {it.isClickable && it.isEnabled && it.text.toString()==label}?.let {if(!mobile)it.requestFocus();it.performClick()}==true}}}
+        fun click(label:String) {
+            await("action $label is reachable") { main {
+                val action = visible().lastOrNull { view ->
+                    view.isClickable && view.isEnabled &&
+                        (view.contentDescription?.toString() == label || (view as? TextView)?.text?.toString() == label)
+                }
+                action?.let { if (!mobile) it.requestFocus(); it.performClick() } == true
+            }}
+        }
         fun back()=main {activity.onBackPressedDispatcher.onBackPressed()}
         await("live-only lists leave Video out of the main bar"){main {bar()!=null && tab("Video")==null && selected()==listOf("Canali")}}
         capture("00-no-video")
@@ -78,7 +87,7 @@ object VideoNavigationInspection {
                 verify(label+" keeps navigation labels on one complete line"){main {val nav=bar()!!;(0 until nav.childCount).map {nav.getChildAt(it) as ViewGroup}.all {item->val text=item.getChildAt(1) as TextView;!text.isShown || text.layout?.let {it.lineCount==1 && it.getEllipsisCount(0)==0}==true}}}
             } else {
                 verify(label+" keeps the brand, bar and clock within the TV header"){main {
-                    val header=bar()!!.parent as ViewGroup
+                    val header=bar()!!.parent.parent as ViewGroup
                     (0 until header.childCount).map {header.getChildAt(it)}.filter {it.isShown}.all {it.left>=header.paddingLeft && it.right<=header.width-header.paddingRight}
                 }}
             }
@@ -90,6 +99,10 @@ object VideoNavigationInspection {
             await("D-pad reaches Video from Canali"){main {activity.currentFocus===tab("Video")}}
             runner.sendKeyDownUpSync(KeyEvent.KEYCODE_DPAD_RIGHT)
             await("D-pad reaches Radio after Video"){main {activity.currentFocus===tab("Radio")}}
+            for(destination in listOf("Radio","Cosa guardare","Guida TV","Canali")) {
+                clickTab(destination)
+                await("$destination uses the shared TV menu"){main {!video() && selected()==listOf(destination)}}
+            }
         } else {
             for(destination in listOf("Radio","Guida","Scopri","Canali")) {
                 clickTab(destination);await("$destination remains selectable alongside Video"){main {selected()==listOf(destination)}}
@@ -99,7 +112,26 @@ object VideoNavigationInspection {
         clickTab("Video")
         await("Video is the sole selected navigation destination"){main {video() && selected()==listOf("Video")}}
         verify("the main Video destination has no header Back control"){main {content.findViewWithTag<View>("video_back")?.isShown!=true}}
+        fun arrivalsVisible() = visible().filterIsInstance<TextView>().any { it.isClickable && it.text.toString() == "Nuovi arrivi" }
+        fun homeVisible() = content.findViewWithTag<RecyclerView>("video_home")?.let { it.isShown && (it.adapter?.itemCount ?: 0) > 0 } == true
+        await("lists without arrivals load the Video library without the arrivals action"){main {homeVisible() && !arrivalsVisible()}}
         capture("02-video-active")
+        val arrivals = io {
+            val list = "#EXTM3U\n#EXTINF:-1 type=\"movie\" group-title=\"$VIDEO_ARRIVALS_GROUP\",Film appena arrivato\n$fixture/video.mp4?arrival=1\n"
+            repo.prepareFile(list.toByteArray(), allowHttp = true).use { repo.save("Cinema con arrivi", it) }
+        }
+        await("adding an arrivals film reveals the action"){main {arrivalsVisible()}}
+        click("Nuovi arrivi")
+        await("the arrivals action opens the matching film"){main {grid()?.adapter?.itemCount==1}}
+        capture("06-arrivals-visible")
+        click("Filtri");click("Tutte le liste");click("Cinema")
+        await("a list without arrivals returns to its library and hides the arrivals action"){main {homeVisible() && !arrivalsVisible()}}
+        click("Filtri");click("Cinema");click("Tutte le liste")
+        await("all lists reveal arrivals again"){main {arrivalsVisible()}}
+        click("Nuovi arrivi")
+        await("the arrivals collection is open before removing its last film"){main {grid()?.adapter?.itemCount==1}}
+        io {repo.delete(arrivals)}
+        await("removing the last arrivals film returns to the library and hides the action"){main {homeVisible() && !arrivalsVisible()}}
         click("Cerca")
         main {visible().filterIsInstance<EditText>().single {it.contentDescription=="Cerca un video"}.setText("Pellicola 2")}
         await("Video search shows its matching title"){main {grid()?.adapter?.itemCount==1}}

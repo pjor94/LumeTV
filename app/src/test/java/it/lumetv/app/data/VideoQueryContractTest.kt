@@ -21,13 +21,15 @@ class VideoQueryContractTest {
     private val prefs get()=context.getSharedPreferences("lume",0)
     private val store get()=PersonalPlaylistStore(File(context.filesDir,"personal-playlists"))
     @Before fun reset(){File(context.filesDir,"personal-playlists").deleteRecursively();File(context.filesDir,"personal-watch.sqlite").delete();prefs.edit().clear().commit()}
-    private fun list()=buildString {appendLine("#EXTM3U");repeat(32){i->
+    private fun list(withArrivals:Boolean=false)=buildString {appendLine("#EXTM3U");repeat(32){i->
         val kind=when(i%4){0->"movie";1,2->"series";else->"live"}
         val title=if(kind=="series")"Orbita ${i/12} S0${i%2+1}E${(i+1).toString().padStart(2,'0')}" else "Film 100%_ ${31-i}"
-        appendLine("#EXTINF:-1 type=\"$kind\" group-title=\"${if(i%2==0)"A" else "B"}\" plot=\"Test\",$title");appendLine("https://example.org/$i.mp4")
+        val group = if (withArrivals && i < 8 && kind != "live") VIDEO_ARRIVALS_GROUP else if (i % 2 == 0) "A" else "B"
+        appendLine("#EXTINF:-1 type=\"$kind\" group-title=\"$group\" plot=\"Test\",$title");appendLine("https://example.org/$i.mp4")
     }}.toByteArray()
     private data class Expected(val total:Int,val rows:List<Triple<String,String,Pair<Int,Boolean>>>)
-    private fun reference(repo:PersonalPlaylistRepository,q:VideoQuery):Expected {
+    private fun reference(repo:PersonalPlaylistRepository,query:VideoQuery):Expected {
+        val q = if (query.shelf == VideoShelf.ARRIVALS) query.copy(group = VIDEO_ARRIVALS_GROUP, kind = VodKind.MOVIE) else query
         val sources=repo.state.value.filter {it.id in repo.videoSources.value && (q.source==null || q.source==it.id)}.map {store.read(it.id)!!}
         if(sources.isEmpty())return Expected(0,emptyList())
         return SQLiteDatabase.openDatabase(store.file(sources.first().source.id).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
@@ -58,7 +60,7 @@ class VideoQueryContractTest {
         }
     }
     @Test fun `indexed queries preserve representatives counts saved flags and global ordering across combined filters`()=runBlocking {
-        val repo=PersonalPlaylistRepository(context);val first=repo.save("Mista",repo.prepareFile(list()))
+        val repo=PersonalPlaylistRepository(context);val first=repo.save("Mista",repo.prepareFile(list(withArrivals = true)))
         val forced=repo.save("Forzata",repo.prepareFile(list(),settings=PlaylistSettings(contentOverride=PlaylistContentKind.VOD)))
         repo.save("Esclusa",repo.prepareFile(list(),settings=PlaylistSettings(contentOverride=PlaylistContentKind.LIVE)))
         // Simulate old episodes without an added date mixed with episodes added in later refreshes.

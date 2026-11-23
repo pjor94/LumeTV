@@ -56,6 +56,7 @@ jobs:
       - name: Build optimized APK and dependency manifest
         env:
           ORG_GRADLE_PROJECT_auraTrustedCertificateSha256: ${{ vars.AURA_TRUSTED_CERTIFICATE_SHA256 }}
+          TMDB_READ_ACCESS_TOKEN: ${{ secrets.TMDB_READ_ACCESS_TOKEN }}
         run: ./gradlew :app:assembleRelease :app:writeReleaseDependencies --no-daemon
       - name: Verify licenses and collect matching dependency sources
         run: python3 tools/dependency_sources.py fetch --report app/build/reports/release-dependencies.json

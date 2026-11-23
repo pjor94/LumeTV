@@ -18,6 +18,7 @@ internal class PrivateGuideEvent(val programme:Programme,val catchupId:String,va
 }
 data class GuideChannelOption(val id:String,val name:String) {override fun toString()=name}
 internal data class GuideMapping(val feed:Int,val xmlId:String)
+internal data class LiveGuideRows(val programmes: Map<String, Programme>, val manual: Set<String>)
 internal class GuideImport(val file:File,val rows:Int,val matches:Int) : AutoCloseable {
     override fun close(){file.delete();File(file.path+"-journal").delete()}
 }
@@ -57,6 +58,10 @@ internal class PersonalGuideStore(private val directory:File) {
     fun state(source:String,state:GuideFeedState)=open(source).use {db->putState(db,state)}
     private fun putState(db:SQLiteDatabase,s:GuideFeedState) {db.execSQL("INSERT OR REPLACE INTO feeds VALUES(?,?,?,?,?,?,?,?,?,?,?)",arrayOf<Any?>(s.id,s.signature,s.updated,s.attempted,s.retry,s.etag,s.modified,s.error,s.rows,s.serverRetry,s.urlHash))}
     fun mappings(source:String):Map<String,GuideMapping> = open(source).use {db->db.rawQuery("SELECT channel,feed,xml FROM manual",null).use {c->buildMap {while(c.moveToNext())put(c.getString(0),GuideMapping(c.getInt(1),c.getString(2)))}}}
+    fun manualMapping(source:String,channel:String):GuideMapping? {
+        if(!file(source).exists())return null
+        return open(source).use {db->db.rawQuery("SELECT feed,xml FROM manual WHERE channel=?",arrayOf(channel)).use {if(it.moveToFirst())GuideMapping(it.getInt(0),it.getString(1)) else null}}
+    }
     fun mapping(source:String,channel:String,feed:Int?,xml:String="")=open(source).use {db->
         db.beginTransaction();try {
             db.execSQL("DELETE FROM manual WHERE channel=?",arrayOf<Any?>(channel));db.execSQL("DELETE FROM bindings WHERE channel=?",arrayOf<Any?>(channel))
@@ -188,6 +193,36 @@ internal class PersonalGuideStore(private val directory:File) {
                 putState(db,state.copy(rows=draft.rows,urlHash=if(draft.rows==0 && previousRows>0)previousUrl.orEmpty() else state.urlHash,
                     error=if(draft.rows==0)"Nessun programma associato. Verifica l’intervallo o associa i canali manualmente." else ""));db.setTransactionSuccessful()
             }finally {db.endTransaction()}}finally {db.execSQL("DETACH DATABASE incoming")}
+        }
+    }
+
+    fun onAir(source: String, ids: List<String>, now: Long): LiveGuideRows {
+        val database = file(source)
+        if (ids.isEmpty() || !database.exists()) return LiveGuideRows(emptyMap(), emptySet())
+        return SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            val placeholders = ids.joinToString(",") { "?" }
+            val manual = db.rawQuery("SELECT channel FROM manual WHERE channel IN ($placeholders)", ids.toTypedArray()).use { cursor ->
+                buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
+            }
+            val args = (listOf(now.toString(), now.toString()) + ids).toTypedArray()
+            val programmes = db.rawQuery("""
+                SELECT b.channel, p.title, p.start + b.shift, p.end + b.shift
+                FROM bindings b JOIN programmes p ON p.rowid = (
+                    SELECT live.rowid FROM programmes live WHERE live.feed = b.feed AND live.xml = b.xml
+                    AND live.start <= ? - b.shift AND live.end > ? - b.shift
+                    AND live.end > live.start AND live.start + b.shift > 0 AND trim(live.title) <> ''
+                    ORDER BY live.start DESC, live.rowid LIMIT 1
+                )
+                WHERE b.channel IN ($placeholders)
+                AND b.feed = (SELECT MIN(feed) FROM bindings WHERE channel = b.channel)
+            """.trimIndent(), args).use { cursor ->
+                buildMap {
+                    while (cursor.moveToNext()) {
+                        put(cursor.getString(0), Programme(cursor.getString(1), cursor.getLong(2), cursor.getLong(3), sourceId = source))
+                    }
+                }
+            }
+            LiveGuideRows(programmes, manual)
         }
     }
 

@@ -239,14 +239,25 @@ internal class PersonalBackupRepository(
                         }
                         previous=changes.keys.associateWith {prefs.all[it]}
                         progress("Applico il ripristino…")
+                        val metadata=JSONArray().apply {
+                            if(BackupCategory.PERSONAL in selection) {
+                                val rows=preview.personal.optJSONArray("metadata") ?: JSONArray()
+                                for(i in 0 until rows.length()) {
+                                    val row=rows.getJSONObject(i);val key=row.getString("key")
+                                    if(row.getString("source") in sourceIds && (key.startsWith("s:") || eligible(key.removePrefix("i:"))))put(row)
+                                }
+                            }
+                        }
+                        VideoMetadataStore(app).use {metadataStore->metadataStore.restoreWithChoices(metadata,sourceIds) {
                         history.restoreMissing(watches) {imported,skipped->
                             ignored+=skipped
                             if(!commitPreferences(changes))throw IOException("Impossibile salvare le impostazioni. Riprova.")
                             commit()
                             BackupRestoreResult(added,kept,favoriteCount,imported,ignored,BackupCategory.PREFERENCES in selection)
                         }
+                        }}
                     }
-                }.also {runCatching {IntegrationStore.changed(app)}}
+                }.also {repository.metadataRestored();runCatching {IntegrationStore.changed(app)}}
             }catch(error:Exception) {
                 previous?.let {before->synchronized(IntegrationStore.cacheLock){commitPreferences(before)}}
                 if(error is CancellationException)throw error

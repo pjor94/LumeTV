@@ -19,6 +19,10 @@ class HomeInspection : Instrumentation() {
             check(Build.HARDWARE in setOf("ranchu", "goldfish")) { "Only disposable emulators are supported" }
             check(Build.VERSION.SDK_INT >= 26)
             val context = targetContext
+            if(arguments.getString("operation")=="vod-player") {
+                val result=it.lumetv.app.playback.VodPlayerInspection.run(this,arguments)
+                finish(Activity.RESULT_OK,Bundle().apply {putString("snapshot",result.toString())});return
+            }
             if(arguments.getString("operation")=="companion") {
                 val result=it.lumetv.app.companion.CompanionInspection.run(this,arguments)
                 finish(Activity.RESULT_OK,Bundle().apply {putString("snapshot",result.toString())});return
@@ -40,6 +44,8 @@ class HomeInspection : Instrumentation() {
                 else if(arguments.getString("operation")=="playlist-continuous")it.lumetv.app.playlists.ContinuousCatalogInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-vod-detection")it.lumetv.app.playlists.VodDetectionInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-library")it.lumetv.app.playlists.VideoLibraryInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-video-metadata")it.lumetv.app.playlists.VideoMetadataInspection.run(this,arguments)
+                else if(arguments.getString("operation")=="playlist-video-trailer")it.lumetv.app.playlists.VideoTrailerInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-navigation")it.lumetv.app.playlists.VideoNavigationInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-continuity")it.lumetv.app.playlists.VideoContinuityInspection.run(this,arguments)
                 else if(arguments.getString("operation")=="playlist-video-performance")it.lumetv.app.playlists.VideoPerformanceInspection.run(this,arguments)

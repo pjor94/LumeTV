@@ -47,6 +47,7 @@ class MobilePlaybackView(
     stop: () -> Unit,
 ) : FrameLayout(context) {
     var onPlaybackOptions: () -> Unit = {}
+    var onWatchOnTv:()->Unit={}
     val video = PlayerView(context).apply {
         useController = false
         setBackgroundColor(Color.BLACK)
@@ -55,7 +56,13 @@ class MobilePlaybackView(
         setOnClickListener { setControlsVisible(controls.visibility != VISIBLE) }
     }
     private val controls = FrameLayout(context)
-    val onDemand=it.lumetv.app.ui.OnDemandControls(context).apply { showOptions = false }
+    val onDemand=it.lumetv.app.ui.OnDemandControls(context,false)
+    var canAutoHide:()->Boolean={true}
+    private val auxiliaryActions=LinearLayout(context)
+    private var lastInteraction=0L
+    private var demandMode=false
+    private var scrubbing=false
+    private var externalBlocked=false
     private val channelName = TvStyle.text(context, "", 16f, bold = true).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
     private val title = TvStyle.text(context, "", 21f, bold = true).apply { maxLines = 3; ellipsize = TextUtils.TruncateAt.END }
     private val timing = TvStyle.text(context, "", 13f, TvStyle.accent).apply { fontFeatureSettings = "tnum" }
@@ -63,6 +70,7 @@ class MobilePlaybackView(
     private val favorite = MobileStyle.icon(context, R.drawable.ic_mobile_heart, "Aggiungi ai preferiti", toggleFavorite)
     private val expand = MobileStyle.icon(context, R.drawable.ic_mobile_expand, "Schermo intero", fullscreen)
     val pipButton = MobileStyle.icon(context, R.drawable.ic_mobile_pip, "Picture in Picture", pip)
+    private val watchButton=MobileStyle.icon(context,R.drawable.ic_mobile_tv_send,"Guarda sulla TV"){onWatchOnTv()}.apply {tag="player_watch_tv"}
     private val audioView = AudioPlaybackView(context, logos, false, back, togglePause, previous, next, toggleFavorite, stop, retry, audioMode).apply {
         onPlaybackOptions = { this@MobilePlaybackView.onPlaybackOptions() }
     }
@@ -84,9 +92,14 @@ class MobilePlaybackView(
     private var failed = false
     private var audio = false
     private var inPip = false
-    private val hideControls = Runnable { if (playing && !busy && !failed) setControlsVisible(false) }
+    private val hideControls = Runnable { if (playing && !busy && !failed && !scrubbing && !onDemand.holdingControls && canAutoHide()) setControlsVisible(false) }
 
     init {
+        onDemand.onInteraction={noteInteraction()}
+        onDemand.onPlaybackOptions={onPlaybackOptions()}
+        onDemand.onAudioMode=audioMode
+        onDemand.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->updateSubtitleArea()}
+        video.subtitleView?.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->updateSubtitleArea()}
         setBackgroundColor(Color.BLACK)
         addView(video, LayoutParams(-1, -1))
         val top = LinearLayout(context).apply {
@@ -97,6 +110,7 @@ class MobilePlaybackView(
         top.addView(MobileStyle.icon(context, R.drawable.ic_mobile_back, "Torna al catalogo", back), LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
         top.addView(channelName, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = context.dp(4) })
         top.addView(favorite, LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
+        top.addView(watchButton,LinearLayout.LayoutParams(context.dp(48),context.dp(48)))
         top.addView(pipButton, LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
         top.addView(expand, LinearLayout.LayoutParams(context.dp(48), context.dp(48)))
         controls.addView(top, LayoutParams(-1, -2, Gravity.TOP))
@@ -129,7 +143,7 @@ class MobilePlaybackView(
         bottom.addView(description, LinearLayout.LayoutParams(-1, -2).apply { topMargin = context.dp(4) })
         bottom.addView(progress, LinearLayout.LayoutParams(-1, context.dp(2)).apply { topMargin = context.dp(14); bottomMargin = context.dp(8) })
         bottom.addView(onDemand,LinearLayout.LayoutParams(-1,-2))
-        val actions = LinearLayout(context)
+        val actions = auxiliaryActions
         actions.addView(MobileStyle.button(context, "Canali", action = channelPicker), LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(MobileStyle.button(context, "Solo audio", action = audioMode), LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(optionsButton, LinearLayout.LayoutParams(0, -2, 1f))
@@ -184,16 +198,19 @@ class MobilePlaybackView(
     }
 
     fun ready(isPlaying: Boolean) {
+        val recovered=busy || failed
         busy = false; failed = false
         loading.visibility = GONE; error.visibility = GONE; centerControls.visibility = VISIBLE
         setPlaying(isPlaying)
+        if(recovered){lastInteraction=android.os.SystemClock.uptimeMillis();scheduleHide()}
     }
 
     fun setPlaying(value: Boolean) {
+        val changed=playing!=value
         playing = value
         play.setImageResource(if (value) R.drawable.ic_mobile_pause else R.drawable.ic_mobile_play)
         play.contentDescription = if (value) "Pausa" else "Riprendi la diretta"
-        if (!value) setControlsVisible(true) else scheduleHide()
+        if(changed){if (!value) setControlsVisible(true) else {lastInteraction=android.os.SystemClock.uptimeMillis();scheduleHide()}}
     }
 
     fun showError(message: String) {
@@ -212,16 +229,26 @@ class MobilePlaybackView(
 
     fun setControlsVisible(visible: Boolean) {
         removeCallbacks(hideControls)
-        controls.visibility = if (inPip || audio) GONE else if (visible || !playing || busy || failed) VISIBLE else GONE
+        if(visible)lastInteraction=android.os.SystemClock.uptimeMillis()
+        controls.visibility = if (inPip || audio) GONE else if (visible || busy || failed) VISIBLE else GONE
+        video.post {updateSubtitleArea()}
         if (controls.visibility == VISIBLE) scheduleHide()
     }
 
-    fun stopTimers() { removeCallbacks(hideControls) }
+    fun stopTimers() { onDemand.cancelSeek();removeCallbacks(hideControls) }
     fun renderState(state: PlaybackSnapshot, preferred: Boolean) {
+        val blocked=!canAutoHide()
+        if(externalBlocked && !blocked)noteInteraction()
+        externalBlocked=blocked
+        watchButton.visibility=if(state.mode==it.lumetv.core.PlaybackMode.ARCHIVE)GONE else VISIBLE
         optionsButton.text = if (state.options.sleepRemaining > 0) "Timer · " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining).substringBefore(" rimanenti") else "Opzioni"
         optionsButton.contentDescription = if (state.options.sleepRemaining > 0) "Opzioni riproduzione, timer: " + it.lumetv.app.playback.sleepTimerLabel(state.options.sleepRemaining) else "Opzioni riproduzione"
         onDemand.render(state)
         val demand=state.mode!=it.lumetv.core.PlaybackMode.LIVE
+        demandMode=demand;auxiliaryActions.visibility=if(demand)GONE else VISIBLE
+        video.contentDescription=(if(demand)"Video" else "Diretta")+" · Tocca per mostrare o nascondere i comandi"
+        channelName.visibility=if(demand)INVISIBLE else VISIBLE
+        if(demand)centerControls.visibility=GONE
         if(demand)play.contentDescription=if(state.ended)"Rivedi il video" else if(state.wantsToPlay)"Pausa" else "Riprendi il video"
         centerControls.getChildAt(0).visibility=if(demand)GONE else VISIBLE
         centerControls.getChildAt(2).visibility=if(demand)GONE else VISIBLE
@@ -234,7 +261,9 @@ class MobilePlaybackView(
         if (audio) { audioView.bind(state, preferred); controls.visibility = GONE; loading.visibility = GONE; error.visibility = GONE }
         video.visibility = if (audio) GONE else VISIBLE
         if (inPip) { controls.visibility = GONE; loading.visibility = GONE; error.visibility = GONE }
+        updateSubtitleArea()
     }
+    private fun updateSubtitleArea(){it.lumetv.app.ui.keepSubtitlesAbove(video,if(demandMode && controls.visibility==VISIBLE)onDemand.subtitleBoundary else null)}
     fun restoreVideo() {
         if (video.parent !== this) {
             (video.parent as? ViewGroup)?.removeView(video)
@@ -242,6 +271,7 @@ class MobilePlaybackView(
         }
     }
     fun setInPip(value: Boolean) {
+        if(value)onDemand.cancelSeek()
         inPip = value
         setControlsVisible(!value)
         if (value) { loading.visibility = GONE; error.visibility = GONE; audioView.visibility = GONE }
@@ -249,7 +279,16 @@ class MobilePlaybackView(
     private fun scheduleHide() {
         removeCallbacks(hideControls)
         val accessibility = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        if (playing && !busy && !failed && !accessibility.isTouchExplorationEnabled) postDelayed(hideControls, 5_000)
+        if (controls.visibility==VISIBLE && playing && !busy && !failed && !scrubbing && !onDemand.holdingControls && canAutoHide() && !accessibility.isTouchExplorationEnabled)
+            postDelayed(hideControls,(5_000-(android.os.SystemClock.uptimeMillis()-lastInteraction)).coerceAtLeast(0))
+    }
+    fun noteInteraction(){lastInteraction=android.os.SystemClock.uptimeMillis();scheduleHide()}
+    fun setScrubbing(value:Boolean){scrubbing=value;if(value)removeCallbacks(hideControls) else noteInteraction()}
+    fun handleBack():Boolean {
+        if(!demandMode)return false
+        if(onDemand.isScrubbing)return onDemand.handleBack()
+        if(controls.visibility==VISIBLE && !busy && !failed){setControlsVisible(false);return true}
+        return false
     }
     private fun landscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     private fun time(value: Long) = SimpleDateFormat("HH:mm", Locale.ITALY).format(Date(value))

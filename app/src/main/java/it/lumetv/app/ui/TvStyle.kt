@@ -50,13 +50,15 @@ object TvStyle {
         includeFontPadding = false
         if (size >= 28f) letterSpacing = -0.035f
     }
+    internal fun animationsEnabled(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
+        else Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
+
     fun focusMotion(view: View, focused: Boolean, scale: Float = 1.04f) {
         // Retarget the current presentation rather than queueing focus animations.
-        val animations = if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
-        else Settings.Global.getFloat(view.context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
         view.animate().cancel()
         val target = if (focused) scale else 1f
-        if (!animations) { view.scaleX = target; view.scaleY = target }
+        if (!animationsEnabled(view.context)) { view.scaleX = target; view.scaleY = target }
         else view.animate().scaleX(target).scaleY(target).setDuration(180)
             .setInterpolator(DecelerateInterpolator(1.5f)).start()
     }

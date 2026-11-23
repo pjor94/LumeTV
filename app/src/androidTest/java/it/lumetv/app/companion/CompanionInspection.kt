@@ -72,7 +72,7 @@ object CompanionInspection {
         }==true}}
         fun click(label:String){await("action: $label"){
             all(content()).lastOrNull {it.isShown && it.isClickable && it.isEnabled &&
-                (it is TextView && it.text.toString()==label || it.contentDescription?.toString()==label || it.contentDescription?.toString()?.startsWith(label+":")==true)}?.let {
+                (it is TextView && it.text.toString()==label || it.contentDescription?.toString()==label || it.contentDescription?.toString()?.startsWith(label+":")==true || it.contentDescription?.toString()?.startsWith(label+", ")==true)}?.let {
                 it.requestRectangleOnScreen(Rect(0,0,it.width,it.height),true);if(!phone)it.requestFocusFromTouch();it.performClick();true
             }==true
         }}
@@ -146,6 +146,7 @@ object CompanionInspection {
                 var focusChanges=0
                 val focusObserver=android.view.ViewTreeObserver.OnGlobalFocusChangeListener {_,_->focusChanges++}
                 var finished=false
+                var blockedLookup:kotlinx.coroutines.sync.Mutex?=null
                 while(!finished) {
                     val command=network("/actions")
                     if(!command.has("action")){Thread.sleep(100);continue}
@@ -171,6 +172,59 @@ object CompanionInspection {
                             }
                             "nav-capture"->capture("tv-phone-navigation")
                             "nav-capture-options"->capture("tv-phone-options")
+                            "playlist-state"->io {
+                                repo.local()
+                                details.put("count",repo.state.value.size)
+                                val received=repo.state.value.firstOrNull {it.name=="Lista dal telefono"}
+                                details.put("received",received?.count ?: 0)
+                                details.put("accessPreserved",received?.let {repo.settings(it.id).rule(PlaylistResource.MEDIA).headers["Authorization"]=="private-transfer-header"}==true)
+                                details.put("originalPlayback",player.snapshot.channel?.id==rows.first {it.name=="Prima diretta"}.id)
+                            }
+                            "playlist-capture"->{
+                                main {(field("playlists") as it.lumetv.app.ui.PersonalPlaylistsScreen).show()}
+                                await("received playlist appears in the TV's real list management"){text("Lista dal telefono")}
+                                capture("tv-received-playlist")
+                                main {(field("playlists") as it.lumetv.app.ui.PersonalPlaylistsScreen).hide()}
+                            }
+                            "watch-state"->main {
+                                val state=player.snapshot
+                                details.put("id",state.channel?.id.orEmpty()).put("source",state.channel?.sourceId.orEmpty())
+                                    .put("title",state.channel?.name.orEmpty()).put("position",state.position).put("playing",state.playing)
+                                    .put("mode",state.mode.name).put("fullscreen",!field("showingCatalog").let {it as Boolean})
+                                    .put("backup",(field("backup") as it.lumetv.app.ui.PersonalBackupScreen).isShowing)
+                                    .put("playbackOptions",(field("playbackOptions") as it.lumetv.app.ui.PlaybackOptionsPanel).isShowing)
+                            }
+                            "watch-modal"->main {activity.javaClass.getDeclaredMethod("showExitConfirmation").apply {isAccessible=true}.invoke(activity)}
+                            "watch-dismiss-modal"->main {(field("exitDialog") as? android.app.Dialog)?.dismiss()}
+                            "watch-stage-old-launch"->{
+                                val mutex=repo.javaClass.getDeclaredField("mutex").apply {isAccessible=true}.get(repo) as kotlinx.coroutines.sync.Mutex
+                                io {mutex.lock()};blockedLookup=mutex
+                                main {
+                                    (field("launchQueue") as it.lumetv.app.integration.LaunchQueue).replace(it.lumetv.app.integration.LaunchRequest.ChannelId(rows.first {it.name=="Seconda diretta"}.id))
+                                    activity.javaClass.getDeclaredMethod("consumeLaunchRequest").apply {isAccessible=true}.invoke(activity)
+                                }
+                            }
+                            "watch-backup"->main {
+                                (field("launchQueue") as it.lumetv.app.integration.LaunchQueue).replace(it.lumetv.app.integration.LaunchRequest.ChannelId(rows.first {it.name=="Seconda diretta"}.id))
+                                (field("backup") as it.lumetv.app.ui.PersonalBackupScreen).show()
+                            }
+                            "watch-release-old-launch"->{
+                                blockedLookup?.unlock();blockedLookup=null;Thread.sleep(700)
+                                main {details.put("pending",(field("launchQueue") as it.lumetv.app.integration.LaunchQueue).pending!=null)}
+                            }
+                            "watch-playback-options"->main {(field("playbackOptions") as it.lumetv.app.ui.PlaybackOptionsPanel).show()}
+                            "watch-list-off","watch-list-on"->io {
+                                val source=repo.state.value.first {it.name=="Lista dal telefono"}
+                                repo.setEnabled(source.id,action=="watch-list-on")
+                            }
+                            "watch-history"->io {
+                                val source=repo.state.value.first {it.name=="Lista dal telefono"}
+                                val history=PersonalPlaybackStore.get(context)
+                                repo.videos(VideoQuery(source=source.id,collapseSeries=false)).rows.forEach {item->
+                                    history.write(source.id,it.lumetv.core.PlaybackTarget(item.id,it.lumetv.core.PlaybackMode.VOD),90_000,180_000)
+                                }
+                            }
+                            "watch-capture"->capture("tv-watch-video")
                             "paired"->{
                                 verify("QR scan authorizes exactly one phone without a TV approval request"){controller.store.peers().size==1 && controller.pending()==null}
                                 verify("QR scan never presents a Consenti button"){content().findViewWithTag<View>("companion_approve")==null}
@@ -201,6 +255,7 @@ object CompanionInspection {
                     }.getOrElse {JSONObject().put("ok",false).put("error",it.toString())}
                     network("/done",answer.put("request",command.getInt("request")))
                 }
+                blockedLookup?.unlock()
                 main {content().viewTreeObserver.removeOnGlobalFocusChangeListener(focusObserver);controller.enabled(false);screen.hide()}
             } else {
                 val screen=field("companion") as CompanionPhoneScreen
@@ -215,6 +270,14 @@ object CompanionInspection {
                     it.command("untrusted:0","navigate",JSONObject().put("key","home"))
                 }}.exceptionOrNull()}
                 verify("unpaired phone cannot navigate the TV"){unauthenticatedNavigation is CompanionFailure && unauthenticatedNavigation.status==401}
+                val unauthorizedWatch=io {runCatching {CompanionClient(endpoint,invite.getString("pin"),"00".repeat(32)).use {
+                    it.exchange("/v1/watch/resolve",JSONObject().put("id",java.util.UUID.randomUUID().toString()).put("reference",JSONObject()),true)
+                }}.exceptionOrNull()}
+                verify("unpaired phones cannot request playback on the TV"){unauthorizedWatch is CompanionFailure && unauthorizedWatch.status==401}
+                val unpairedTransfer=io {runCatching {CompanionClient(endpoint,invite.getString("pin"),"00".repeat(32)).use {
+                    it.exchange("/v1/playlists/start",JSONObject().put("id",java.util.UUID.randomUUID().toString()).put("name","Una lista").put("size",1).put("sha256","00".repeat(32)),true)
+                }}.exceptionOrNull()}
+                verify("an unpaired phone cannot stage a playlist on the TV"){unpairedTransfer is CompanionFailure && unpairedTransfer.status==401}
                 capture("phone-entry")
                 val cancelledScan=runner.addMonitor(it.lumetv.app.ui.CompanionCaptureActivity::class.java.name,
                     Instrumentation.ActivityResult(android.app.Activity.RESULT_CANCELED,null),true)
@@ -270,6 +333,154 @@ object CompanionInspection {
                 }
                 verify("last TV selection is retained"){CompanionStore(context).lastTelevision==saved.endpoint.id}
                 capture("phone-remote-reconnect")
+                verify("older TV update instructions are included in the sender's accessible label") {
+                    val state=screen.javaClass.getDeclaredField("latest").apply {isAccessible=true}.get(screen) as JSONObject
+                    val render=screen.javaClass.getDeclaredMethod("renderRemote").apply {isAccessible=true}
+                    try {
+                        state.put("playlistTransferSupported",false);render.invoke(screen)
+                        val row=content().findViewWithTag<View>("companion_send_lists_entry")
+                        !row.isEnabled && row.contentDescription.toString().contains("Aggiorna Lume sulla TV")
+                    }finally {state.put("playlistTransferSupported",true);render.invoke(screen)}
+                }
+                main {
+                    // Reproduce discovery replacing a saved endpoint after a network/port change.
+                    val stale=saved.copy(endpoint=saved.endpoint.copy(port=if(saved.endpoint.port==65535)65534 else saved.endpoint.port+1))
+                    screen.javaClass.getDeclaredMethod("connect",SavedTelevision::class.java).apply {isAccessible=true}.invoke(screen,stale)
+                    screen.javaClass.getDeclaredMethod("stopPolling").apply {isAccessible=true}.invoke(screen)
+                    screen.javaClass.getDeclaredField("target").apply {isAccessible=true}.set(screen,saved)
+                    screen.javaClass.getDeclaredMethod("startPolling").apply {isAccessible=true}.invoke(screen)
+                }
+                await("remote reconnects after discovery replaces a stale TV endpoint"){text("Collegato")}
+                io {repo.local();repo.state.value.toList().forEach {repo.delete(it.id)}}
+                clickTag("companion_send_lists_entry")
+                await("empty sender explains where to add a local playlist"){text("Non ci sono liste da inviare")}
+                capture("phone-send-empty")
+                main {screen.handleBack()}
+                io {
+                    val input=buildString {
+                        appendLine("#EXTM3U")
+                        repeat(650){index->
+                            val name=when(index){640->"Film dal telefono";641->"Cosmo S01E01";642->"Cosmo S01E02";else->"Canale telefono ${index+1}"}
+                            appendLine("#EXTINF:-1 type=\"${if(index in 640..642)if(index==640)"movie" else "episode" else "live"}\",$name")
+                            appendLine("$root/video.mp4?private-transfer-token=${java.util.UUID.randomUUID()}${java.util.UUID.randomUUID()}")
+                        }
+                    }
+                    repo.prepareFile(input.toByteArray(),allowHttp=true,settings=PlaylistSettings(
+                        access=mapOf(PlaylistResource.MEDIA to PlaylistAccessRule(mapOf("Authorization" to "private-transfer-header"))),
+                        guide=PersonalGuideSettings(enabled=false))).use {repo.save("Lista dal telefono",it)}
+                }
+                fun senderReady()=content().findViewWithTag<View>("companion_send_import")?.let {it.isShown && it.isEnabled}==true
+                clickTag("companion_send_lists_entry")
+                await("saved phone playlists are selectable for the paired TV"){content().findViewWithTag<View>("companion_send_source")?.isShown==true}
+                capture("phone-send-lists");clickTag("companion_send_source")
+                await("the phone shows a full playlist preview prepared on the paired TV"){senderReady() && text("650 voci pronte")}
+                verify("the sender uses the reconnected TV endpoint"){senderReady()}
+                verify("a prepared transfer never imports without confirmation"){io {control("playlist-state")}.getInt("count")==1}
+                capture("phone-send-preview")
+                main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+                await("playlist preview adapts to a landscape phone"){context.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+                capture("phone-send-landscape")
+                main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+                await("playlist preview returns to portrait"){context.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+                clickTag("companion_send_cancel")
+                verify("cancelling the preview keeps TV lists untouched"){io {control("playlist-state")}.getInt("count")==1}
+                main {screen.handleBack()}
+                clickTag("companion_send_lists_entry");clickTag("companion_send_source")
+                await("a cancelled transfer can be started again"){senderReady()}
+                enter("companion_send_name","Rete locale test");clickTag("companion_send_import")
+                await("duplicate TV names remain editable without replacing the existing list"){senderReady() && text("Sulla TV esiste già una lista")}
+                capture("phone-send-name-conflict")
+                enter("companion_send_name","Lista dal telefono");clickTag("companion_send_import")
+                await("explicit confirmation completes the import on the TV"){content().findViewWithTag<View>("companion_send_done")?.isShown==true && text("Lista importata")}
+                capture("phone-send-complete")
+                verify("all entries and private access settings reach the TV without interrupting playback") {
+                    io {control("playlist-state")}.let {it.getInt("count")==2 && it.getInt("received")==650 && it.getBoolean("accessPreserved") && it.getBoolean("originalPlayback")}
+                }
+                check(control("playlist-capture").getBoolean("ok"))
+                clickTag("companion_send_done");main {screen.handleBack()}
+                await("finishing the sender returns to the working remote"){content().findViewWithTag<View>("companion_remote")?.isShown==true && text("Collegato")}
+                val phonePlayer=field("player") as TvPlayer
+                fun tvWatch()=io {control("watch-state")}
+                fun watchReady()=content().findViewWithTag<TextView>("companion_watch_start")?.let {it.isShown && it.isEnabled && it.text.toString()=="Guarda sulla TV"}==true
+                main {screen.handleBack()}
+                val builtin=(field("channels") as List<*>).filterIsInstance<it.lumetv.core.Channel>().first {it.name=="TV Test 1"}
+                fun local(channel:it.lumetv.core.Channel) {main {
+                    activity.javaClass.getDeclaredMethod("selectChannel",it.lumetv.core.Channel::class.java,Boolean::class.javaPrimitiveType,String::class.java)
+                        .apply {isAccessible=true}.invoke(activity,channel,false,null)
+                }}
+                local(builtin);await("phone starts its local live fixture"){phonePlayer.snapshot.playing}
+                capture("phone-watch-player-entry")
+                clickTag("player_watch_tv");await("watch action verifies the integrated channel on the paired TV"){watchReady()}
+                verify("read-only watch preview keeps the phone playing and preserves TV content") {
+                    phonePlayer.snapshot.playing && tvWatch().getString("title")=="Prima diretta"
+                }
+                capture("phone-watch-live-ready")
+                check(control("watch-modal").getBoolean("ok"));clickTag("companion_watch_start")
+                await("an existing TV modal rejects handoff while preserving the local player"){text("Chiudi la finestra aperta sulla TV") && phonePlayer.snapshot.playing}
+                capture("phone-watch-modal")
+                check(control("watch-dismiss-modal").getBoolean("ok"))
+                check(control("watch-stage-old-launch").getBoolean("ok"));check(control("watch-backup").getBoolean("ok"))
+                clickTag("companion_watch_start");await("handoff can be verified again after closing a TV modal"){watchReady()}
+                clickTag("companion_watch_start")
+                await("confirmed live handoff starts the TV and opens the phone remote") {
+                    tvWatch().let {it.getString("title")==builtin.name && it.getBoolean("playing") && it.getBoolean("fullscreen") && !it.getBoolean("backup")} &&
+                        phonePlayer.snapshot.channel==null && content().findViewWithTag<View>("companion_remote")?.isShown==true
+                }
+                verify("handoff consumes the queued launch before restoring normal TV UI"){!io {control("watch-release-old-launch")}.getBoolean("pending")}
+                verify("an older delayed channel lookup cannot replace the confirmed TV handoff"){tvWatch().getString("title")==builtin.name}
+                main {screen.handleBack()}
+                main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+                await("video sheet returns to portrait after a live handoff"){context.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+                val phoneSource=repo.state.value.single()
+                io {repo.videoMetadata.setEnabled(false)}
+                val film=io {repo.videos(VideoQuery(source=phoneSource.id,text="Film dal telefono",collapseSeries=false)).rows.single()}
+                io {PersonalPlaybackStore.get(context).write(phoneSource.id,it.lumetv.core.PlaybackTarget(film.id,it.lumetv.core.PlaybackMode.VOD),42_000,180_000)}
+                check(control("watch-history").getBoolean("ok"))
+                click("Video");click("Film dal telefono")
+                await("video detail exposes the watch-on-TV action without local playback"){content().findViewWithTag<View>("video_watch_tv")?.isShown==true}
+                capture("phone-watch-video-detail")
+                clickTag("video_watch_tv");await("saved video is matched despite different local channel IDs"){watchReady()}
+                capture("phone-watch-video-ready")
+                main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+                await("watch confirmation fits a landscape phone"){context.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+                capture("phone-watch-landscape")
+                main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+                await("watch confirmation returns to portrait"){context.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT}
+                check(control("watch-playback-options").getBoolean("ok"))
+                clickTag("companion_watch_start")
+                await("TV resumes the requested video at the phone position instead of its own history") {
+                    tvWatch().let {it.getString("title")==film.title && it.getBoolean("playing") && it.getLong("position") in 40_000..58_000 && it.getString("id")!=film.id && !it.getBoolean("playbackOptions")} &&
+                        content().findViewWithTag<View>("companion_remote")?.isShown==true
+                }
+                check(control("watch-capture").getBoolean("ok"))
+                main {screen.handleBack()}
+                val localFilm=io {repo.channel(film.id,film.source)!!}
+                local(localFilm);await("phone can keep playing while a TV handoff is unavailable"){phonePlayer.snapshot.playing && phonePlayer.snapshot.seekable}
+                main {phonePlayer.seek(62_000)}
+                check(control("watch-list-off").getBoolean("ok"))
+                clickTag("player_watch_tv")
+                await("missing TV list is explained without guessing another video"){text("Il contenuto o la stessa lista non sono disponibili")}
+                verify("a failed TV lookup preserves the active film and the intent to play") {
+                    val state = phonePlayer.snapshot
+                    state.wantsToPlay && state.channel?.id == film.id
+                }
+                await("the same film plays at the requested position after buffering") {
+                    val state = phonePlayer.snapshot
+                    state.playing && state.channel?.id == film.id && state.position >= 60_000L
+                }
+                capture("phone-watch-missing")
+                clickTag("companion_watch_close")
+                check(control("watch-list-on").getBoolean("ok"))
+                main {(field("playback") as it.lumetv.app.ui.mobile.MobilePlaybackView).setControlsVisible(true)}
+                clickTag("player_watch_tv");await("reenabling the matching TV list allows another preview"){watchReady()}
+                val transferPoint=main {phonePlayer.snapshot.position}
+                clickTag("companion_watch_start")
+                await("playing video handoff transfers its current position before stopping local playback") {
+                    tvWatch().let {it.getString("title")==film.title && it.getBoolean("playing") && it.getLong("position") in (transferPoint-2000)..(transferPoint+15_000)} &&
+                        phonePlayer.snapshot.channel==null && content().findViewWithTag<View>("companion_remote")?.isShown==true
+                }
+                capture("phone-watch-remote")
+                check(control("live").getBoolean("ok"))
                 val tv=io {CompanionClient(saved.endpoint,saved.pin,saved.token)}
                 try {
                     val state=io {tv.getState()}

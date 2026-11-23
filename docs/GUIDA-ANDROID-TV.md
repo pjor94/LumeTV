@@ -4,7 +4,7 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Questa guida descrive l’interfaccia per telecomando. Se usi un telefono, consulta la [guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md).
 
-Questa guida descrive **Lume TV 0.11.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
+Questa guida descrive **Lume TV 0.12.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
 
 [Download e installazione](../README.md#distribuzione-e-installazione) · [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
@@ -18,7 +18,11 @@ Il telecomando si apre sul telefono e la TV torna automaticamente alla schermata
 
 Il telefono può navigare nell’interfaccia di Lume con frecce, OK e Indietro. Home torna al catalogo dell’app e Opzioni apre le impostazioni sulla TV; frecce e OK funzionano anche senza riproduzione attiva. Puoi inoltre usare pausa/ripresa, cambio canale nelle dirette, avanzamento nei video, tracce disponibili e timer. Il telecomando fisico continua a funzionare e lo stato aggiornato appare sul telefono. La conferma del codice manuale e la rimozione dei telefoni richiedono il telecomando fisico.
 
-La configurazione tramite moduli sul telefono e il trasferimento delle liste non sono ancora disponibili. Le impostazioni si possono raggiungere sullo schermo TV con il telecomando smartphone. Liste, credenziali dei provider e chiavi DRM non sono esposte dal telecomando.
+Il telefono abbinato può anche inviare una lista da **Telecomando → Invia lista alla TV**. L’anteprima e la conferma **Importa sulla TV** si trovano sul telefono; al termine la copia appare in **Opzioni → Le mie liste** sulla TV. Comprende le voci e le impostazioni della sorgente, con nuovi identificativi locali; preferiti e avanzamenti restano separati. Mantieni Lume aperta durante l’invio. Le liste già presenti e la riproduzione in corso vengono conservate.
+
+Con **Guarda sulla TV**, nel player e nelle schede dello smartphone, puoi anche scegliere cosa avviare sul televisore. La TV verifica che il contenuto sia presente nel proprio catalogo; dopo la conferma sul telefono apre il player a schermo intero. I video riprendono dal punto inviato dal telefono. Il telecomando smartphone si apre dopo l’avvio della riproduzione.
+
+La modifica delle liste già presenti sulla TV tramite moduli sul telefono non è ancora disponibile. Le impostazioni si possono raggiungere sullo schermo TV con il telecomando smartphone. Il controllo della riproduzione espone soltanto i metadati e i comandi del contenuto corrente.
 
 In **Gestisci collegamenti** puoi rimuovere ogni telefono, revocando subito il controllo. **Disattiva collegamento** chiude l’accesso di rete conservando gli abbinamenti. Uscire da Lume chiude il servizio fino alla successiva apertura dell’app. Le autorizzazioni sono separate da AURA e restano escluse dai backup.
 
@@ -68,7 +72,7 @@ Nel catalogo, **Lista** seleziona la sorgente e **Tutti i gruppi** restringe l�
 
 Limiti: **10 liste, 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento**. Il catalogo scorre in continuo; ricerca e gruppi considerano l’intera lista. Sono disponibili M3U semplice o estesa, UTF-8/Windows-1252/Latin-1, liste incluse e le forme di header, KODIPROP e ClearKey DASH/CENC documentate. HTTP invia senza cifratura indirizzi e dati di accesso; i consensi di lista, loghi e guida restano separati.
 
-**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. La voce **Video** nella barra principale compare solo con VOD in almeno una lista abilitata e apre la biblioteca con copertine, Film, Serie, ricerca e scorrimento continuo; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
+**Guida e archivio** configura gli indirizzi XMLTV, gli orari, le associazioni dei canali e l’archivio. Se mancano indirizzi XMLTV della lista, Lume usa la propria guida per i canali riconosciuti, cercando nell’intera sorgente EPG anche oltre il catalogo integrato. I loghi mancanti vengono completati dai dati Lume; guida e loghi forniti dalla lista mantengono la precedenza. Le esclusioni manuali e la guida disattivata restano rispettate. EPGShare IT1 completa i canali ancora senza palinsesto Lume e i loghi ancora mancanti; i programmi supplementari indicano la fonte nei dettagli. La guida personale supporta XML/gzip/xz, ricerca e storico fino a sette giorni. La voce **Video** nella barra principale compare solo con VOD in almeno una lista abilitata e apre la biblioteca con copertine, Film, Serie, ricerca e scorrimento continuo; il player conserva la posizione. Dalla guida puoi scegliere **Rivedi dall’archivio** o **Guarda dall’inizio**, quando il servizio li supporta; **Torna alla diretta** lascia il replay. Questa funzione non registra i programmi sul dispositivo.
 
 Gli archivi della 0.8.0 vengono migrati conservando ID, preferiti e impostazioni. Liste, guida personale e avanzamenti restano locali ed esclusi da AURA e dalla Home dei launcher. [Formati, limiti e funzionamento](personal-playlists.md).
 
@@ -76,13 +80,21 @@ Se la TV non offre un selettore documenti, la pagina indica di usare un URL. L�
 
 ## Video on demand
 
+Durante il film i controlli scompaiono dopo circa cinque secondi senza comandi. **OK** li mostra nuovamente. La barra distingue la posizione raggiunta, la parte già caricata e quella ancora da caricare.
+
+I comandi usano icone: play/pausa, salto indietro di 10 secondi, avanti di 30 secondi, prossimo episodio, ingranaggio per audio e opzioni e tre puntini per **Altro**. Il nome del comando selezionato compare sopra le icone. L’indice dei capitoli è disponibile quando fornito dalla lista.
+
+Seleziona la barra e usa **sinistra/destra** per cercare una scena: il cursore mostra il tempo e, quando disponibile, una miniatura. Tenere premuta la freccia accelera la ricerca. **OK** conferma il salto; **Indietro** annulla. Fuori dalla ricerca, il primo **Indietro** chiude i controlli e il successivo torna al catalogo. In pausa i controlli restano disponibili. **Altro → Dall’inizio** riparte da zero; **Audio e opzioni** apre tracce, sottotitoli, qualità e timer.
+
+Il VOD carica il video in anticipo e usa una cache locale temporanea. I dati video vengono eliminati al cambio di contenuto, alla fine o interruzione definitiva del video e alla chiusura dell’app. Pausa, ricerca delle scene e riconnessione dello stesso contenuto mantengono la cache; il ritorno al catalogo con riproduzione ancora attiva mantiene la sessione. Dopo una chiusura forzata, eventuali residui vengono rimossi al successivo avvio. La riserva dipende da sorgente, qualità, memoria e spazio disponibili; non è un download offline garantito. **Capitoli** compare quando la lista fornisce un indice. Anteprime e capitoli non vengono ricavati dalle copertine dei film.
+
 **Dalla versione 0.11.0:** le schede di film ed episodi offrono **Segna come visto / Segna come non visto**. Non visto azzera la ripresa; un titolo visto propone **Riguarda**. **Rimuovi da Continua a guardare** conserva il punto raggiunto, e **Mostra in Continua a guardare** permette di ripristinarlo. La mia lista rimane indipendente. Una nuova riproduzione effettivamente avviata riprende il normale aggiornamento degli avanzamenti; un errore di apertura conserva lo stato precedente.
 
 Nel player trovi **Episodio successivo**. A fine episodio il focus passa a **Guarda il prossimo episodio**: premi **OK** per avviarlo oppure **Indietro** per tornare alla libreria. Il passaggio non è automatico e mantiene il conto del timer. Stagione e numero determinano l’ordine nella stessa serie e lista; senza numeri si segue l’ordine della lista. La scheda della serie riprende l’episodio in corso o propone il primo non visto. Disponibili dalla versione 0.11.0.
 
-Se almeno una lista abilitata contiene video, nella barra principale compare **Video**, tra **Canali** e **Radio**. La home mostra copertine e raccolte Film, Serie, Continua a guardare e La mia lista. **Mostra tutto** apre la raccolta completa; **Cerca** e **Filtri** permettono di restringere i risultati per titolo, lista, categoria e ordine.
+Se almeno una lista abilitata contiene video, nella barra principale compare **Video**, tra **Canali** e **Radio**. In home, l’anteprima segue il titolo selezionato nelle raccolte. **Dettagli** apre la sua scheda. **Mostra tutto** apre la raccolta completa. Puoi usare **Cerca** e **Filtri** per restringere i risultati per titolo, lista, categoria e ordine.
 
-Seleziona una copertina per aprire la scheda del titolo. **Guarda** o **Riprendi** avvia il player; **Dall’inizio** riparte da zero. Le serie riconosciute raggruppano stagioni ed episodi. Tornando dal player o passando tra le sezioni si conservano pagina e posizione. Copertine e informazioni dipendono dai dati presenti nella lista.
+Nella raccolta **Continua a guardare**, premi **OK** per riprendere il video dalla posizione salvata. Nelle altre raccolte, **OK** apre la scheda del titolo. Da lì puoi avviare la visione o aggiungere il titolo alla tua lista. I tre puntini aprono **Altre opzioni**, con i comandi disponibili per il titolo, tra cui **Dall’inizio** e **Segna come visto**. La scheda di una serie contiene il selettore delle stagioni e l’elenco degli episodi. Copertine e informazioni dipendono dai dati presenti nella lista.
 
 Il menu superiore resta disponibile. Usa le frecce del telecomando per scorrere copertine e raccolte; **Indietro** torna al livello precedente e conserva il focus.
 
@@ -107,7 +119,7 @@ Serve un gestore documenti che supporti apertura e creazione dei file. Alcune TV
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Scarica [LumeTV-0.10.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.11.0/LumeTV-0.11.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
+1. Scarica [LumeTV-0.12.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
@@ -135,7 +147,7 @@ Nel catalogo trovi numero, nome e logo dei canali. Il menu superiore contiene **
 - Usa le **frecce** per spostare la selezione: la scheda evidenziata è quella che aprirai.
 - Premi **OK** per guardare il canale a tutto schermo.
 - Digita un **numero** per raggiungere direttamente il canale corrispondente.
-- Premi **Indietro** durante la visione per tornare al catalogo; dalla Home di Canali, Indietro chiede conferma per chiudere l’app.
+- Premi **Indietro** per chiudere il pannello aperto e, dalla diretta a tutto schermo, per tornare al catalogo. Dalla Home di Canali, Indietro chiede conferma per chiudere l’app.
 
 L’app ricorda l’ultimo canale riprodotto e lo riapre al successivo avvio, se ancora disponibile.
 
@@ -158,26 +170,25 @@ Fascia, ricerca, filtro e programma selezionato vengono conservati. Dopo la ripr
 
 ## Informazioni durante la visione
 
-![Informazioni del programma in onda](screenshots/live-info.png)
+![Informazioni del programma in onda con palinsesto di esempio](screenshots/live-info.png)
 
 Premi **OK** oppure **INFO** mentre guardi un canale. Il pannello mostra, quando il palinsesto li fornisce:
 
 - Titolo del programma attuale e orari di inizio e fine.
 - Avanzamento e minuti rimanenti.
-- Descrizione del programma.
 - Titolo e orario del programma successivo.
 
-Le descrizioni occupano fino a tre righe alla volta. Se il testo continua, compare **↑↓ Leggi la descrizione completa**: usa le frecce **su e giù** per scorrerlo. Il video continua a essere riprodotto.
+Scegli **Dettagli** per leggere la descrizione, quando disponibile. Usa **↑/↓** per scorrerla e **Indietro** per chiuderla. La descrizione resta aperta mentre il video continua a essere riprodotto.
 
-Aprendo il pannello con OK o INFO, hai **15 secondi** per leggere una descrizione; ogni scorrimento rinnova questo tempo. Al cambio canale, o quando manca una descrizione, il pannello si richiude dopo **sei secondi**. Le informazioni si aggiornano al cambio di programma.
+Durante lo zapping compare per circa **tre secondi** una scheda con il nome del canale e il programma in onda. Il riepilogo aperto con **OK** o **INFO** si chiude dopo **15 secondi** di inattività. Le informazioni del riepilogo si aggiornano al cambio di programma.
 
 Se hai messo la riproduzione in pausa con il tasto Play/Pausa, **OK** la riprende e mostra le informazioni.
 
 ## Elenco canali durante la diretta
 
-![Elenco canali sulla sinistra del video](screenshots/live-channels.png)
+![Elenco canali sulla sinistra del video con Rai 1 in visione e Rai 2 evidenziata](screenshots/live-channels.png)
 
-Premi **←** durante la visione. Si apre un elenco laterale e il focus parte dal canale attivo, indicato da un punto azzurro.
+Premi **←** durante la visione. L’elenco laterale mostra logo, numero e programma in onda. Il focus parte dal canale con l’etichetta **In visione** e l’azzurro evidenzia la riga che puoi aprire con **OK**.
 
 1. Usa **↑/↓** per scorrere i canali: il video resta sul canale che stai guardando.
 2. Premi **OK** per guardare il canale evidenziato e richiudere l’elenco.
@@ -262,17 +273,18 @@ Durante la diretta, Indietro torna prima al catalogo o alla consultazione da cui
 | Catalogo | Frecce, OK | Scegli e apri un canale |
 | Catalogo o Guida | OK prolungato | Aggiungi o rimuovi un preferito |
 | Diretta | OK / INFO | Mostra le informazioni del programma |
-| Informazioni con testo lungo | ↑/↓ | Scorri la descrizione |
+| Informazioni | Dettagli, ↑/↓ | Apri e scorri la descrizione |
 | Diretta | ← | Apri l’elenco canali |
 | Elenco canali | ↑/↓, OK | Scegli un canale e conferma il cambio |
 | Elenco canali | → dalla riga / Indietro | Chiudi l’elenco |
+| Diretta | → | Apri le opzioni di riproduzione |
 | Diretta | CH+/CH− | Cambia canale secondo la modalità scelta |
 | Diretta o catalogo | Numeri | Apri un canale per numero |
 | Guida | Numeri | Seleziona la riga senza avviare la diretta |
 | Guida | CH+/CH− | Scorri per pagina |
 | Cosa guardare | ↑/↓, ←/→ | Seleziona un programma e raggiungi le azioni |
 | Cosa guardare | OK / INFO | Guarda o imposta un avviso / leggi i dettagli |
-| Diretta | Indietro | Torna al catalogo |
+| Diretta | Indietro | Chiudi il pannello aperto o torna al catalogo |
 | Home di Canali | Indietro | Chiedi conferma per chiudere l’app |
 | Guida TV / Cosa guardare | Indietro | Chiudi dettagli o ricerca aperti, poi torna a Canali |
 | Conferma di uscita | Indietro | Annulla e continua a usare Lume TV |

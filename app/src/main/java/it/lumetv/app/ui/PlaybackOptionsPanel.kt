@@ -23,6 +23,7 @@ class PlaybackOptionsPanel(context: Context, private val mobile: Boolean, privat
         orientation = LinearLayout.VERTICAL
         background = TvStyle.rounded(TvStyle.surface, context.dp(16).toFloat())
         isClickable = true
+        visibility = GONE
     }
     private val heading = TvStyle.text(context, "Opzioni riproduzione", 24f, bold = true).apply {
         ViewCompat.setAccessibilityHeading(this, true)
@@ -35,7 +36,10 @@ class PlaybackOptionsPanel(context: Context, private val mobile: Boolean, privat
     private var page: String? = null
     private var state = player.snapshot
     private var pageRevision = 0L
-    val isShowing: Boolean get() = visibility == VISIBLE
+    private var liveAppearance = false
+    var isShowing = false
+        private set
+    private val backButton = TvStyle.button(context, "Indietro") { back() }
 
     init {
         visibility = GONE
@@ -48,7 +52,7 @@ class PlaybackOptionsPanel(context: Context, private val mobile: Boolean, privat
             gravity = Gravity.CENTER_VERTICAL
             setPadding(context.dp(20), context.dp(12), context.dp(12), context.dp(12))
             addView(heading, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = context.dp(12) })
-            addView(TvStyle.button(context, "Indietro") { back() }, LinearLayout.LayoutParams(-2, -2))
+            addView(backButton, LinearLayout.LayoutParams(-2, -2))
         }
         card.addView(header, LinearLayout.LayoutParams(-1, -2))
         card.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -58,25 +62,49 @@ class PlaybackOptionsPanel(context: Context, private val mobile: Boolean, privat
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
         val h = MeasureSpec.getSize(heightMeasureSpec)
+        val margin = context.dp(if (liveAppearance) 24 else 16)
         (card.layoutParams as LayoutParams).apply {
-            width = if (mobile) -1 else minOf(context.dp(460), (w - context.dp(32)).coerceAtLeast(0))
-            height = if (mobile) (h * if (resources.configuration.fontScale > 1.3f) .95f else .85f).toInt() else (h - context.dp(32)).coerceAtLeast(0)
+            width = when {
+                mobile -> -1
+                liveAppearance -> minOf((w - margin * 2).coerceAtLeast(0), context.dp(414), maxOf(context.dp(310), (w * .36).toInt()))
+                else -> minOf(context.dp(460), (w - margin * 2).coerceAtLeast(0))
+            }
+            height = when {
+                mobile -> (h * if (resources.configuration.fontScale > 1.3f) .95f else .85f).toInt()
+                liveAppearance -> minOf((h - margin * 2).coerceAtLeast(0), context.dp(418))
+                else -> (h - margin * 2).coerceAtLeast(0)
+            }
             gravity = if (mobile) Gravity.BOTTOM else Gravity.END or Gravity.CENTER_VERTICAL
-            rightMargin = if (mobile) 0 else context.dp(16)
+            val gutter = if (mobile) 0 else margin
+            setMargins(gutter, 0, gutter, 0)
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
-    fun show() {
+    fun show(live: Boolean = false) {
         if (player.snapshot.channel == null) return
-        if (!isShowing) {
+        val reopening = !isShowing
+        if (reopening) {
             previousFocus = rootView.findFocus()
             (parent as? ViewGroup)?.let { parent -> for (index in 0 until parent.childCount) {
                 val view = parent.getChildAt(index)
                 if (view !== this) { previousAccessibility[view] = view.importantForAccessibility; view.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS }
             } }
         }
+        val wasLive = liveAppearance
+        liveAppearance = live && !mobile
+        if (!mobile && wasLive != liveAppearance) applyAppearance()
+        isShowing = true
+        isClickable = true
         visibility = VISIBLE
+        card.descendantFocusability = FOCUS_AFTER_DESCENDANTS
+        if (liveAppearance) LiveOverlayStyle.reveal(card, fromX = context.dp(22))
+        else {
+            card.animate().cancel()
+            card.visibility = VISIBLE
+            card.alpha = 1f
+            card.translationX = 0f
+        }
         bringToFront()
         state = player.snapshot
         main()
@@ -84,11 +112,35 @@ class PlaybackOptionsPanel(context: Context, private val mobile: Boolean, privat
 
     fun hide() {
         if (!isShowing) return
-        visibility = GONE; page = null
+        isShowing = false
+        isClickable = false
+        page = null
+        card.descendantFocusability = FOCUS_BLOCK_DESCENDANTS
+        card.clearFocus()
+        LiveOverlayStyle.conceal(card, toX = context.dp(22), animated = liveAppearance) { visibility = GONE }
         previousAccessibility.forEach { (view, value) -> view.importantForAccessibility = value }
         previousAccessibility.clear()
         previousFocus?.takeIf { it.isShown }?.requestFocus(); previousFocus = null
         closed()
+    }
+
+    private fun applyAppearance() {
+        setBackgroundColor(if (liveAppearance) 0x00000000 else 0x80000000.toInt())
+        card.background = if (liveAppearance) LiveOverlayStyle.material(context)
+            else TvStyle.rounded(TvStyle.surface, context.dp(16).toFloat())
+        heading.textSize = if (liveAppearance) 21f else 24f
+        backButton.background = if (liveAppearance) LiveOverlayStyle.focusBackground(context, radius = 20)
+            else TvStyle.focusBackground(context)
+        fun colorBack(focused: Boolean) = if (liveAppearance) TvStyle.white else if (focused) TvStyle.background else TvStyle.muted
+        backButton.setTextColor(colorBack(backButton.hasFocus()))
+        backButton.setOnFocusChangeListener { view, focused ->
+            backButton.setTextColor(colorBack(focused))
+            TvStyle.focusMotion(view, focused, if (liveAppearance) 1.015f else 1.035f)
+        }
+        val gutter = context.dp(if (liveAppearance) 12 else 16)
+        body.setPadding(gutter, 0, gutter, gutter)
+        body.clipChildren = !liveAppearance
+        body.clipToPadding = !liveAppearance
     }
 
     fun back(): Boolean {
@@ -111,7 +163,10 @@ class PlaybackOptionsPanel(context: Context, private val mobile: Boolean, privat
     private fun row(key: String, label: String, summary: String = "", action: () -> Unit): OptionsRowView =
         OptionsRowView(context, mobile, label, summary, action).also {
             it.tag = key
-            body.addView(it, LinearLayout.LayoutParams(-1, -2))
+            if (liveAppearance) it.useLiveAppearance(hasSubmenu = page == null)
+            body.addView(it, LinearLayout.LayoutParams(-1, -2).apply {
+                if (liveAppearance) topMargin = context.dp(if (key == "audioLanguage") 7 else 3)
+            })
             rows[key] = it
             if (mobile) body.addView(OptionsRowView.divider(context), LinearLayout.LayoutParams(-1, context.dp(1)))
         }

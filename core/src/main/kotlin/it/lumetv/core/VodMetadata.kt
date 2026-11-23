@@ -9,7 +9,8 @@ enum class VodKind { VIDEO, MOVIE, EPISODE }
 /** Presentation metadata. Playback identity and the original title are never rewritten. */
 data class VodMetadata(val title:String,val kind:VodKind,val seriesTitle:String="",val seriesKey:String="",
     val season:Int?=null,val episode:Int?=null,val year:Int?=null,val duration:Long=0,
-    val description:String="",val genres:List<String> = emptyList(),val poster:String="",val backdrop:String="") {
+    val description:String="",val genres:List<String> = emptyList(),val poster:String="",val backdrop:String="",
+    val previewVtt:String="",val chaptersVtt:String="") {
     companion object {
         private val episodeName=Regex("^(.+?)[ ._\\-]+(?:[sS](\\d{1,2})[ ._\\-]*[eE](\\d{1,3})|([0-9]{1,2})[xX]([0-9]{1,3}))(?:\\b|_)(.*)$")
         private val releaseYear=Regex("(?:^|[ (\\[])(19[0-9]{2}|20[0-9]{2})(?:[)\\] ]|$)")
@@ -51,7 +52,8 @@ data class VodMetadata(val title:String,val kind:VodKind,val seriesTitle:String=
             val genres=value("genre","genres").split(';',',').map(String::trim).filter(String::isNotBlank).distinct().take(20)
             val duration=entry.metadata.duration?.takeIf {it.isFinite() && it>0}?.times(1000)?.toLong() ?: 0
             return VodMetadata(entry.name,kind,series,key,season,episode,year,duration,description,genres,
-                image("poster","poster-url","tvg-poster","cover","cover-url").ifBlank {entry.logo},image("backdrop","backdrop-url","fanart","fanart-url","tvg-background"))
+                image("poster","poster-url","tvg-poster","cover","cover-url").ifBlank {entry.logo},image("backdrop","backdrop-url","fanart","fanart-url","tvg-background"),
+                image("preview-vtt","thumbnails-url","thumbnail-vtt","storyboard-url"),image("chapters-vtt","chapters-url"))
         }
     }
     override fun toString()="VodMetadata(kind=$kind)"

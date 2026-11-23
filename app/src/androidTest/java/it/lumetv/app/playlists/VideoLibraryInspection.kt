@@ -50,6 +50,7 @@ object VideoLibraryInspection {
                 for(i in 1..220){appendLine("#EXTINF:-1 type=\"live\",Diretta $i");appendLine("$fixture/video.mp4?live=$i")}
                 for(i in 1..180){appendLine("#EXTINF:-1 type=\"movie\" tvg-id=\"film-$i\" group-title=\"${if(i%2==0)"Avventura" else "Dramma"}\" year=\"2023\" genre=\"Avventura\" plot=\"Un viaggio tra stelle e oceani. Contenuto sintetico per il collaudo.\" poster=\"https://posters.example.org/movie-$i.png\" backdrop=\"https://posters.example.org/scene-$i.png\",Orizzonte ${i.toString().padStart(3,'0')}");appendLine("$fixture/video.mp4?movie=$i")}
                 for((season,episode) in listOf(2 to 2,1 to 1,2 to 1)){appendLine("#EXTINF:-1 type=\"series\" group-title=\"Fantascienza\" poster=\"https://posters.example.org/orbita.png\" plot=\"Una serie sintetica in due stagioni.\",Orbita S0${season}E0${episode}");appendLine("$fixture/video.mp4?episode=$season-$episode")}
+                appendLine("#EXTINF:-1 type=\"episode\" series-name=\"Orbita\" poster=\"https://posters.example.org/orbita.png\",Orbita - Extra");appendLine("$fixture/video.mp4?episode=extra")
                 appendLine("#EXTINF:-1 type=\"vod\" group-title=\"Musica\",Concerto senza copertina");appendLine("$fixture/video.mp4?concert=1")
             }
             repo.prepareFile(list.toByteArray(),allowHttp=true,settings=PlaylistSettings(artworkHttp=true)).use {repo.save("Cinema di prova",it)}
@@ -89,11 +90,15 @@ object VideoLibraryInspection {
         }}
         fun text(value:String)=main {visible().filterIsInstance<TextView>().any {it.text.toString().contains(value)}}
         fun matches(v:View,label:String)=v.isClickable && v !is EditText && (v is TextView && v.text.toString()==label || v.contentDescription?.toString()?.let {it==label || it.startsWith("$label:") || it.startsWith("$label,")}==true)
+        fun shelfPosition(home:RecyclerView,title:String):Int{
+            val adapter=home.adapter as it.lumetv.app.ui.VideoShelfAdapter
+            return adapter.rows.firstOrNull {it.title==title}?.let {adapter.positionOfShelf(it.key)} ?: -1
+        }
         fun click(label:String) {
             if(label.startsWith("Mostra tutto:")) {
                 val target=label.substringAfter(":").trim()
                 await("collection $target is available"){main {content.findViewWithTag<RecyclerView>("video_home")?.let {(it.adapter as? it.lumetv.app.ui.VideoShelfAdapter)?.rows?.any {row->row.title==target}}==true}}
-                main {if(mobile){content.isFocusableInTouchMode=true;content.requestFocus()};val home=content.findViewWithTag<RecyclerView>("video_home");val index=(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).rows.indexOfFirst {it.title==target};(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index,0)}
+                main {if(mobile){content.isFocusableInTouchMode=true;content.requestFocus()};val home=content.findViewWithTag<RecyclerView>("video_home");(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(shelfPosition(home,target),0)}
                 runner.waitForIdleSync()
             }
             await("action $label is reachable"){main {
@@ -105,14 +110,22 @@ object VideoLibraryInspection {
                     // Progressive rows and a saved home anchor can settle after the first scroll.
                     // Keep targeting the requested shelf until its real, enabled action is bound.
                     if(label.startsWith("Mostra tutto:"))content.findViewWithTag<RecyclerView>("video_home")?.let {home->
-                        val index=(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).rows.indexOfFirst {it.title==label.substringAfter(':').trim()}
+                        val index=shelfPosition(home,label.substringAfter(':').trim())
                         if(index>=0)(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(index,0)
                     }
+                    if(!mobile && label=="Dall’inizio" && actions.any {it.tag=="video_restart" && !it.isShown})
+                        actions.firstOrNull {it.tag=="video_more_actions" && it.isShown}?.performClick()
                     false
                 } else {action.requestRectangleOnScreen(android.graphics.Rect(0,0,action.width,action.height),true);if(!mobile)action.requestFocus();action.performClick()}
             }}
         }
-        fun back()=main {activity.onBackPressedDispatcher.onBackPressed()}
+        fun back()=main {
+            // Navigation intent: dismiss the VOD transport before leaving the playing title.
+            val transport=visible().filterIsInstance<it.lumetv.app.ui.OnDemandControls>().any {it.isShown}
+            activity.onBackPressedDispatcher.onBackPressed()
+            val catalog=activity.javaClass.getDeclaredField("showingCatalog").apply {isAccessible=true}.getBoolean(activity)
+            if(transport && !catalog)activity.onBackPressedDispatcher.onBackPressed()
+        }
         fun grid()=main {visible().filterIsInstance<RecyclerView>().firstOrNull {it.tag=="video_grid_results"}}
         fun player()=main {activity.javaClass.getDeclaredField(if(mobile)"player" else "tvPlayer").apply {isAccessible=true}.get(activity) as TvPlayer}
         fun posterAt(list:RecyclerView,position:Int)=main {(list.adapter as VideoPosterAdapter).catalog?.peek(position) ?: (list.adapter as VideoPosterAdapter).items.getOrNull(position)}
@@ -120,6 +133,18 @@ object VideoLibraryInspection {
         click("Video")
         await("home contains continue watching films series and saved collections"){text("Continua a guardare") && text("Film") && main {content.findViewWithTag<RecyclerView>("video_home")?.adapter?.itemCount?.let {it>=5}==true}}
         verify("app brand and original navigation remain visible around Video"){main {visible().filterIsInstance<ImageView>().any {it.contentDescription=="Lume TV"} && visible().any {matches(it,"Canali")}}}
+        if(!mobile)await("the focused shelf leaves the featured title fully visible"){main {
+            val title=content.findViewWithTag<TextView>("video_featured_title") ?: return@main false
+            val text=title.text.toString()
+            if(text.isBlank() || title.height==0)return@main false
+            val bounds=android.graphics.Rect()
+            val glyph=android.graphics.Rect()
+            val origin=IntArray(2)
+            title.paint.getTextBounds(text,0,text.length,glyph)
+            title.getLocationOnScreen(origin)
+            val baseline=origin[1]+title.baseline
+            title.getGlobalVisibleRect(bounds) && bounds.top<=baseline+glyph.top && bounds.bottom>=baseline+glyph.bottom
+        }}
         await("movie artwork is rendered above channel-logo resolution"){main {visible().filterIsInstance<ImageView>().any {(it.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap?.width?.let {it>256}==true}}}
         capture("00-home")
         click("Mostra tutto: Film")
@@ -144,10 +169,11 @@ object VideoLibraryInspection {
         verify("browsing a movie does not automatically start its stream"){player().snapshot.channel==null}
         capture("02-details")
         click("Aggiungi alla mia lista")
-        await("saved status updates on the details page"){text("Rimuovi dalla mia lista")}
+        val savedLabel=if(mobile)"Rimuovi dalla mia lista" else "Nella mia lista"
+        await("saved status updates on the details page"){text(savedLabel)}
         click("Guarda")
         await("movie plays through the existing VOD player"){player().snapshot.let {it.channel?.id==selected.id && it.mode==PlaybackMode.VOD && it.playing}}
-        back();await("Back from playback restores the movie details"){text("Rimuovi dalla mia lista")}
+        back();await("Back from playback restores the movie details"){text(savedLabel)}
         back();await("Back from details restores the deep poster-grid position"){main {list.isShown && list.findViewHolderForAdapterPosition(155)!=null}}
         if(!mobile)await("Back restores D-pad focus to the same poster"){main {list.findContainingViewHolder(activity.currentFocus ?: list)?.bindingAdapterPosition==155}}
         val monitor=runner.addMonitor(activity.javaClass.name,null,false);main {activity.recreate()}
@@ -165,24 +191,88 @@ object VideoLibraryInspection {
         await("series appear as one title rather than separate channel rows"){grid()?.adapter?.itemCount==1}
         list=grid()!!;await("series poster is loaded"){posterAt(list,0)?.displayTitle=="Orbita" && main {list.findViewHolderForAdapterPosition(0)!=null}}
         main {list.findViewHolderForAdapterPosition(0)!!.itemView.performClick()}
-        await("series detail identifies its episode count"){text("3 episodi") && text("Stagioni ed episodi")}
+        await("series detail identifies its episode count"){text("4 episodi") && text("Stagioni ed episodi")}
         capture("04-series")
-        click("Stagioni ed episodi")
-        await("series episodes are sorted by season and episode"){grid()?.let {posterAt(it,0)?.title=="Orbita S01E01"}==true}
-        click("Tutte le stagioni");click("Stagione 2")
+        if(mobile)click("Stagioni ed episodi")
+        else verify("episode rows are displayed inside the series details"){grid()?.let {main {it.isShown && content.findViewWithTag<View>("video_detail")?.isShown==true}}==true}
+        fun selectedSeason(tag:String)=main {visible().any {it.tag==tag && it.isSelected}}
+        await("series opens its first numbered season with visible season choices"){grid()?.let {it.adapter?.itemCount==1 && posterAt(it,0)?.title=="Orbita S01E01"}==true && selectedSeason("video_season_1") && text("Stagione 2")}
+        capture("05-seasons")
+        if(!mobile) {
+            list=grid()!!
+            await("first-season episode is ready for D-pad navigation"){main {list.findViewHolderForAdapterPosition(0)?.itemView?.requestFocus()==true}}
+            runner.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_UP)
+            await("D-pad up reaches the visible season choices"){main {activity.currentFocus?.tag?.toString()?.startsWith("video_season_")==true}}
+        }
+        click("Stagione 2")
         await("selecting a season returns exactly its episodes"){grid()?.adapter?.itemCount==2}
         list=grid()!!;await("selected season starts from its first episode"){posterAt(list,0)?.title=="Orbita S02E01" && main {list.findViewHolderForAdapterPosition(0)!=null}}
         if(!mobile)await("choosing a season returns remote focus to its episodes"){main {list.findContainingViewHolder(activity.currentFocus ?: list)!=null}}
+        main {list.findViewHolderForAdapterPosition(0)!!.itemView.performClick()};back()
+        await("Back from episode details keeps the selected season"){selectedSeason("video_season_2") && grid()?.adapter?.itemCount==2}
+        click("Altri episodi")
+        await("episodes without season numbers stay in their own collection"){selectedSeason("video_season_0") && grid()?.let {it.adapter?.itemCount==1 && posterAt(it,0)?.title=="Orbita - Extra"}==true && !text("Stagione 0")}
+        capture("05-unseasoned")
+        click("Tutte le stagioni")
+        await("all seasons remains an explicit choice"){selectedSeason("video_season_all") && grid()?.adapter?.itemCount==4}
+        val seasonMonitor=runner.addMonitor(activity.javaClass.name,null,false);main {activity.recreate()}
+        activity=seasonMonitor.waitForActivityWithTimeout(20_000) as? ComponentActivity ?: error("Season recreation timed out")
+        runner.removeMonitor(seasonMonitor);content=main {activity.findViewById(android.R.id.content)}
+        await("recreation preserves an explicit all-seasons selection"){selectedSeason("video_season_all") && grid()?.adapter?.itemCount==4}
+        capture("05-all-episodes")
+        click("Stagione 2")
+        val continued=all.first {it.title=="Orbita S02E01"}
+        io {history.write(source,PlaybackTarget(continued.id,PlaybackMode.VOD),21_000,180_000)}
+        if(mobile)back()
+        await("series details receive the episode in progress"){text("Riprendi da 0:21")}
+        if(mobile)click("Stagioni ed episodi")
+        await("reopening a series selects the season of its episode in progress"){selectedSeason("video_season_2") && grid()?.adapter?.itemCount==2}
+        list=grid()!!;await("resumed season is ready for episode selection"){main {list.findViewHolderForAdapterPosition(0)!=null}}
         capture("05-episodes")
-        main {list.findViewHolderForAdapterPosition(0)!!.itemView.performClick()};click("Guarda")
+        if(mobile) {
+            main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            await("landscape keeps the selected season and its episodes"){selectedSeason("video_season_2") && grid()?.adapter?.itemCount==2 && main {activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}}
+            capture("05-season-landscape")
+            main {activity.requestedOrientation=android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT}
+            await("portrait restores the same season and an accessible episode"){selectedSeason("video_season_2") && main {activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_PORTRAIT && list.findViewHolderForAdapterPosition(0)?.itemView?.isShown==true}}
+        }
+        await("resumed episode opens after the grid has finished resizing"){main {list.findViewHolderForAdapterPosition(0)?.itemView?.performClick()==true}}
+        click("Riprendi")
         await("an episode plays in VOD mode without changing its stable ID"){player().snapshot.let {it.channel?.name=="Orbita S02E01" && it.mode==PlaybackMode.VOD && it.playing}}
-        back();back();back();back();back()
+        repeat(if(mobile)5 else 4){back()}
         await("return from episodes restores the Video home"){main {content.findViewWithTag<RecyclerView>("video_home")?.isShown==true}}
-        click("Mostra tutto: Continua a guardare")
-        await("continue watching includes the previously saved progress"){grid()?.let {list->main {(list.adapter as VideoPosterAdapter).catalog?.cached?.any {it.id==movie.id && it.resume==21_000L}==true}}==true}
-        list=grid()!!
-        val resumeIndex=main {(list.adapter as VideoPosterAdapter).catalog!!.indexOf {it.id==movie.id}!!}
-        main {list.findViewHolderForAdapterPosition(resumeIndex)!!.itemView.performClick()}
+        if(mobile){
+            click("Mostra tutto: Continua a guardare")
+            await("continue watching includes the previously saved progress"){grid()?.let {list->main {(list.adapter as VideoPosterAdapter).catalog?.cached?.any {it.id==movie.id && it.resume==21_000L}==true}}==true}
+            list=grid()!!
+            val resumeIndex=main {(list.adapter as VideoPosterAdapter).catalog!!.indexOf {it.id==movie.id}!!}
+            main {list.findViewHolderForAdapterPosition(resumeIndex)!!.itemView.performClick()}
+        }else{
+            val home=main {content.findViewWithTag<RecyclerView>("video_home")}
+            fun resumeShelf()=home.findViewHolderForAdapterPosition(shelfPosition(home,"Continua a guardare")) as? it.lumetv.app.ui.VideoShelfAdapter.Holder
+            await("continue watching includes the previously saved progress"){main {
+                val index=shelfPosition(home,"Continua a guardare")
+                if(index<0)false else {
+                    if(resumeShelf()==null)(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(0,0)
+                    resumeShelf()?.posters?.items?.any {it.id==movie.id && it.resume==21_000L}==true
+                }
+            }}
+            await("the continue watching movie card receives focus"){main {
+                val shelf=resumeShelf() ?: return@main false
+                val position=shelf.posters!!.items.indexOfFirst {it.id==movie.id}
+                shelf.list.findViewHolderForAdapterPosition(position)?.itemView?.requestFocus()==true
+            }}
+            runner.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+            await("one OK on Continue resumes the movie"){player().snapshot.let {it.channel?.id==movie.id && it.playing && it.position>=21_000}}
+            back()
+            await("Back from direct resume restores the same card"){main {
+                val shelf=resumeShelf()
+                val index=shelf?.list?.findContainingViewHolder(activity.currentFocus ?: home)?.bindingAdapterPosition ?: -1
+                shelf?.posters?.items?.getOrNull(index)?.id==movie.id
+            }}
+            main {(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(0,0)}
+            click("Dettagli")
+        }
         click("Dall’inizio")
         await("starting a different video from the beginning clears its stored position"){player().snapshot.let {it.channel?.id==movie.id && it.playing && it.position<10_000}}
         val activePlayer=player();main {activePlayer.seek(17_000)}
@@ -192,7 +282,10 @@ object VideoLibraryInspection {
         await("paused video reaches the passive progress fixture"){player().snapshot.position>=41_000}
         val playBeforeProgress=main {visible().first {it.tag=="video_play"}}
         io {history.write(source,PlaybackTarget(movie.id,PlaybackMode.VOD),42_000,180_000)}
-        await("visible details receive passive progress changes"){text("Riprendi da 0:42")}
+        await("visible details receive passive progress changes"){
+            if(mobile)text("Riprendi da 0:42")
+            else main {content.findViewWithTag<android.widget.ProgressBar>("video_detail_progress")?.progress==233}
+        }
         verify("passive detail progress keeps the existing action views"){main {visible().first {it.tag=="video_play"}===playBeforeProgress}}
         click("Dall’inizio")
         await("restarting the current video begins from zero without a second selection"){player().snapshot.let {it.channel?.id==movie.id && it.playing && it.position<10_000}}
@@ -203,7 +296,7 @@ object VideoLibraryInspection {
             val home=main {content.findViewWithTag<RecyclerView>("video_home")}
             fun continued()=main {(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).rows.firstOrNull {it.key=="continue"}}
             await("continue shelf receives a passive progress update"){continued()?.page?.rows?.any {it.id==selected.id && it.position==40_000L}==true}
-            val shelfIndex=main {(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).rows.indexOfFirst {it.key=="continue"}}
+            val shelfIndex=main {(home.adapter as it.lumetv.app.ui.VideoShelfAdapter).positionOfShelf("continue")}
             main {(home.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(shelfIndex,0)}
             await("continue posters are ready for remote focus"){main {(home.findViewHolderForAdapterPosition(shelfIndex) as? it.lumetv.app.ui.VideoShelfAdapter.Holder)?.list?.findViewHolderForAdapterPosition(0)!=null}}
             val shelf=main {home.findViewHolderForAdapterPosition(shelfIndex) as it.lumetv.app.ui.VideoShelfAdapter.Holder}
@@ -223,7 +316,7 @@ object VideoLibraryInspection {
         capture("06-no-cover")
         main {visible().filterIsInstance<EditText>().single {it.contentDescription=="Cerca un video"}.setText("")};await("clearing search restores the Video home"){main {content.findViewWithTag<RecyclerView>("video_home")?.isShown==true}};back();click("Filtri");click("Tutte le liste");click("Seconda lista")
         await("source filter scopes the home collections"){text("Seconda lista") && main {content.findViewWithTag<RecyclerView>("video_home")?.isShown==true}}
-        click("Mostra tutto: Film");await("source filter applies to the full catalog"){grid()?.adapter?.itemCount==1 && grid()?.let {posterAt(it,0)?.title=="Alfa"}==true}
+        click(if(mobile)"Mostra tutto: Film" else "Film");await("source filter applies to the full catalog"){grid()?.adapter?.itemCount==1 && grid()?.let {posterAt(it,0)?.title=="Alfa"}==true}
         io {repo.setEnabled(second,false);repo.setEnabled(source,false)}
         await("disabling all VOD sources restores the live catalog shell"){main {content.findViewWithTag<View>("lume_video_catalog")==null && visible().none {matches(it,"Video")}}}
         verify("navigation remains available after the last Video source disappears"){main {visible().any {matches(it,"Canali")}}}

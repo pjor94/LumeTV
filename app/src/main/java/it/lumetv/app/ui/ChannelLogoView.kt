@@ -14,7 +14,12 @@ import kotlinx.coroutines.Job
 
 /** A fixed optical footprint, shared by cards, guide rows and the live banner. */
 @SuppressLint("ViewConstructor") // Programmatic UI; the repository is supplied by the activity.
-class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository, private val compact: Boolean = false) : FrameLayout(context) {
+class ChannelLogoView(
+    context: Context,
+    private val logos: ChannelLogoRepository,
+    private val compact: Boolean = false,
+    private val fallbackIcon: Boolean = false,
+) : FrameLayout(context) {
     private val image = ImageView(context).apply {
         scaleType = ImageView.ScaleType.FIT_CENTER
         val horizontal = context.dp(if (compact) 4 else 10)
@@ -61,11 +66,13 @@ class ChannelLogoView(context: Context, private val logos: ChannelLogoRepository
     }
 
     private fun placeholder() {
-        if (channel?.isRadio == true) {
-            image.setImageResource(R.drawable.ic_mobile_radio)
+        val current = channel
+        if (current != null && (current.isRadio || fallbackIcon)) {
+            image.setImageResource(if (current.isRadio) R.drawable.ic_mobile_radio else R.drawable.ic_mobile_channels)
             image.imageTintList = android.content.res.ColorStateList.valueOf(TvStyle.accent)
             image.visibility = VISIBLE
-            background = TvStyle.rounded(TvStyle.surface, context.dp(12).toFloat())
+            background = TvStyle.rounded(if (fallbackIcon) 0xFF263751.toInt() else TvStyle.surface,
+                context.dp(if (compact) 7 else 12).toFloat())
             clipToOutline = true
         } else {
             image.setImageDrawable(null)

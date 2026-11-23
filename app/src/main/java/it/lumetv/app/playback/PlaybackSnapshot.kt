@@ -28,7 +28,16 @@ data class PlaybackSnapshot(
     val nextEpisodeLoading:Boolean=false,
     val nextEpisodeError:Boolean=false,
     val playbackRevision:Long=0,
+    val bufferedPosition:Long=0,
+    val bufferedDuration:Long=0,
+    val rebufferCount:Int=0,
+    val rebufferDuration:Long=0,
+    val downloadBitrate:Long=0,
+    val chapters:List<VodChapter> = emptyList(),
+    val preloadedBytes:Long=0,
 )
+
+data class VodChapter(val position:Long,val title:String)
 
 internal object PlaybackPolicy {
     fun canContinueInBackground(mobile: Boolean, channel: Channel?, audioOnly: Boolean): Boolean =

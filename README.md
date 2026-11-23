@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.11.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.11.0/LumeTV-0.11.0.apk)
+> ### [Scarica Lume TV 0.12.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release: novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.11.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release per novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.12.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -35,14 +35,15 @@ Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedica
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## Novità della 0.11.0
+## Novità della 0.12.0
 
-- **Telecomando TV dallo smartphone:** apri **Opzioni → Collega telefono** sulla TV e inquadra il QR grande sulla destra. Il telecomando si apre subito, con frecce, OK, Indietro, Home di Lume e Opzioni per navigare nei menu, oltre ai controlli di riproduzione. Le aperture successive riconnettono l’ultima TV.
-- **Backup e ripristino:** un file locale protetto da password conserva liste personali, configurazioni di accesso, preferiti, canali nascosti, avanzamenti e preferenze. L’anteprima permette di scegliere i dati da recuperare mantenendo quelli già presenti.
-- **Video e continuità:** episodio successivo, proposta con conferma a fine episodio, Visto/Non visto e rimozione reversibile da Continua a guardare. Sullo smartphone, video e dirette si aprono subito a schermo intero orizzontale.
-- **Preferiti e riproduzione:** riordino dei preferiti, canali nascosti, scelta delle tracce audio e dei sottotitoli, qualità e timer da 15, 30, 60 o 90 minuti. La barra smartphone mantiene al massimo cinque sezioni, con preferiti e recenti nei filtri di Canali e Radio.
+- La **libreria Video** rinnova le schede di film e serie, aggiunge la selezione delle stagioni e mostra **Nuovi arrivi** quando le liste selezionate contengono film nella raccolta.
+- Le **schede TMDB** aggiungono trama, cast e immagini. I trailer si aprono nel player di Lume, con precedenza all’italiano.
+- Il **player VOD** distingue il video già caricato sulla timeline, mostra anteprime delle scene e supporta i capitoli forniti dalle liste. Il precaricamento usa una cache limitata alla sessione.
+- **Invia lista alla TV** aggiunge una copia della lista dopo l’anteprima e la conferma sul telefono. **Guarda sulla TV** avvia la diretta o riprende il video dal punto raggiunto sullo smartphone.
+- La **diretta su Android TV** rinnova i pannelli di canali e programmi. Le liste personali possono usare la guida e i loghi Lume, con integrazione supplementare da EPGShare IT1.
 
-Preferiti, liste e avanzamenti già presenti vengono conservati aggiornando con la stessa firma. Restano disponibili le correzioni `localplay` della 0.10.2, la biblioteca Video, le liste fino a **500.000 voci lette per sorgente**, la guida XMLTV e l’archivio per i servizi compatibili. [Tutte le novità](CHANGELOG.md#0110--telecomando-tv-backup-e-continuità-di-visione--2026-11-15) · [Liste personali](docs/personal-playlists.md).
+L’aggiornamento con la stessa firma conserva preferiti, liste e avanzamenti. [Tutte le novità](CHANGELOG.md) · [Liste personali](docs/personal-playlists.md).
 
 ## TV, radio e riproduzione continua
 
@@ -58,10 +59,13 @@ Il progetto continua a usare un solo player. **Opzioni riproduzione** permette d
 
 **Opzioni → Canali e preferiti** permette di riordinare i preferiti TV e radio e nascondere o ripristinare canali. **Tutti / Preferiti / Recenti** sono accessibili dentro Canali e Radio. **Opzioni → Backup e ripristino** crea e recupera un file protetto da password tramite un gestore documenti Android compatibile.
 
-Il **Telecomando** smartphone controlla la TV sulla rete privata IPv4. Il collegamento tramite QR autorizza subito il telefono; chi può inquadrarlo può controllare Lume su quella TV. Il codice manuale mantiene la conferma sul televisore e i telefoni possono essere rimossi da **Gestisci collegamenti**. Lume deve essere aperta sulla TV; configurazione tramite moduli smartphone, catalogo sul telefono, invio liste e sincronizzazione restano previsti per sviluppi successivi. Vedi le guide [TV](docs/GUIDA-ANDROID-TV.md#collega-telefono) e [smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md#telecomando-e-collegamento-tv).
+Il **Telecomando** smartphone controlla la TV sulla rete privata IPv4. Il collegamento tramite QR autorizza subito il telefono; chi può inquadrarlo può controllare Lume su quella TV. Il codice manuale mantiene la conferma sul televisore e i telefoni possono essere rimossi da **Gestisci collegamenti**. **Invia lista alla TV**, nel telecomando, trasferisce una lista salvata da URL o file, con anteprima sul telefono e conferma **Importa sulla TV**. Lume deve essere aperta sulla TV; configurazione tramite moduli smartphone, catalogo sul telefono e sincronizzazione restano previsti per sviluppi successivi. Vedi le guide [TV](docs/GUIDA-ANDROID-TV.md#collega-telefono) e [smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md#telecomando-e-collegamento-tv).
 
 ## Funzioni
 
+- **Guida e loghi delle liste personali** completati dai dati Lume quando la lista non li fornisce. L’associazione considera l’intera sorgente EPG pubblica, compresi i canali fuori dal catalogo integrato, tramite ID o nome univoco. Le guide configurate, i loghi dichiarati e le esclusioni manuali hanno la precedenza.
+- **EPGShare IT1**, come sul desktop, completa i palinsesti e i loghi ancora assenti dopo Lume, con cache e aggiornamenti separati. La guida mantiene una sola sorgente per canale e indica l’origine dei programmi supplementari.
+- **Guarda sulla TV** dal player smartphone, dalle schede Video e dai dettagli dei programmi: verifica il contenuto sulla TV abbinata, trasferisce il punto di ripresa dei video e apre il telecomando dopo l’avvio. Usa canali integrati e liste già disponibili su entrambi i dispositivi, con Lume aperta sulla TV.
 - **Opzioni → Canali nella Home** pubblica fino a 24 canali del catalogo integrato nei launcher Android TV compatibili, con consenso separato da AURA. [Funzionamento e contratto per launcher](docs/integration-launchers.md).
 - Liste M3U personali da URL HTTP/HTTPS o file, con consenso HTTP per sorgente, guida XMLTV, Video e archivio per i servizi compatibili, gestibili in **Opzioni → Le mie liste**, con filtri per sorgente e gruppo. Le liste restano sul dispositivo e sono escluse dalla condivisione AURA e dalla Home dei launcher.
 - Canali Rai, Rai/TGR e Mediaset presenti nella lista WLTV, insieme alle altre sorgenti supportate.
@@ -135,9 +139,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.11.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.12.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.11.0 sopra quella esistente, senza disinstallare: preferiti e impostazioni vengono conservati e i prossimi aggiornamenti potranno usare il controllo corretto.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.12.0 sopra quella esistente per conservare preferiti e impostazioni e ripristinare il controllo degli aggiornamenti.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 
@@ -200,7 +204,7 @@ Il catalogo viene aggiornato ogni 24 ore mentre usi l’app. La lista inclusa ne
 
 RSI La1 e RSI La2 sono escluse dal catalogo incluso, dalla sua cache e dai suoi aggiornamenti, anche quando presenti nella sorgente integrata. Alle liste personali questo filtro non si applica: le due emittenti seguono le normali regole di importazione e riproduzione della lista.
 
-La guida usa il servizio [EPG-Guide](https://epg-guide.com/) e si aggiorna ogni sei ore. Non tutti i canali hanno un palinsesto disponibile. In caso di errore o di pausa richiesta dal servizio, Lume conserva i programmi già scaricati e riprova in seguito.
+La guida usa il servizio [EPG-Guide](https://epg-guide.com/) e si aggiorna ogni sei ore. Per le liste personali senza guida propria, [EPGShare IT1](https://epgshare01.online/) completa i metadati ancora mancanti dopo Lume, con aggiornamenti ogni quattro ore e cache separata. Non tutti i canali hanno un palinsesto disponibile. In caso di errore o di pausa richiesta dal servizio, Lume conserva i programmi già scaricati e riprova in seguito.
 
 I loghi del catalogo, della guida e del pannello della diretta vengono scaricati direttamente dagli indirizzi della playlist e della guida, poi conservati sul dispositivo. Le immagini salvate vengono ricontrollate dopo sette giorni e rimangono disponibili quando la sorgente non risponde. Le edizioni TGR possono condividere il marchio Rai 3, mantenendo separati i programmi regionali. Quando manca un logo, il suo spazio resta vuoto e il nome del canale rimane visibile, mantenendo gli allineamenti delle schede. Alcune sorgenti di immagini usano HTTP: le eccezioni sono limitate alle destinazioni previste e il download controlla anche i redirect.
 
@@ -226,7 +230,9 @@ La compilazione e l’installazione locali restano disponibili. La configurazion
 
 ## Privacy
 
-Lume TV non richiede un account e non contiene telemetria. Catalogo, guida e preferiti vengono conservati sul dispositivo; le sessioni anonime Mediaset restano in memoria. Per funzionare, l’app contatta i servizi di WLTV, EPG-Guide e delle emittenti. Il controllo aggiornamenti e il download delle APK contattano GitHub; puoi disattivare il controllo automatico nelle Opzioni.
+Le informazioni online dei video, quando disponibili nella build e attive nelle Opzioni, contattano TMDB per titolo, tipo e anno. Le schede scaricate restano sul dispositivo; URL e credenziali delle liste non vengono inviati al servizio. La funzione si disattiva da **Opzioni → Informazioni sui video**. Configurazione e funzionamento sono descritti in [docs/tmdb.md](docs/tmdb.md).
+
+Lume TV non richiede un account e non contiene telemetria. Catalogo, guida e preferiti vengono conservati sul dispositivo; le sessioni anonime Mediaset restano in memoria. Per funzionare, l’app contatta i servizi di WLTV, EPG-Guide, EPGShare01 e delle emittenti. Il controllo aggiornamenti e il download delle APK contattano GitHub; puoi disattivare il controllo automatico nelle Opzioni.
 
 ## Sorgenti e diritti
 

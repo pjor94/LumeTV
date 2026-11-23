@@ -9,8 +9,9 @@ import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 
-enum class VideoShelf { ALL, CONTINUE, SAVED, ADDED }
+enum class VideoShelf { ALL, CONTINUE, SAVED, ADDED, ARRIVALS }
 enum class VideoOrder { PLAYLIST, TITLE, ADDED }
+internal const val VIDEO_ARRIVALS_GROUP = "VOD · Film · Nuovi arrivi"
 data class VideoQuery(val source:String?=null,val group:String?=null,val text:String="",val kind:VodKind?=null,
     val shelf:VideoShelf=VideoShelf.ALL,val order:VideoOrder=VideoOrder.PLAYLIST,val series:String?=null,val season:Int?=null,
     val collapseSeries:Boolean=true,val offset:Int=0,val limit:Int=50,val id:String?=null,val details:Boolean=true)
@@ -119,9 +120,10 @@ internal object VideoCatalogIndex {
 }
 
 /** The candidate query stays narrow. Extended metadata is read only for the selected window. */
-internal fun PersonalPlaylistStore.videoPage(sources:List<VideoSource>,q:VideoQuery,watch:File,favorites:Set<String>,savedSeries:Set<String>,
+internal fun PersonalPlaylistStore.videoPage(sources:List<VideoSource>,query:VideoQuery,watch:File,favorites:Set<String>,savedSeries:Set<String>,
     signal:CancellationSignal,knownCount:Int?=null,preview:Boolean=false):VideoPage {
     if(sources.isEmpty())return VideoPage(emptyList(),0,!preview)
+    val q=if(query.shelf==VideoShelf.ARRIVALS)query.copy(group=VIDEO_ARRIVALS_GROUP,kind=VodKind.MOVIE) else query
     return SQLiteDatabase.openDatabase(file(sources.first().id).path,null,SQLiteDatabase.OPEN_READWRITE).use {db->
         db.execSQL("PRAGMA temp_store=FILE")
         if(q.shelf==VideoShelf.CONTINUE)db.execSQL("ATTACH DATABASE ? AS history",arrayOf(watch.path))
