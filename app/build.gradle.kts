@@ -22,8 +22,8 @@ android {
         applicationId = "it.lumetv.app"
         minSdk = 23
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.12.0"
+        versionCode = 26
+        versionName = "0.12.1"
         testInstrumentationRunner = "it.lumetv.app.home.HomeInspection"
         buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"" + tmdbToken.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
     }

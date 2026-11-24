@@ -17,7 +17,7 @@ La scelta rimane salvata. Cambiare interfaccia conserva catalogo, guida e prefer
 
 ## Versioni e download
 
-Queste guide descrivono **Lume TV 0.12.0**, con liste personali, libreria Video, trailer, radio e pagine Opzioni su entrambe le interfacce. Su Android TV 8 o successivo sono disponibili anche i canali nella Home dei launcher compatibili. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
+Queste guide descrivono **Lume TV 0.12.1**, con liste personali, libreria Video, trailer, radio e pagine Opzioni su entrambe le interfacce. Su Android TV 8 o successivo sono disponibili anche i canali nella Home dei launcher compatibili. Scarica la [stessa APK per smartphone e TV](https://github.com/pjor94/LumeTV/releases/download/v0.12.1/LumeTV-0.12.1.apk), oppure segui le [istruzioni di compilazione](../README.md#compilazione).
 
 Il supporto smartphone è stato introdotto nella versione 0.6.0. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 

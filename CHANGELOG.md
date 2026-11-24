@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1 · Cambio canale con le frecce — 2026-11-24
+
+- Durante una diretta TV a schermo intero, **↑** passa al canale successivo e **↓** al precedente. La scorciatoia funziona anche mentre compare il banner del canale e segue la scelta **Tutti i canali** o **Solo preferiti**.
+- Con l’elenco canali, le opzioni o le informazioni del programma aperti, **↑** e **↓** servono per navigare nel pannello.
+
+Collaudo su emulatore Android TV con 41 verifiche, comprese pressioni consecutive durante il banner e navigazione nei pannelli.
+
 ## 0.12.0 · Libreria Video, trailer e Guarda sulla TV — 2026-11-23
 
 ### Libreria Video

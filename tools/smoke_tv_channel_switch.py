@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Switch TV channels through Back, the catalog and remote OK on a disposable emulator."""
+"""Check TV channel switching and remote navigation on a disposable emulator."""
 import argparse
 import functools
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import Thread
 import time
 
-from smoke_playback import Device, FILES, PACKAGE, ROOT, fixture
+from smoke_playback import Device, FILES, PACKAGE, ROOT, fixture, is_tv_channel_catalog
 
 
 def main():
@@ -40,7 +40,11 @@ def main():
         node = next((n for n in d.nodes() if n.get("focused") == "true"), None)
         return (node.get("content-desc") or node.get("text", "")) if node is not None else ""
 
-    def catalog(): return "Canali" in d.texts()
+    def catalog(): return is_tv_channel_catalog(d.nodes())
+
+    def preview_channel(number):
+        description = f"Apri TV Test {number} a schermo intero. In visione"
+        return any(node.get("content-desc") == description for node in d.nodes())
 
     try:
         d.run("logcat", "-c")
@@ -57,7 +61,7 @@ def main():
         if args.media_button_dex:
             def replace_and_stop(kind):
                 d.key(4)
-                d.wait("preview before " + kind + " STOP", lambda: "TV Test 1 · In diretta" in d.texts())
+                d.wait("preview before " + kind + " STOP", lambda: preview_channel(1))
                 d.wait("first card focused before " + kind + " STOP", lambda: "TV Test 1" in focused())
                 d.key(22)
                 d.wait("second card focused before " + kind + " STOP", lambda: "TV Test 2" in focused())
@@ -67,19 +71,50 @@ def main():
             replace_and_stop("synthetic")
             d.wait("untimed synthetic STOP cannot cancel the opening replacement", lambda: d.playing("TV Test 2") and not catalog(), timeout=25)
             d.key(4)
-            d.wait("replacement preview survives the synthetic STOP", lambda: "TV Test 2 · In diretta" in d.texts())
+            d.wait("replacement preview survives the synthetic STOP", lambda: preview_channel(2))
             d.run("shell", "CLASSPATH=/data/local/tmp/lume-media-button.dex app_process /system/bin MediaButtonProbe synthetic")
-            d.wait("synthetic STOP is accepted after the replacement is ready", lambda: not d.playing() and "Apri la diretta" not in d.texts())
+            d.wait("synthetic STOP is accepted after the replacement is ready", lambda: not d.playing() and not preview_channel(2))
             d.launch("channel/" + first)
             d.wait("first channel reopens for a real STOP", lambda: d.playing("TV Test 1") and not catalog())
             replace_and_stop("real")
-            d.wait("timestamped remote STOP still cancels an opening replacement", lambda: not d.playing() and catalog() and "Apri la diretta" not in d.texts())
+            d.wait("timestamped remote STOP still cancels an opening replacement", lambda: not d.playing() and catalog() and not preview_channel(2))
             (args.output / "report.json").write_text(json.dumps({"passed": d.checks, "count": len(d.checks)}, ensure_ascii=False, indent=2) + "\n")
             return
+
+        d.run("shell", "input", "keyevent", "KEYCODE_DPAD_UP", "KEYCODE_DPAD_UP")
+        d.wait("two quick Up presses switch channels through the brief banner", lambda: d.playing("TV Test 3"))
+        d.key("KEYCODE_DPAD_DOWN")
+        d.wait("Down switches to the previous channel", lambda: d.playing("TV Test 2"))
+        d.key("KEYCODE_DPAD_DOWN")
+        d.wait("Down returns to the first channel", lambda: d.playing("TV Test 1"))
+
+        d.key("KEYCODE_DPAD_LEFT")
+        d.wait("the live channel list focuses the playing channel", lambda: "TV Test 1" in focused())
+        d.key("KEYCODE_DPAD_DOWN")
+        d.wait("Down moves the list focus while the channel keeps playing",
+               lambda: "TV Test 2" in focused() and d.playing("TV Test 1"))
+        d.key("KEYCODE_BACK")
+
+        d.key("KEYCODE_DPAD_CENTER")
+        d.wait("OK opens programme information on Details", lambda: focused() == "Dettagli")
+        d.key("KEYCODE_DPAD_DOWN")
+        d.wait("Down focuses Options in programme information",
+               lambda: focused() == "Opzioni riproduzione" and d.playing("TV Test 1"))
+        d.key("KEYCODE_DPAD_UP")
+        d.wait("Up returns to Details in programme information",
+               lambda: focused() == "Dettagli" and d.playing("TV Test 1"))
+
+        d.key("KEYCODE_DPAD_RIGHT")
+        d.wait("playback options focus Audio", lambda: focused().startswith("Audio"))
+        d.key("KEYCODE_DPAD_DOWN")
+        d.wait("Down moves the playback options focus to Subtitles",
+               lambda: focused().startswith("Sottotitoli") and d.playing("TV Test 1"))
+        d.key("KEYCODE_BACK")
+
         for number in [2, 3, 4]:
             d.key(4)
             d.wait("Back keeps the current TV preview " + str(number - 1),
-                   lambda number=number: d.playing("TV Test " + str(number - 1)) and "Apri la diretta" in d.texts())
+                   lambda number=number: d.playing("TV Test " + str(number - 1)) and preview_channel(number - 1))
             d.wait("catalog focuses the current channel " + str(number - 1),
                    lambda number=number: "TV Test " + str(number - 1) in focused())
             d.key(22 if number < 4 else 20)
@@ -90,7 +125,7 @@ def main():
             d.wait("OK opens the selected channel full screen " + str(number),
                    lambda number=number: d.playing("TV Test " + str(number)) and not catalog())
         d.key(4)
-        d.wait("Back restores the latest preview", lambda: "TV Test 4 · In diretta" in d.texts())
+        d.wait("Back restores the latest preview", lambda: preview_channel(4))
         d.key(23)
         d.wait("OK reopens the same current channel", lambda: d.playing("TV Test 4") and not catalog())
         d.key(4)
@@ -99,7 +134,7 @@ def main():
         d.wait("selecting a different card also works with touch", lambda: d.playing("TV Test 1") and not catalog())
         d.capture("switched-player.png")
         d.key(4)
-        d.wait("final preview survives the switch", lambda: "TV Test 1 · In diretta" in d.texts())
+        d.wait("final preview survives the switch", lambda: preview_channel(1))
         d.capture("switched-preview.png")
         d.key(3)
         d.wait("leaving the TV app still stops playback", lambda: not d.playing())

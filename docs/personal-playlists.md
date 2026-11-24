@@ -2,7 +2,7 @@
 
 Per i VOD, gli attributi `preview-vtt`, `thumbnails-url`, `thumbnail-vtt` o `storyboard-url` indicano un indice WebVTT di miniature. Ogni cue contiene l’URL dell’immagine, relativo all’indice o assoluto; `#xywh=x,y,w,h` seleziona una regione di uno sprite. `chapters-vtt` o `chapters-url` indicano un WebVTT in cui il testo dei cue è il titolo del capitolo. Sono accettati soltanto HTTP/HTTPS, con dimensioni e numero di cue limitati. Queste risorse usano gli accessi, gli header e il consenso HTTP configurati per i loghi; non ereditano automaticamente le credenziali del flusso video.
 
-Questo documento descrive le liste personali di **Lume TV 0.12.0**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
+Questo documento descrive le liste personali di **Lume TV 0.12.1**, con biblioteca Video e scorrimento continuo. Sono consentite fino a 500.000 voci lette per sorgente, un milione di voci importate complessive e 256 MiB per documento. Gli archivi precedenti vengono conservati con ID, preferiti, impostazioni e avanzamenti.
 
 La versione 0.10.2 include il recupero delle righe anomale, la compatibilità delle configurazioni riconoscibili e le sorgenti localplay descritte sotto, con formato e protezione determinati dal resolver.
 

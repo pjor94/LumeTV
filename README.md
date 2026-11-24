@@ -17,11 +17,11 @@
 </p>
 
 > [!TIP]
-> ### [Scarica Lume TV 0.12.0 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk)
+> ### [Scarica Lume TV 0.12.1 per Android e Android TV](https://github.com/pjor94/LumeTV/releases/download/v0.12.1/LumeTV-0.12.1.apk)
 >
 > Un’unica APK firmata per **smartphone Android, Android TV e Google TV con Android 6.0 o successivo**. L’interfaccia viene scelta automaticamente in base al dispositivo.
 >
-> [Apri la release per novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.12.0) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
+> [Apri la release per novità, sorgenti e checksum](https://github.com/pjor94/LumeTV/releases/tag/v0.12.1) · [Guida Android TV](docs/GUIDA-ANDROID-TV.md) · [Guida smartphone](docs/GUIDA-SMARTPHONE-ANDROID.md) · [Istruzioni di installazione](#distribuzione-e-installazione)
 
 ![Cosa guardare: vista Focus nativa con palinsesto di esempio](docs/screenshots/discovery.png)
 
@@ -34,6 +34,10 @@ Lume TV è un’app per **smartphone Android, Android TV e Google TV** dedicata 
 Lume TV ne adatta la logica di risoluzione in Kotlin e propone interfacce dedicate ad Android TV e smartphone Android. Il merito della raccolta e della manutenzione delle sorgenti resta al progetto originale e ai suoi collaboratori.
 
 Lume TV è un progetto indipendente, distribuito con licenza **GPL-3.0-or-later**. Non è un’app ufficiale WorldLiveTV né delle emittenti. Versioni di riferimento, file adattati e altre attribuzioni sono raccolti in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Novità della 0.12.1
+
+In diretta TV a schermo intero, **↑** passa al canale successivo e **↓** al precedente, anche durante il banner del canale. Con l’elenco, le opzioni o le informazioni aperti, le frecce navigano nel pannello.
 
 ## Novità della 0.12.0
 
@@ -139,9 +143,9 @@ Per le istruzioni illustrate su installazione, preferiti, palinsesto e aggiornam
 
 Le [release su GitHub](https://github.com/pjor94/LumeTV/releases) contengono l’APK firmata `LumeTV-<versione>.apk`, i sorgenti completi della stessa versione, l’impronta del certificato e i checksum SHA-256. GitHub Actions esegue test, Lint e compilazione prima della pubblicazione. Le nuove versioni usano numeri come `0.3.1` e sono pubblicate come normali release.
 
-Lume TV **0.12.0** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
+Lume TV **0.12.1** supporta **smartphone Android, Android TV e Google TV con Android 6.0 o successivo** nella stessa APK. Le versioni fino alla **0.5.3** comprendono soltanto la UI TV.
 
-Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.12.0 sopra quella esistente per conservare preferiti e impostazioni e ripristinare il controllo degli aggiornamenti.
+Su Android 9 e 10, le versioni fino alla 0.6.0 possono bloccare l’aggiornamento dall’app con un falso errore di firma. Installa manualmente l’APK ufficiale 0.12.1 sopra quella esistente per conservare preferiti e impostazioni e ripristinare il controllo degli aggiornamenti.
 
 La versione TV è stata provata anche su Sony Bravia KD-55X81J con Android 12. Le due interfacce attuali sono state collaudate su emulatori Android TV e smartphone; codec e DRM possono comportarsi diversamente sui dispositivi fisici.
 
@@ -178,6 +182,7 @@ La prima APK contenente l’aggiornatore va installata con la procedura manuale 
 | Indietro da Canali | Chiede conferma per chiudere l’app |
 | Indietro da Guida TV o Cosa guardare | Chiude la ricerca o i dettagli aperti, poi torna a Canali |
 | CH+/CH− | Passa al canale successivo o precedente |
+| ↑/↓ in diretta a schermo intero | Passa al canale successivo o precedente, anche durante il banner breve |
 | Numeri | Seleziona il numero del canale |
 | OK durante la diretta | Mostra le informazioni e riprende la riproduzione se in pausa |
 | ← durante la diretta | Apre l’elenco canali sulla sinistra, mantenendo la diretta in riproduzione |

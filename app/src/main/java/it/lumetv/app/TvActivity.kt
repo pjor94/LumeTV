@@ -51,6 +51,8 @@ import it.lumetv.app.ui.TvStyle.dp
 import it.lumetv.app.update.UpdateController
 import it.lumetv.core.Channel
 import it.lumetv.core.ChannelNavigation
+import it.lumetv.core.MediaKind
+import it.lumetv.core.PlaybackMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -1786,21 +1788,32 @@ class TvActivity : ComponentActivity() {
         loadPersonalGuideWindow(rows,now,now+GuideSchedule.WINDOW)
     }
 
-    private fun zap(direction: Int) {
-        if(tvPlayer.snapshot.mode!=it.lumetv.core.PlaybackMode.LIVE){tvPlayer.seekBy(if(direction>0)30_000 else -10_000);return}
-        lifecycleScope.launch {
-        val before=current
-        val revision=tvPlayer.snapshot.playbackRevision
-        val next = repository.nextChannel(channels, current?.id, direction, current)
-        if(current?.id!=before?.id || tvPlayer.snapshot.playbackRevision!=revision)return@launch
-        if (next != null) {
-            if (next.id != current?.id || showingCatalog || failed) selectChannel(next)
-            else showChannelBanner()
-        } else {
-            val message = "Nessun preferito · Tieni premuto OK su un canale per aggiungerlo"
-            if (showingCatalog) status.text = message
-            else showBanner("Nessun canale preferito", "Aggiungi un preferito dal catalogo o cambia la modalità in Opzioni")
+    private fun canZapWithArrows(): Boolean {
+        val playback = tvPlayer.snapshot
+        return !showingCatalog && !showingOptions && !failed && !liveChannels.isOpen &&
+            !playbackOptions.isShowing && !banner.isInfoOpen &&
+            playback.mode == PlaybackMode.LIVE && playback.channel?.kind == MediaKind.TV
+    }
+
+    private fun zap(direction: Int, requireFullscreenLive: Boolean = false) {
+        if (tvPlayer.snapshot.mode != PlaybackMode.LIVE) {
+            tvPlayer.seekBy(if (direction > 0) 30_000 else -10_000)
+            return
         }
+        lifecycleScope.launch {
+            val before = current
+            val revision = tvPlayer.snapshot.playbackRevision
+            val next = repository.nextChannel(channels, before?.id, direction, before)
+            if (current?.id != before?.id || tvPlayer.snapshot.playbackRevision != revision) return@launch
+            if (requireFullscreenLive && !canZapWithArrows()) return@launch
+            if (next != null) {
+                if (next.id != current?.id || showingCatalog || failed) selectChannel(next)
+                else showChannelBanner()
+            } else {
+                val message = "Nessun preferito · Tieni premuto OK su un canale per aggiungerlo"
+                if (showingCatalog) status.text = message
+                else showBanner("Nessun canale preferito", "Aggiungi un preferito dal catalogo o cambia la modalità in Opzioni")
+            }
         }
     }
 
@@ -1935,6 +1948,13 @@ class TvActivity : ComponentActivity() {
             return true
         }
         when (event.keyCode) {
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> if (canZapWithArrows()) {
+                if (event.repeatCount == 0) {
+                    val direction = if (event.keyCode == KeyEvent.KEYCODE_DPAD_UP) 1 else -1
+                    zap(direction, requireFullscreenLive = true)
+                }
+                return true
+            }
             KeyEvent.KEYCODE_CHANNEL_UP, KeyEvent.KEYCODE_MEDIA_NEXT -> {
                 if (showingCatalog && currentFilter == "Guida TV") guideView.pageChannels(1)
                 else if (showingCatalog && currentFilter == "Cosa guardare") discoveryView.page(1) else zap(1)

@@ -2,7 +2,7 @@
 
 Lume TV permette di guardare le dirette italiane sul telefono, con comandi touch, preferiti e palinsesto. La stessa APK comprende anche l’interfaccia per telecomando: se usi una TV, consulta la [guida per Android TV e Google TV](GUIDA-ANDROID-TV.md).
 
-Questa guida descrive **Lume TV 0.12.0**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
+Questa guida descrive **Lume TV 0.12.1**, con liste personali, radio in background, mini player, Picture in Picture e pagina Opzioni. La stessa APK supporta anche Android TV e Google TV. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV.
 
 La funzione **Canali nella Home**, dalla versione 0.8.0, compare nelle Opzioni soltanto sui dispositivi TV, anche quando si usa l’interfaccia Smartphone. Sui telefoni non pubblica canali. Vedi la [guida per Android TV](GUIDA-ANDROID-TV.md#canali-nella-home).
 
@@ -132,7 +132,7 @@ Sono necessari un gestore documenti compatibile e spazio temporaneo per la verif
 
 Serve uno **smartphone con Android 6.0 o successivo**, collegato a Internet, e un’APK che includa il supporto smartphone.
 
-1. Scarica [LumeTV-0.12.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
+1. Scarica [LumeTV-0.12.1.apk](https://github.com/pjor94/LumeTV/releases/download/v0.12.1/LumeTV-0.12.1.apk), oppure compila il [codice corrente](../README.md#compilazione). La build debug si trova in `app/build/outputs/apk/debug/app-debug.apk`.
 2. Trasferisci il file sul telefono e aprilo dal gestore file. Se Android lo richiede, autorizza quel programma a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV**.
 4. Nella sezione **Canali**, tocca il nome del canale che vuoi guardare.

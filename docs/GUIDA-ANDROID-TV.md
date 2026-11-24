@@ -4,7 +4,7 @@ La TV, fatta semplice. Lume TV porta le dirette italiane su Android TV e Google 
 
 Questa guida descrive l’interfaccia per telecomando. Se usi un telefono, consulta la [guida per smartphone Android](GUIDA-SMARTPHONE-ANDROID.md).
 
-Questa guida descrive **Lume TV 0.12.0**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
+Questa guida descrive **Lume TV 0.12.1**, con liste personali, canali nella Home dei launcher, radio, anteprima durante la navigazione e pagina Opzioni con menu superiore. Le versioni fino alla 0.5.3 comprendono soltanto la UI TV e non hanno la scelta dell’interfaccia.
 
 [Download e installazione](../README.md#distribuzione-e-installazione) · [Tutte le guide](GUIDA-UTENTE.md) · [Torna al progetto](../README.md) · [Novità](../CHANGELOG.md)
 
@@ -119,7 +119,7 @@ Serve un gestore documenti che supporti apertura e creazione dei file. Alcune TV
 
 Serve una TV o un dispositivo con **Android TV o Google TV, Android 6.0 o successivo**, collegato a Internet.
 
-1. Scarica [LumeTV-0.12.0.apk](https://github.com/pjor94/LumeTV/releases/download/v0.12.0/LumeTV-0.12.0.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
+1. Scarica [LumeTV-0.12.1.apk](https://github.com/pjor94/LumeTV/releases/download/v0.12.1/LumeTV-0.12.1.apk), oppure ottienila seguendo [Compilazione](../README.md#compilazione).
 2. Trasferiscilo sulla TV e aprilo con un gestore file. Se Android lo richiede, autorizza quel gestore a installare applicazioni.
 3. Conferma l’installazione e apri **Lume TV** dal launcher della TV.
 4. Scegli un canale con le frecce e premi **OK**.
@@ -278,6 +278,7 @@ Durante la diretta, Indietro torna prima al catalogo o alla consultazione da cui
 | Elenco canali | ↑/↓, OK | Scegli un canale e conferma il cambio |
 | Elenco canali | → dalla riga / Indietro | Chiudi l’elenco |
 | Diretta | → | Apri le opzioni di riproduzione |
+| Diretta a schermo intero | ↑/↓ | Passa al canale successivo o precedente, anche durante il banner breve |
 | Diretta | CH+/CH− | Cambia canale secondo la modalità scelta |
 | Diretta o catalogo | Numeri | Apri un canale per numero |
 | Guida | Numeri | Seleziona la riga senza avviare la diretta |
